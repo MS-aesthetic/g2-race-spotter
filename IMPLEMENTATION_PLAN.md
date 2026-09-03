@@ -1,9 +1,9 @@
-# Implementation plan — 2026-09-03T13:36:13-04:00
+# Implementation plan — 2026-09-03T13:41:22-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field and exact non-hardware version/device values, plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI and allow `TBD` only for hardware fields whose `[HW]` criteria remain open; verify the focused test and the AC-1 gate.
+- [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field and exact non-hardware version/device values, plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI and allow `TBD` only for hardware fields whose `[HW]` criteria remain open; verify the focused test and the AC-1 gate. This is the single retry after iteration 9 produced no worker hand-off.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add `scripts/sim-harness.ts` and the root `sim:scenarios` script with injectable launcher/automation seams; resolve the pinned local simulator, use automation port 9898, and on launch or ping failure exit non-zero with literal `sim-unavailable` and no partial report; verify `scripts/test/sim-harness.test.ts`.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the mocked simulator smoke-success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and write pinned simulator/SDK versions to `report.json`; verify `scripts/test/sim-harness-smoke.test.ts`.
 - [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` and commit `qa/<date>/sim/` plus simulator fields in `docs/ENVIRONMENT.md`; if the command reports `sim-unavailable`, hand off `failed` with that literal reason so this task is parked rather than retried.
@@ -41,14 +41,18 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- [x] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffolded the pinned minimal G2 app and verified one guarded startup-page call rendering “Hello, driver”; simulator evidence remains T002d/T002c. (commit f0adb01)
+- (none; iteration 9 had no worker hand-off or review)
 
 ## Notes / why
-- Review verdict `approve with nits` closes T002; the README greeting mismatch is documentation-only and affects no acceptance criterion, so it does not create a follow-up task.
-- AC audit 010: AC-1 is met by `.github/workflows/ci.yml` plus the passing root gate; AC-2 is met by `sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts`; AC-3 is unmet `[SIM]`, AC-5 and AC-7 are unmet automated criteria, and AC-4 is open `[HW]`.
-- AC audit 020: AC-1–AC-9 are unmet because every named verifier is absent; AC-10 is open `[HW]` and its local CLI prerequisite is T014.
-- AC audit 030: AC-1–AC-6 are unmet, AC-7 is unmet `[SIM]`, and AC-8–AC-10 are open `[HW]`; spec 040 AC-1–AC-5 are unmet and AC-6–AC-7 are open `[HW]`.
-- AC audit 050: AC-1–AC-5 are unmet, AC-5b is unmet `[SIM]`, and AC-6–AC-8 are open `[HW]`; spec 060 AC-1–AC-4 are unmet and AC-5–AC-8 are open `[HW]`; spec 070 AC-1–AC-3 are unmet and AC-4–AC-5 are open `[HW]`.
-- No criterion is `DISPUTED`; no committed `qa/` evidence exists. The current root gates pass: 5 test files/8 tests, typecheck, lint, generated-agent sync, and dependency pins.
-- T003 remains first because the checked environment schema must exist before the simulator evidence task fills its non-hardware fields; the harness failure contract follows, then mocked smoke assertions, then the real `[SIM]` run.
-- Protocol tasks retain full-state replay, per-open sequence reset, accepted-socket errors, and authenticated driver eviction; future HUD tasks retain state-only rendering, one 288×144 image, 250 ms latest-wins gap coalescing, NO LINK dimming, and permanent text fallback.
+- Iteration 9 is `nothing-to-do`/`n/a`: `ralph/last-build.md` and `ralph/last-review.md` are absent, `HEAD` remains planner commit `234c473`, and there is no post-plan diff; per the role rule T003 stays first for one retry before any split.
+- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the passing 5-file/8-test root gate; AC-2 met by passing `sync:agents:check`; AC-6 met by `scripts/test/check-pins.test.ts`; AC-3 unmet `[SIM]`, AC-5 and AC-7 unmet automated, AC-4 open `[HW]`.
+- AC audit 020: AC-1–AC-9 unmet because their named verifier files are absent; AC-10 open `[HW]`, with local CLI prerequisite T014.
+- AC audit 030: AC-1–AC-6 unmet because their named tests are absent; AC-7 unmet `[SIM]`; AC-8–AC-10 open `[HW]`.
+- AC audit 040: AC-1–AC-5 unmet because their named tests are absent; AC-6–AC-7 open `[HW]`.
+- AC audit 050: AC-1–AC-5 unmet because their named tests are absent; AC-5b unmet `[SIM]`; AC-6–AC-8 open `[HW]`.
+- AC audit 060: AC-1–AC-4 unmet because their named tests are absent; AC-5–AC-8 open `[HW]`.
+- AC audit 070: AC-1–AC-3 unmet because their named tests are absent; AC-4–AC-5 open `[HW]`.
+- No criterion is `DISPUTED`; no committed `qa/` evidence exists. Current verification is green: 5 test files/8 tests, typecheck, lint, generated-agent sync, and dependency pins.
+- T003 remains first because the checked environment schema must exist before the simulator records its non-hardware fields; the harness failure contract follows, then mocked smoke assertions, then the real `[SIM]` run.
+- Protocol work remains ordered types/guards → reducer → client → relay so all consumers share wire shapes and reducer semantics; HUD tasks later must preserve state-only rendering, one image container, 250 ms latest-wins coalescing, stale dimming, and permanent text fallback.
+- No spec Decision or Open question changed: this iteration produced only a process retry, not a product or acceptance-criterion clarification.
