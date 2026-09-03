@@ -1,8 +1,9 @@
-# Implementation plan — 2026-09-03T12:06:38-04:00
+# Implementation plan — 2026-09-03T12:17:29-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
+- [ ] T015a (owner: relay-backend-dev) (spec: 010 AC-6) Fix the blocked pin checker and add the missing regression coverage; reviewer finding (verbatim): “[block] scripts/check-pins.mjs:63 — AC-6 covers every `@evenrealities/*` dependency, but the checker recognizes only three hard-coded package names — scenario: add `@evenrealities/new-sdk: "^1.0.0"` to any dependency section → `npm run check:pins` exits 0 instead of rejecting the range — fix: treat every name beginning with `@evenrealities/` as pin-controlled and add a non-listed scoped-package fixture assertion.” Verify `scripts/test/check-pins.test.ts`, `npm run check:pins`, and the full AC-1 gate.
 - [ ] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Add `scripts/check-pins.mjs`, fixture-driven coverage in `scripts/test/check-pins.test.ts`, and a CI step rejecting range specifiers for every dependency named by R2; verify the checker and full AC-1 gate.
 - [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts`.
 - [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI, rejecting missing/toolchain/simulator `TBD` fields while allowing hardware `TBD` only while their named `[HW]` criteria remain open.
@@ -42,17 +43,17 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- [x] T001b (owner: relay-backend-dev) (spec: 010 AC-2) Added `npm run sync:agents:check` to CI and verified the generated outputs and full gate (commit 31a0615; review: approve).
+- (none; T015 remains open after review block)
 
 ## Notes / why
-- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the passing 3-test/typecheck/lint gate; AC-2 met by CI commit 31a0615 plus the passing freshness check; AC-5/AC-6/AC-7 unmet; AC-3 `[SIM]` open; AC-4 `[HW]` open.
+- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the green local test/typecheck/lint gate; AC-2 met by CI plus the green `sync:agents:check`; AC-5/AC-6/AC-7 unmet; AC-3 `[SIM]` open; AC-4 `[HW]` open.
 - AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and named tests are absent/placeholders; AC-10 `[HW]` open.
 - AC audit 030: AC-1–AC-6 unmet—`apps/glasses` and its named tests are absent; AC-7 `[SIM]` open; AC-8–AC-10 `[HW]` open.
-- AC audit 040: AC-1–AC-5 unmet—the spotter module/test are placeholders; AC-6–AC-7 `[HW]` open.
+- AC audit 040: AC-1–AC-5 unmet—the spotter module and named tests are absent/placeholders; AC-6–AC-7 `[HW]` open.
 - AC audit 050: AC-1–AC-5 unmet; AC-5b `[SIM]` open; AC-6–AC-8 `[HW]` open.
 - AC audit 060: AC-1–AC-4 unmet; AC-5–AC-8 `[HW]` open.
 - AC audit 070: AC-1–AC-3 unmet; AC-4–AC-5 `[HW]` open. No criterion is DISPUTED.
-- T001b is complete because the approved diff adds the sync freshness gate to CI and `npm run sync:agents:check` passes on the generated tree.
-- Pin enforcement leads the queue so each exact SDK/CLI/simulator/Worker dependency introduced by later bootstrap tasks is guarded immediately; the glasses scaffold follows because environment and simulator work depend on its actual pins.
+- T015 is not complete despite a green local checker because its fixed package allowlist fails AC-6's namespace-wide `@evenrealities/*` requirement; T015a closes exactly that review block before any new dependencies land.
+- Pin enforcement still leads the queue so each exact SDK/CLI/simulator/Worker dependency introduced by later bootstrap tasks is guarded immediately; the glasses scaffold follows because environment and simulator work depend on its actual pins.
 - The harness remains split into failure plumbing, mocked smoke success, and committed `[SIM]` evidence; simulator output never substitutes for hardware nibble, pacing, lifecycle, or visual evidence.
 - Protocol types, reducer, and shared `RoomClient` precede relay and UI consumers; full-state replay and authenticated last-writer-wins remain normative.
