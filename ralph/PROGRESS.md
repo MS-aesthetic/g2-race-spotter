@@ -3,8 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- Environment prerequisite for T002 (not `[HW]`) — install the official `even-realities/everything-evenhub` Codex plugin, confirm `$sdk-reference` and `$glasses-ui` are available, then rerun planning so the blocked scaffold task can resume
-- T101b — QR sideload plus hardware/device/font fields in `docs/ENVIRONMENT.md` (spec 010 AC-4); simulator evidence is automated by T002b/T002d/T002c (`[SIM]`)
+- T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence is automated by T002b/T002d/T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
 - T107–T108 — mobile PWA installation/layout and LTE end-to-end evidence (spec 040 AC-6/AC-7)
@@ -13,6 +12,7 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 - T116–T117 — pre-grid checklist and signed full-session evidence (spec 070 AC-4/AC-5)
 
 ## Codex pre-flight
+- 2026-09-03 — Bootstrap re-plan confirmed the official `everything-evenhub` skills are available in Codex; cleared the stale T002 environment blocker.
 - 2026-09-03 — Verified live on this account that `gpt-5.6-terra` accepts `high` and `gpt-5.6-sol` accepts both `high` and `xhigh`.
 - 2026-09-03 — Codex CLI 0.151.0-alpha.7.2 exposes `--ask-for-approval` only before the `exec` subcommand; all other assumed `codex exec` flags match this install.
 - 2026-09-03 — A live iteration showed Windows `workspace-write` blocks npm network/cache access and Git index writes under approval `never`. Kept `workspace-write`, enabled its network setting, redirected npm cache to the writable temp directory, and switched to Codex automatic approval so guarded Git writes can complete.
