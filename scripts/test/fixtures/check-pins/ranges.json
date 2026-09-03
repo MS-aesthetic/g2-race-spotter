@@ -3,6 +3,7 @@
     "@evenrealities/even_hub_sdk": "^0.0.12",
     "@evenrealities/evenhub-cli": "latest",
     "@evenrealities/evenhub-simulator": "~0.9.5",
+    "@evenrealities/new-sdk": "^1.0.0",
     "wrangler": ">=4.68.0",
     "vite": "8.2.x",
     "vitest": "*",

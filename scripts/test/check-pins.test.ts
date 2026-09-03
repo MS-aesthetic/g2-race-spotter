@@ -53,6 +53,10 @@ describe('check-pins', () => {
         name: '@evenrealities/evenhub-simulator',
         version: '~0.9.5',
       }),
+      expect.objectContaining({
+        name: '@evenrealities/new-sdk',
+        version: '^1.0.0',
+      }),
       expect.objectContaining({ name: 'wrangler', version: '>=4.68.0' }),
       expect.objectContaining({ name: 'vite', version: '8.2.x' }),
       expect.objectContaining({ name: 'vitest', version: '*' }),

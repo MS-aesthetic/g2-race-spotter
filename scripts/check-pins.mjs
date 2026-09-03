@@ -2,15 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { resolve, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const PINNED_PACKAGES = new Set([
-  '@evenrealities/even_hub_sdk',
-  '@evenrealities/evenhub-cli',
-  '@evenrealities/evenhub-simulator',
-  'wrangler',
-  'vite',
-  'vitest',
-  'typescript',
-]);
+const PINNED_PACKAGES = new Set(['wrangler', 'vite', 'vitest', 'typescript']);
 
 const DEPENDENCY_SECTIONS = [
   'dependencies',
@@ -49,6 +41,10 @@ export function isExactVersion(version) {
   return typeof version === 'string' && EXACT_VERSION.test(version);
 }
 
+function isPinControlledPackage(name) {
+  return name.startsWith('@evenrealities/') || PINNED_PACKAGES.has(name);
+}
+
 export async function findUnpinnedDependencies(root) {
   const packageFiles = await findPackageJsonFiles(root);
   const failures = [];
@@ -60,7 +56,7 @@ export async function findUnpinnedDependencies(root) {
       if (dependencies === undefined) continue;
 
       for (const [name, version] of Object.entries(dependencies)) {
-        if (PINNED_PACKAGES.has(name) && !isExactVersion(version)) {
+        if (isPinControlledPackage(name) && !isExactVersion(version)) {
           failures.push({
             file: relative(root, packageFile).split(sep).join('/'),
             section,
