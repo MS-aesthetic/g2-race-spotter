@@ -3,7 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence is automated by T002b/T002d/T002c (`[SIM]`)
+- T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
 - T107–T108 — mobile PWA installation/layout and LTE end-to-end evidence (spec 040 AC-6/AC-7)
@@ -42,3 +42,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 15 | 2026-09-03 | T002e | hud-qa | review-blocked | block | 6f3b4b3 | A fixed-date no-report assertion cannot prove the harness leaves no partial report beneath its selected output root on later dates. |
 | 16 | 2026-09-03 | T002f | hud-qa | done | approve | 1c56c26 | Recursive search beneath the injected output root now proves launcher and ping failures cannot leave a partial report on any run date. |
 | 17 | 2026-09-03 | T002d | hud-qa | review-blocked | block | 3c22234 | Device info can precede startup rendering, and broad `sim-unavailable` mapping hides product assertion or evidence failures. |
+| 18 | 2026-09-03 | T002g | hud-qa | review-blocked | block | 3b683f1 | After automation readiness, missing device info is an evidence failure; the required lint gate must also pass before hand-off. |

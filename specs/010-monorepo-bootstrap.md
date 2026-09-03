@@ -50,6 +50,7 @@ R7. `scripts/sim-harness.ts` MUST launch the pinned simulator with `--automation
 - 2026-09-03 Require AC-7's no-partial-report check to search beneath the runtime-selected output root rather than a fixed date — why: a date-bound assertion can pass while a later run writes invalid evidence elsewhere in that root.
 - 2026-09-03 Treat rendered pixels, not the `getDeviceInfo()` console marker, as smoke display readiness — why: bridge metadata can resolve before `createStartUpPageContainer()`, causing a premature blank capture.
 - 2026-09-03 Reserve `sim-unavailable` for launch and automation-readiness failures — why: display assertions and evidence writes are product/test failures and must remain distinguishable so they cannot be parked as infrastructure problems.
+- 2026-09-03 Treat missing `bridge.getDeviceInfo()` after simulator automation is ready as `evidence-failed`, not `sim-unavailable` — why: AC-3 requires the device observation in committed evidence, and its absence does not prove the simulator could not launch.
 
 ## Open questions
 
