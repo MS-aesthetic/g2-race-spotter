@@ -1,4 +1,4 @@
-# Implementation plan — 2026-09-03T14:00:40-04:00
+# Implementation plan — 2026-09-03T14:08:44-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
@@ -51,6 +51,7 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - (none; T003a is `review-blocked` and stays unchecked beneath T003c)
 
 ## Notes / why
+- Iteration 12 produced no `ralph/last-build.md` hand-off and no review; retain T003c first for its one permitted retry before splitting or reordering the blocked repair.
 - Iteration 11 applies verdict `block`: T003c is first, has the same owner, and quotes every review finding verbatim; T003a remains unchecked until the repair is approved.
 - AC audit 010: AC-1 is met by `.github/workflows/ci.yml` plus the passing root test/typecheck/lint gate; AC-2 is met by `sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts`; AC-3 is unmet `[SIM]`, AC-5 and AC-7 are unmet automated, and AC-4 is open `[HW]`.
 - AC audit 020: AC-1–AC-9 are unmet because their named verifier files are absent; AC-10 is open `[HW]`, with local CLI prerequisite T014.

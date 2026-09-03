@@ -36,3 +36,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 9 | 2026-09-03 | T003 | relay-backend-dev | nothing-to-do | n/a | - | No worker hand-off, review, or post-plan commit exists; retain T003 first for its one permitted retry before splitting. |
 | 10 | 2026-09-03 | T003 | relay-backend-dev | nothing-to-do | n/a | - | A second absent hand-off exhausts the retry; split environment schema/testing from post-simulator repository and CI enforcement. |
 | 11 | 2026-09-03 | T003a | relay-backend-dev | review-blocked | block | 6a2292a | An AC-5 hand-off cannot allow a non-hardware `TBD` or omit its named verifier from CI; repair both before closing the task. |
+| 12 | 2026-09-03 | T003c | relay-backend-dev | nothing-to-do | n/a | - | No worker hand-off or review exists; retain the blocked repair first for its one permitted retry before splitting. |
