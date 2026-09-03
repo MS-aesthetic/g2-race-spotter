@@ -32,3 +32,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 5 | 2026-09-03 | T015 | relay-backend-dev | review-blocked | block | 62ea204 | AC-6's `@evenrealities/*` requirement is namespace-wide; a fixed allowlist leaves future SDK packages unguarded. |
 | 6 | 2026-09-03 | T015a | relay-backend-dev | done | approve | 4cc5ffb | A namespace predicate plus an unknown scoped-package fixture closes the future `@evenrealities/*` pinning gap. |
 | 7 | 2026-09-03 | T002 | g2-glasses-dev | failed | n/a | - | Mandatory official SDK plugin skills were unavailable, so the worker correctly stopped before undocumented bridge work; install the plugin before retrying. |
+| 8 | 2026-09-03 | T002 | g2-glasses-dev | done | approve with nits | f0adb01 | The pinned startup scaffold and one-call guard pass; AC-3 remains separate `[SIM]` evidence, and the README greeting nit affects no criterion. |

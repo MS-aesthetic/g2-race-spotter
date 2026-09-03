@@ -1,9 +1,8 @@
-# Implementation plan — 2026-09-03T13:19:38-04:00
+# Implementation plan — 2026-09-03T13:36:13-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Use the installed official `everything-evenhub` `template`, `sdk-reference`, and `glasses-ui` guidance to scaffold `apps/glasses` from the `minimal` template; pin SDK, CLI, Vite, and simulator 0.9.5 exactly; add `dev` and `dev:sim` with simulator mode limited to logging/relay defaults; render “Hello, driver” through exactly one startup-page call; verify `apps/glasses/test/startup-page.test.ts` plus the AC-1 gate.
 - [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field and exact non-hardware version/device values, plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI and allow `TBD` only for hardware fields whose `[HW]` criteria remain open; verify the focused test and the AC-1 gate.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add `scripts/sim-harness.ts` and the root `sim:scenarios` script with injectable launcher/automation seams; resolve the pinned local simulator, use automation port 9898, and on launch or ping failure exit non-zero with literal `sim-unavailable` and no partial report; verify `scripts/test/sim-harness.test.ts`.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the mocked simulator smoke-success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and write pinned simulator/SDK versions to `report.json`; verify `scripts/test/sim-harness-smoke.test.ts`.
@@ -18,10 +17,10 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth errors followed by close 4401; verify `services/relay/test/auth.test.ts`.
 - [ ] T012 (owner: relay-backend-dev) (spec: 020 AC-7) Implement shared-timing alarm ticks, silent-socket close 4408, peer-offline state reduction, and broadcast; verify `services/relay/test/heartbeat.test.ts`.
 - [ ] T013 (owner: relay-backend-dev) (spec: 020 AC-9) Enforce frame-size, malformed, unknown-type, wrong-role, version, and URL-versus-hello semantics with each required ignore/keep-open/close behavior; verify `services/relay/test/validation.test.ts`.
-- [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10) Implement the `fake-spotter` prerequisite with every R6 scenario and `--role driver`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
+- [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10) Implement the local `fake-spotter` prerequisite with every R6 scenario and `--role driver`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
 
 ## Needs simulator [SIM]
-- (none parked; T002c has not yet reported `sim-unavailable`)
+- (none parked; T002c has not reported `sim-unavailable`)
 
 ## Needs human [HW]
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode, QR-sideload the scaffold, and save the required photo/log under `qa/<date>/`.
@@ -42,15 +41,14 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- (none; this was a bootstrap re-plan, not a worker iteration)
+- [x] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffolded the pinned minimal G2 app and verified one guarded startup-page call rendering “Hello, driver”; simulator evidence remains T002d/T002c. (commit f0adb01)
 
 ## Notes / why
-- The previous SDK-plugin blocker is cleared: the official `everything-evenhub` skills are available in this Codex session, so T002 can run first.
-- AC audit 010: AC-1 is met by `.github/workflows/ci.yml` and the local `npm ci`/test/typecheck/lint gate; AC-2 is met by `sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts`; AC-3, AC-5, and AC-7 are unmet; AC-4 is `[HW]`.
-- AC audit 020: AC-1–AC-9 are unmet because every named verifier is absent; AC-10 is `[HW]` and its local CLI prerequisite is T014.
-- AC audit 030: AC-1–AC-6 are unmet, AC-7 is unmet `[SIM]`, and AC-8–AC-10 are `[HW]`; spec 040 AC-1–AC-5 are unmet and AC-6–AC-7 are `[HW]`.
-- AC audit 050: AC-1–AC-5 are unmet, AC-5b is unmet `[SIM]`, and AC-6–AC-8 are `[HW]`; spec 060 AC-1–AC-4 are unmet and AC-5–AC-8 are `[HW]`; spec 070 AC-1–AC-3 are unmet and AC-4–AC-5 are `[HW]`.
-- Placeholder smoke tests do not satisfy later criteria; no committed `qa/` evidence exists, and no criterion is `DISPUTED`.
-- T002 stays first because environment and simulator work need the scaffold's real pins and loadable app; protocol follows only after spec 010's worker-runnable criteria are closed or the `[SIM]` run is parked.
-- Protocol tasks preserve full-state replay, per-open sequence reset, accepted-socket errors, and authenticated driver eviction; future HUD tasks must preserve state-only rendering, one 288×144 image, 250 ms latest-wins gap coalescing, NO LINK dimming, and permanent text fallback.
-- Local verification ran on Node 24.11.1 and passed with the expected engine warning; CI remains the Node 22 verifier required by AC-1.
+- Review verdict `approve with nits` closes T002; the README greeting mismatch is documentation-only and affects no acceptance criterion, so it does not create a follow-up task.
+- AC audit 010: AC-1 is met by `.github/workflows/ci.yml` plus the passing root gate; AC-2 is met by `sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts`; AC-3 is unmet `[SIM]`, AC-5 and AC-7 are unmet automated criteria, and AC-4 is open `[HW]`.
+- AC audit 020: AC-1–AC-9 are unmet because every named verifier is absent; AC-10 is open `[HW]` and its local CLI prerequisite is T014.
+- AC audit 030: AC-1–AC-6 are unmet, AC-7 is unmet `[SIM]`, and AC-8–AC-10 are open `[HW]`; spec 040 AC-1–AC-5 are unmet and AC-6–AC-7 are open `[HW]`.
+- AC audit 050: AC-1–AC-5 are unmet, AC-5b is unmet `[SIM]`, and AC-6–AC-8 are open `[HW]`; spec 060 AC-1–AC-4 are unmet and AC-5–AC-8 are open `[HW]`; spec 070 AC-1–AC-3 are unmet and AC-4–AC-5 are open `[HW]`.
+- No criterion is `DISPUTED`; no committed `qa/` evidence exists. The current root gates pass: 5 test files/8 tests, typecheck, lint, generated-agent sync, and dependency pins.
+- T003 remains first because the checked environment schema must exist before the simulator evidence task fills its non-hardware fields; the harness failure contract follows, then mocked smoke assertions, then the real `[SIM]` run.
+- Protocol tasks retain full-state replay, per-open sequence reset, accepted-socket errors, and authenticated driver eviction; future HUD tasks retain state-only rendering, one 288×144 image, 250 ms latest-wins gap coalescing, NO LINK dimming, and permanent text fallback.

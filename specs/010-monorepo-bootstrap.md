@@ -43,6 +43,7 @@ R7. `scripts/sim-harness.ts` MUST launch the pinned simulator with `--automation
 - 2026-09-03 Standardize repository text and Prettier on LF — why: the AC-1 CI gate runs on Ubuntu, where Git materializes normalized text as LF, so forcing CRLF makes a clean checkout fail formatting.
 - 2026-09-03 Pin TypeScript 6.0.3 rather than 7.0.2 with the current lint stack — why: `typescript-eslint` 8.69.0 requires TypeScript below 6.1 for a resolvable fresh `npm ci`.
 - 2026-09-03 Treat `@evenrealities/*` as a namespace-wide pin rule rather than a fixed package list — why: newly introduced SDK packages must not evade exact-version enforcement.
+- 2026-09-03 Treat the startup-page unit test as a scaffold prerequisite, not AC-3 evidence — why: AC-3 specifically requires the committed simulator screenshot and report from `npm run sim:scenarios -- --smoke`.
 
 ## Open questions
 
