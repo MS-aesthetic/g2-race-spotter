@@ -40,6 +40,8 @@ R7. `scripts/sim-harness.ts` MUST launch the pinned simulator with `--automation
 - 2026-09-03 Use the official `minimal` template rather than hand-rolling — why: it already matches the SDK version conventions and simulator wiring.
 - 2026-09-03 Treat AC-1 as an indivisible end-to-end gate — why: deferring lint or its CI command chain makes the criterion fail even when the workspace smoke tests pass.
 - 2026-09-03 Simulator 0.9.x accepts the full 288×144 image and our 4-container page, so image mode is the normal simulator path and the harness is the primary functional gate; the simulator does not enforce on-device image limits, so hardware criteria stay `[HW]` — why: earlier notes (200×100 cap, 4-container cap) were from simulator ≤ 0.7 and are obsolete.
+- 2026-09-03 Standardize repository text and Prettier on LF — why: the AC-1 CI gate runs on Ubuntu, where Git materializes normalized text as LF, so forcing CRLF makes a clean checkout fail formatting.
+- 2026-09-03 Pin TypeScript 6.0.3 rather than 7.0.2 with the current lint stack — why: `typescript-eslint` 8.69.0 requires TypeScript below 6.1 for a resolvable fresh `npm ci`.
 
 ## Open questions
 

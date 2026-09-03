@@ -25,3 +25,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 |---|---|---|---|---|---|---|---|
 | 0 | 2026-09-03 | bootstrap plan | (hand-written) | — | — | — | Specs and loop scaffolding created; no application code yet |
 | 1 | 2026-09-03 | T001 | relay-backend-dev | review-blocked | block | cc13020 | AC-1 is an end-to-end gate: lint, its CI command chain, and the named workspace test must exist before handoff. |
+| 2 | 2026-09-03 | T010 | relay-backend-dev | review-blocked | block | 6e4c2d9 | Cross-platform lint must be reproduced from LF Git blobs; focused workspace tests must discover future criterion tests. |
