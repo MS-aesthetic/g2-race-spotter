@@ -15,11 +15,17 @@
     "build": "npm run build --workspaces --if-present",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
+    "lint": "eslint . && prettier --check \"{apps,packages,services,scripts}/**/*.{ts,js,mjs,json}\" \"*.{js,mjs,json,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
     "sync:agents": "node scripts/sync-agents.mjs",
     "sync:agents:check": "node scripts/sync-agents.mjs --check"
   },
   "devDependencies": {
-    "typescript": "7.0.2",
+    "@eslint/js": "10.0.1",
+    "eslint": "10.9.1",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.69.0",
     "vitest": "5.0.0"
   }
 }

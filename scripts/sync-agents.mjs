@@ -8,7 +8,15 @@
 // Model/effort per tier come from ralph/models.env (same file the loop uses),
 // so a single edit re-routes both runtimes.
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, existsSync, statSync } from 'node:fs';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  existsSync,
+  statSync,
+} from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,8 +25,12 @@ const check = process.argv.includes('--check');
 
 // ---------- models.env ----------
 const env = {};
-for (const line of readFileSync(join(root, 'ralph/models.env'), 'utf8').split('\n')) {
-  const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*"?([^"#]*)"?\s*(#.*)?$/);
+for (const line of readFileSync(join(root, 'ralph/models.env'), 'utf8').split(
+  '\n',
+)) {
+  const m = line.match(
+    /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*"?([^"#]*)"?\s*(#.*)?$/,
+  );
   if (m) env[m[1]] = m[2].trim();
 }
 const tierCfg = (tier) => {
@@ -32,8 +44,18 @@ const tierCfg = (tier) => {
 };
 
 // ---------- portable tool vocabulary → runtime tools ----------
-const claudeTools = { read: ['Read', 'Glob'], search: ['Grep', 'Glob'], write: ['Write'], edit: ['Edit'], shell: ['Bash'], web: ['WebFetch', 'WebSearch'] };
-const codexSandbox = (tools) => (tools.includes('write') || tools.includes('edit') ? 'workspace-write' : 'read-only');
+const claudeTools = {
+  read: ['Read', 'Glob'],
+  search: ['Grep', 'Glob'],
+  write: ['Write'],
+  edit: ['Edit'],
+  shell: ['Bash'],
+  web: ['WebFetch', 'WebSearch'],
+};
+const codexSandbox = (tools) =>
+  tools.includes('write') || tools.includes('edit')
+    ? 'workspace-write'
+    : 'read-only';
 
 // ---------- parse a role file ----------
 function parseRole(text) {
@@ -44,8 +66,17 @@ function parseRole(text) {
     const kv = line.match(/^([a-z_]+):\s*(.*)$/);
     if (!kv) continue;
     let v = kv[2].trim();
-    if (v.startsWith('[')) v = v.slice(1, -1).split(',').map((s) => s.trim()).filter(Boolean);
-    else if (kv[1] === 'tools') v = v.split(',').map((s) => s.trim()).filter(Boolean);
+    if (v.startsWith('['))
+      v = v
+        .slice(1, -1)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    else if (kv[1] === 'tools')
+      v = v
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     fm[kv[1]] = v;
   }
   return { fm, body: m[2].trim() };
@@ -60,7 +91,9 @@ for (const file of readdirSync(rolesDir).filter((f) => f.endsWith('.md'))) {
   const tools = fm.tools || ['read', 'search'];
 
   // ---- Claude Code: .claude/agents/<name>.md ----
-  const ct = [...new Set([...tools.flatMap((t) => claudeTools[t] || []), 'Skill'])].join(', ');
+  const ct = [
+    ...new Set([...tools.flatMap((t) => claudeTools[t] || []), 'Skill']),
+  ].join(', ');
   const claude = [
     '---',
     `name: ${fm.name}`,
@@ -68,7 +101,9 @@ for (const file of readdirSync(rolesDir).filter((f) => f.endsWith('.md'))) {
     `tools: ${ct}`,
     `model: ${cfg.claudeModel}`,
     `effort: ${cfg.claudeEffort}`,
-    ...(fm.skills?.length ? ['skills:', ...fm.skills.map((s) => `  - ${s}`)] : []),
+    ...(fm.skills?.length
+      ? ['skills:', ...fm.skills.map((s) => `  - ${s}`)]
+      : []),
     '---',
     '',
     `<!-- GENERATED from agents/roles/${file} by scripts/sync-agents.mjs — edit the role file, not this one. -->`,
@@ -107,21 +142,38 @@ for (const file of readdirSync(rolesDir).filter((f) => f.endsWith('.md'))) {
 
 // ---------- skills mirror: .agents/skills → .claude/skills (every file, incl. references/ and scripts/) ----------
 const skillsSrc = join(root, '.agents/skills');
-const walk = (dir, rel = '') => readdirSync(dir).flatMap((name) => {
-  const p = join(dir, name);
-  return statSync(p).isDirectory() ? walk(p, join(rel, name)) : [join(rel, name)];
-});
+const walk = (dir, rel = '') =>
+  readdirSync(dir).flatMap((name) => {
+    const p = join(dir, name);
+    return statSync(p).isDirectory()
+      ? walk(p, join(rel, name))
+      : [join(rel, name)];
+  });
 for (const rel of walk(skillsSrc)) {
-  outputs.set(join(root, '.claude/skills', rel), readFileSync(join(skillsSrc, rel), 'utf8'));
+  outputs.set(
+    join(root, '.claude/skills', rel),
+    readFileSync(join(skillsSrc, rel), 'utf8'),
+  );
 }
 
 // ---------- orphans: generated files whose source no longer exists ----------
 const wanted = new Set(outputs.keys());
-const orphanDirs = [join(root, '.claude/agents'), join(root, '.codex/agents'), join(root, '.claude/skills')];
-const orphans = orphanDirs.filter(existsSync).flatMap((d) => walk(d).map((r) => join(d, r))).filter((p) => !wanted.has(p));
+const orphanDirs = [
+  join(root, '.claude/agents'),
+  join(root, '.codex/agents'),
+  join(root, '.claude/skills'),
+];
+const orphans = orphanDirs
+  .filter(existsSync)
+  .flatMap((d) => walk(d).map((r) => join(d, r)))
+  .filter((p) => !wanted.has(p));
 for (const p of orphans) {
-  if (check) { console.error(`orphan: ${p}`); }
-  else { rmSync(p); console.log(`removed orphan ${relative(root, p)}`); }
+  if (check) {
+    console.error(`orphan: ${p}`);
+  } else {
+    rmSync(p);
+    console.log(`removed orphan ${relative(root, p)}`);
+  }
 }
 
 // ---------- write or check ----------
@@ -139,7 +191,11 @@ for (const [path, content] of outputs) {
 }
 if (check) {
   const bad = stale + orphans.length;
-  console.log(bad ? `${stale} stale + ${orphans.length} orphaned generated file(s) — run: node scripts/sync-agents.mjs` : 'generated agents/skills are up to date');
+  console.log(
+    bad
+      ? `${stale} stale + ${orphans.length} orphaned generated file(s) — run: node scripts/sync-agents.mjs`
+      : 'generated agents/skills are up to date',
+  );
   process.exit(bad ? 1 : 0);
 }
 console.log(`synced ${outputs.size} files`);
