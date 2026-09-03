@@ -1,12 +1,10 @@
-# Implementation plan — 2026-09-03T12:17:29-04:00
+# Implementation plan — 2026-09-03T12:26:57-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T015a (owner: relay-backend-dev) (spec: 010 AC-6) Fix the blocked pin checker and add the missing regression coverage; reviewer finding (verbatim): “[block] scripts/check-pins.mjs:63 — AC-6 covers every `@evenrealities/*` dependency, but the checker recognizes only three hard-coded package names — scenario: add `@evenrealities/new-sdk: "^1.0.0"` to any dependency section → `npm run check:pins` exits 0 instead of rejecting the range — fix: treat every name beginning with `@evenrealities/` as pin-controlled and add a non-listed scoped-package fixture assertion.” Verify `scripts/test/check-pins.test.ts`, `npm run check:pins`, and the full AC-1 gate.
-- [ ] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Add `scripts/check-pins.mjs`, fixture-driven coverage in `scripts/test/check-pins.test.ts`, and a CI step rejecting range specifiers for every dependency named by R2; verify the checker and full AC-1 gate.
-- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts`.
-- [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI, rejecting missing/toolchain/simulator `TBD` fields while allowing hardware `TBD` only while their named `[HW]` criteria remain open.
+- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts` and the full AC-1 gate.
+- [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI, rejecting missing/toolchain/simulator `TBD` fields while allowing hardware `TBD` only while their named `[HW]` criteria remain open; verify the checker and full AC-1 gate.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add the simulator harness launcher/failure foundation in `scripts/sim-harness.ts` and `sim:scenarios`: resolve the pinned local executable, use automation port 9898, and exit non-zero with literal `sim-unavailable` and no partial report when launch/ping fails; verify `scripts/test/sim-harness.test.ts` with a mocked launcher.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the harness smoke success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and record pinned simulator/SDK versions in `report.json`; verify `scripts/test/sim-harness-smoke.test.ts` with mocked automation responses.
 - [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke`; commit `qa/<date>/sim/` and simulator fields in `docs/ENVIRONMENT.md`; if it reports `sim-unavailable`, hand off `failed` with that literal reason so the planner parks this task.
@@ -43,17 +41,17 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- (none; T015 remains open after review block)
+- [x] T015a (owner: relay-backend-dev) (spec: 010 AC-6) Enforced namespace-wide `@evenrealities/*` pins and added the unknown-package regression fixture (commit 4cc5ffb; review approve).
+- [x] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Added the exact-version checker, fixture coverage, and CI gate; completed by the original commit plus approved fix (commits 62ea204, 4cc5ffb).
 
 ## Notes / why
-- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the green local test/typecheck/lint gate; AC-2 met by CI plus the green `sync:agents:check`; AC-5/AC-6/AC-7 unmet; AC-3 `[SIM]` open; AC-4 `[HW]` open.
-- AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and named tests are absent/placeholders; AC-10 `[HW]` open.
-- AC audit 030: AC-1–AC-6 unmet—`apps/glasses` and its named tests are absent; AC-7 `[SIM]` open; AC-8–AC-10 `[HW]` open.
-- AC audit 040: AC-1–AC-5 unmet—the spotter module and named tests are absent/placeholders; AC-6–AC-7 `[HW]` open.
-- AC audit 050: AC-1–AC-5 unmet; AC-5b `[SIM]` open; AC-6–AC-8 `[HW]` open.
-- AC audit 060: AC-1–AC-4 unmet; AC-5–AC-8 `[HW]` open.
-- AC audit 070: AC-1–AC-3 unmet; AC-4–AC-5 `[HW]` open. No criterion is DISPUTED.
-- T015 is not complete despite a green local checker because its fixed package allowlist fails AC-6's namespace-wide `@evenrealities/*` requirement; T015a closes exactly that review block before any new dependencies land.
-- Pin enforcement still leads the queue so each exact SDK/CLI/simulator/Worker dependency introduced by later bootstrap tasks is guarded immediately; the glasses scaffold follows because environment and simulator work depend on its actual pins.
-- The harness remains split into failure plumbing, mocked smoke success, and committed `[SIM]` evidence; simulator output never substitutes for hardware nibble, pacing, lifecycle, or visual evidence.
+- AC audit 010: AC-1 met by `.github/workflows/ci.yml` plus the green local `npm ci`/test/typecheck/lint gate; AC-2 met by the green `sync:agents:check`; AC-6 met by `scripts/test/check-pins.test.ts` and the green checker; AC-5/AC-7 unmet because their named scripts/tests are absent; AC-3 `[SIM]` and AC-4 `[HW]` remain open.
+- AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and named tests are absent/placeholders; AC-10 `[HW]` remains open.
+- AC audit 030: AC-1–AC-6 unmet—`apps/glasses` and its named tests are absent; AC-7 `[SIM]` remains open; AC-8–AC-10 `[HW]` remain open.
+- AC audit 040: AC-1–AC-5 unmet—the spotter module and named tests are placeholders/absent; AC-6–AC-7 `[HW]` remain open.
+- AC audit 050: AC-1–AC-5 unmet; AC-5b `[SIM]` remains open; AC-6–AC-8 `[HW]` remain open.
+- AC audit 060: AC-1–AC-4 unmet; AC-5–AC-8 `[HW]` remain open.
+- AC audit 070: AC-1–AC-3 unmet; AC-4–AC-5 `[HW]` remain open. No criterion is DISPUTED.
+- T015a closes the sole review block, so T015 is complete and the glasses scaffold is now the first dependency-ordered task.
+- T002 precedes environment and harness work because those tasks must inspect the actual pinned scaffold and loadable app; failure plumbing precedes successful simulator automation and committed `[SIM]` evidence.
 - Protocol types, reducer, and shared `RoomClient` precede relay and UI consumers; full-state replay and authenticated last-writer-wins remain normative.

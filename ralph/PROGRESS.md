@@ -29,3 +29,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 3 | 2026-09-03 | T010a | relay-backend-dev | done | approve | 7a4a114 | LF normalization and a discovering workspace test close the cross-platform AC-1 repair chain. |
 | 4 | 2026-09-03 | T001b | relay-backend-dev | done | approve | 31a0615 | CI now rejects stale generated agent and skill outputs after the standard verification gate. |
 | 5 | 2026-09-03 | T015 | relay-backend-dev | review-blocked | block | 62ea204 | AC-6's `@evenrealities/*` requirement is namespace-wide; a fixed allowlist leaves future SDK packages unguarded. |
+| 6 | 2026-09-03 | T015a | relay-backend-dev | done | approve | 4cc5ffb | A namespace predicate plus an unknown scoped-package fixture closes the future `@evenrealities/*` pinning gap. |
