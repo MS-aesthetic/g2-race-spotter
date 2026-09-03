@@ -46,3 +46,5 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 16 | 2026-09-03 | T002f | hud-qa | done | approve | 1c56c26 | Recursive search beneath the injected output root now proves launcher and ping failures cannot leave a partial report on any run date. |
 | 17 | 2026-09-03 | T002d | hud-qa | review-blocked | block | 3c22234 | Device info can precede startup rendering, and broad `sim-unavailable` mapping hides product assertion or evidence failures. |
 | 18 | 2026-09-03 | T002g | hud-qa | review-blocked | block | 3b683f1 | After automation readiness, missing device info is an evidence failure; the required lint gate must also pass before hand-off. |
+| 19 | 2026-09-03 | T002h | hud-qa | done | approve | 2ef2f63 | Post-readiness device-info absence and dark screenshots now fail as evidence, closing the blocked repair ancestry while preserving the real `[SIM]` gate. |
+| 20 | 2026-09-03 | T004 | relay-backend-dev | done | approve | 019d2e4 | Protocol v1 types, constants, guards, and fixture pairs are centralized with zero runtime dependencies and pass the integrated root gates. |

@@ -1,37 +1,29 @@
-# Implementation plan — 2026-09-03T15:33:23-04:00
+# Implementation plan — 2026-09-03T15:47:23-04:00
 Status: BUILDING
-Current spec focus: specs/010-monorepo-bootstrap.md
+Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 | lease | task | stream | write scope | locks | dependency / integration gate |
 |---|---|---|---|---|---|
-| L001 | T002h | bootstrap | `apps/glasses/src/main.ts`; `scripts/sim-harness.ts`; `scripts/test/sim-harness-smoke.test.ts` | `sim-harness` | none; integrate first and restore root lint |
-| L002 | T004 | protocol | `packages/protocol/**` | `protocol` | implementation may start now; final commit/integration only after T002h is integrated and full root gates are green |
+| L003 | T005 | protocol | `packages/protocol/src/reduce.ts`; export wiring in `packages/protocol/src/index.ts`; `packages/protocol/test/reduce.test.ts` | `protocol` | T004 integrated at `019d2e4`; coordinator records exact plan-commit base/worktree before dispatch; integrate only after independent approval and full root gates |
 
-The coordinator must add the exact base commit and isolated worktree path to each dispatch record before starting a stream. L001 and L002 have disjoint scopes/locks and may run concurrently; integration is serial in the order above.
+L001/T002h and L002/T004 are retired after approved serial integration. L003 is the only dependency-safe implementation lease at this boundary.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
-- [ ] T002h (owner: hud-qa) (spec: 010 AC-3) [stream: bootstrap; lease: L001; lock: sim-harness] Repair the blocked T002g smoke path: after the app and simulator automation endpoints are ready, classify a missing or rejected `bridge.getDeviceInfo()` observation as `evidence-failed` rather than `sim-unavailable`; make screenshot proof require actual RGB brightness `> 32` in the “Hello, driver” region (not merely opaque alpha or near-black pixels); add focused process-facing regressions in `scripts/test/sim-harness-smoke.test.ts` that prove both failures produce a non-zero CLI result, cleanup, and no success evidence; format `scripts/sim-harness.ts`; run root test/typecheck/lint gates. Review findings (verbatim):
-  > [block] scripts/sim-harness.ts:461 — missing `g2rs.device-info` remains inside the `sim-unavailable` catch even after ping proves the automation server ready — scenario: simulator ping succeeds and "Hello, driver" renders, but `bridge.getDeviceInfo()` rejects or emits no marker → the harness returns `sim-unavailable` with no report, parking a product/evidence failure as infrastructure — fix: move the missing-device-info branch outside the launch/readiness catch, classify it as `evidence-failed`, and add a regression.
-  >
-  > [block] scripts/sim-harness.ts:1 — the committed file fails the task's required lint/format gate — scenario: a clean review runs `npm run lint` → Prettier reports `scripts/sim-harness.ts` and exits 1 — fix: format the file with the pinned Prettier and recommit.
-- [ ] T004 (owner: relay-backend-dev) (spec: 020 AC-1) [stream: protocol; lease: L002; lock: protocol] Implement protocol v1 wire types, shared constants, guards, and one valid plus invalid fixture per message type without runtime dependencies; verify `packages/protocol/test/guards.test.ts` through root and workspace test commands. Start may overlap T002h, but final verification/commit and integration wait for T002h to restore root lint.
-- [ ] T002g (owner: hud-qa) (spec: 010 AC-3) [stream: bootstrap; lock: sim-harness; superseded by T002h] Preserve the blocked repair-chain record until T002h is approved; do not lease independently.
-- [ ] T002d (owner: hud-qa) (spec: 010 AC-3) [stream: bootstrap; lock: sim-harness; superseded by T002h] Preserve the original blocked task until T002h is approved; do not lease independently.
-- [ ] T005 (owner: relay-backend-dev) (spec: 020 AC-2) [stream: protocol; lock: protocol; depends: T004 integrated] Implement the pure, total reducer with injected clock/id and every event, no-op, sequence, ack, peer, and expiry semantic from the normative protocol skill; verify `packages/protocol/test/reduce.test.ts`.
-- [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol; lock: protocol; depends: T005 integrated] Implement the injected-WebSocket `RoomClient` with hello, ping, reconnect/backoff, per-open sequence reset, replay gating, `lastFrameAt`, and disconnected-intent coalescing; verify `packages/protocol/test/client.test.ts`.
-- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lock: relay-room; depends: T006 integrated] Build the Worker and SQLite-hibernating `RaceRoom` baseline with URL/hello validation, immediate state replay, persisted full-state reduction, and broadcasts; verify `services/relay/test/roundtrip.test.ts` against self-managed `wrangler dev`.
-- [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-3; requirement R5) [stream: relay; lock: relay-room; depends: T007 integrated] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on all HTTP responses; verify `services/relay/test/routes.test.ts` against self-managed `wrangler dev`.
+- [ ] T005 (owner: relay-backend-dev) (spec: 020 AC-2) [stream: protocol; lease: L003; lock: protocol] Implement and export the pure, total reducer with injected clock/id and the normative initial state; cover lane, rounded/clamped gap, trimmed message creation, matching/nonmatching/already-acked ack, clear, peer, expire, no-op sequence behavior, and monotonic `updatedAt` in `packages/protocol/test/reduce.test.ts`; run protocol workspace and full root test/typecheck/lint gates.
+- [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol; lock: protocol; depends: T005 integrated] Implement the injected-WebSocket `RoomClient` with hello, ping, reconnect/backoff, per-open sequence reset, replay gating, `lastFrameAt`, and disconnected-intent coalescing; verify `packages/protocol/test/client.test.ts` plus root gates.
+- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lock: relay-room; depends: T005 integrated] Build the Worker and SQLite-hibernating `RaceRoom` baseline with URL/hello validation, immediate state replay, persisted full-state reduction, and broadcasts; verify `services/relay/test/roundtrip.test.ts` against self-managed `wrangler dev` plus root gates.
+- [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-3; requirement R5) [stream: relay; lock: relay-room; depends: T007 integrated] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response; verify `services/relay/test/routes.test.ts` against self-managed `wrangler dev`.
 - [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4) [stream: relay; lock: relay-room; depends: T007 integrated] Preserve state and sequence across reconnect and Durable Object rehydration, and repoint the empty-room alarm to room TTL; verify `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`.
-- [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay; lock: relay-room; depends: T007 integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth errors followed by close 4401; verify `services/relay/test/auth.test.ts`.
-- [ ] T009 (owner: relay-backend-dev) (spec: 020 AC-5) [stream: relay; lock: relay-room; depends: T011 integrated] Enforce PIN-checked, last-writer-wins driver eviction by sending `role_taken` then closing the previous driver with 4409 while accepting the new one; verify `services/relay/test/eviction.test.ts`.
-- [ ] T012 (owner: relay-backend-dev) (spec: 020 AC-7) [stream: relay; lock: relay-room; depends: T007 integrated] Implement shared-timing alarm ticks, silent-socket close 4408, peer-offline state reduction, and broadcast; verify `services/relay/test/heartbeat.test.ts`.
-- [ ] T013 (owner: relay-backend-dev) (spec: 020 AC-9) [stream: relay; lock: relay-room; depends: T007 integrated] Enforce frame-size, malformed, unknown-type, wrong-role, version, and URL-versus-hello semantics with each required ignore/keep-open/close behavior; verify `services/relay/test/validation.test.ts`.
+- [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay; lock: relay-room; depends: T007 integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth error followed by close 4401; verify `services/relay/test/auth.test.ts`.
+- [ ] T009 (owner: relay-backend-dev) (spec: 020 AC-5) [stream: relay; lock: relay-room; depends: T011 integrated] Enforce PIN-checked, last-writer-wins driver eviction by sending `role_taken`, closing the previous driver with 4409, and accepting the new driver; verify `services/relay/test/eviction.test.ts`.
+- [ ] T012 (owner: relay-backend-dev) (spec: 020 AC-7) [stream: relay; lock: relay-room; depends: T007 integrated] Implement shared-timing alarm ticks, silent-socket close 4408, peer-offline reduction, and broadcast; verify `services/relay/test/heartbeat.test.ts`.
+- [ ] T013 (owner: relay-backend-dev) (spec: 020 AC-9) [stream: relay; lock: relay-room; depends: T007 integrated] Enforce frame-size, malformed, unknown-type, wrong-role, version, and URL-versus-hello semantics with every required ignore/keep-open/close behavior; verify `services/relay/test/validation.test.ts`.
 - [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10) [stream: tooling; lock: fake-spotter; depends: T007 integrated] Implement the local `fake-spotter` prerequisite with every R6 scenario and `--role driver`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
 
 ## Needs simulator [SIM]
-- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] After the T002h repair chain is approved, run `npm run sim:scenarios -- --smoke` on an interactive machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
-- [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject any non-hardware `TBD`, add the root environment-check script to CI, and validate that `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and the full AC-1 gate. This closes the blocked T003a repair.
+- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` on an interactive machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
+- [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject non-hardware `TBD`, add the root environment check to CI, and validate `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and full AC-1 gates.
 
 ## Needs human [HW]
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode, QR-sideload the scaffold, and save the required photo/log under `qa/<date>/`.
@@ -52,19 +44,15 @@ The coordinator must add the exact base commit and isolated worktree path to eac
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- None — T002g was implemented at `3b683f1` but remains unchecked because the review verdict was `block`.
+- [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened post-readiness device-info and screenshot evidence classification, closing the T002g/T002d blocked repair ancestry without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
+- [x] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Centralized protocol v1 types/constants/guards and valid/invalid fixtures with zero runtime dependencies (commit `019d2e4`; review `approve`).
 
 ## Notes / why
-- Iteration 18 records T002g as `review-blocked`/`block`; T002h is first with the same owner, while T002g and its original T002d remain unchecked beneath it as required by review handling.
-- L001/T002h and L002/T004 are the only active parallel leases: their scopes and locks do not overlap, but T004 cannot make its final green commit or integrate until T002h restores root lint.
-- T005 and T006 remain serial on the exclusive `protocol` lock; relay auth T011 precedes eviction T009 so last-writer-wins is built on verified PIN admission.
-- Once simulator ping succeeds, a missing `getDeviceInfo()` observation is an evidence failure, not launch unavailability; this prevents a product/evidence defect from being parked under *Needs simulator*.
-- AC audit 010: AC-2 is met by `npm run sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts` plus `check:pins`; AC-7 is met by `scripts/test/sim-harness.test.ts`; AC-1 is unmet because `npm run lint` fails on `scripts/sim-harness.ts`; AC-5 is unmet because the simulator value remains `TBD` and its named repository verifier is absent from CI; AC-3 is open `[SIM]`; AC-4 is open `[HW]`.
-- AC audit 020: AC-1–AC-9 are unmet because the protocol/relay are placeholders and their named verifier files are absent; AC-10 is open `[HW]`, with local CLI prerequisite T014.
-- AC audit 030: AC-1–AC-6 are unmet because their named tests/features are absent; AC-7 is open `[SIM]`; AC-8–AC-10 are open `[HW]`.
-- AC audit 040: AC-1–AC-5 are unmet because their named tests/UI are absent; AC-6–AC-7 are open `[HW]`.
-- AC audit 050: AC-1–AC-5 are unmet because their named tests/image renderer are absent; AC-5b is open `[SIM]`; AC-6–AC-8 are open `[HW]`.
-- AC audit 060: AC-1–AC-4 are unmet because their named tests/hardening are absent; AC-5–AC-8 are open `[HW]`.
-- AC audit 070: AC-1–AC-3 are unmet because their named tests/packaging artifacts are absent; AC-4–AC-5 are open `[HW]`.
-- No criterion is `DISPUTED`; `qa/` is absent, so no `[SIM]` or `[HW]` criterion has passing evidence.
-- Protocol work remains ordered types/guards → reducer → client → relay so all consumers share normative wire shapes, state semantics, and timings before integration.
+- After T004, 020 AC-1 is met by `packages/protocol/test/guards.test.ts`; protocol workspace tests (20) and integrated root typecheck/tests (38)/lint pass on Node 22.
+- T002h restores 010 AC-1 and closes the blocked repair chain, but 010 AC-3 remains open until T002c commits real simulator evidence; no `[SIM]` claim was inferred from mocks.
+- L003/T005 is the only dependency-safe lease now. T005 and T006 remain serial on the `protocol` lock; once T005 integrates, T006 (`protocol`) and T007 (`relay-room`) may run concurrently because the relay baseline needs the reducer/guards, not the client implementation.
+- Relay tasks remain serialized on `relay-room`; after T007 integrates, T014 may run concurrently with one relay-room task because its tooling scope and lock are disjoint.
+- AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human.
+- AC audit 020: AC-1 met; AC-2–AC-9 unmet; AC-10 under Needs human with local prerequisite T014.
+- AC audits 030–070 remain unchanged: automated criteria are unmet, `[SIM]` evidence is absent, and every `[HW]` criterion remains under Needs human.
+- No criterion is `DISPUTED`; `qa/` remains absent, so no simulator or hardware evidence is claimed.
