@@ -6,7 +6,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json"
   },
+  "dependencies": {
+    "@g2-race-spotter/protocol": "file:../../packages/protocol"
+  },
   "devDependencies": {
-    "wrangler": "4.68.0"
+    "@types/node": "22.19.15",
+    "@types/ws": "8.18.1",
+    "wrangler": "4.68.0",
+    "ws": "8.18.0"
   }
 }

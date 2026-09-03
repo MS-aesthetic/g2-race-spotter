@@ -1,0 +1,186 @@
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { afterEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
+
+interface RunningWorker {
+  readonly origin: string;
+  stop(): Promise<void>;
+}
+
+const projectDirectory = fileURLToPath(new URL('../', import.meta.url));
+const nodeExecutable = process.execPath;
+const wranglerEntrypoint = join(
+  projectDirectory,
+  '..',
+  '..',
+  'node_modules',
+  'wrangler',
+  'bin',
+  'wrangler.js',
+);
+
+async function reservePort(): Promise<number> {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('could not reserve a TCP port');
+  }
+  const port = address.port;
+  server.close();
+  await once(server, 'close');
+  return port;
+}
+
+async function stopProcess(worker: ReturnType<typeof spawn>): Promise<void> {
+  if (worker.exitCode !== null) {
+    return;
+  }
+  const exited = once(worker, 'exit');
+  worker.kill();
+  await exited;
+}
+
+async function removePersistence(directory: string): Promise<void> {
+  await rm(directory, {
+    force: true,
+    maxRetries: 10,
+    recursive: true,
+    retryDelay: 100,
+  });
+}
+
+async function startWorker(): Promise<RunningWorker> {
+  const port = await reservePort();
+  const persistenceDirectory = await mkdtemp(join(tmpdir(), 'g2rs-relay-'));
+  const worker = spawn(
+    nodeExecutable,
+    [
+      wranglerEntrypoint,
+      'dev',
+      '--local',
+      '--port',
+      String(port),
+      '--persist-to',
+      persistenceDirectory,
+    ],
+    { cwd: projectDirectory, stdio: ['ignore', 'pipe', 'pipe'] },
+  );
+  const output: string[] = [];
+  const collect = (chunk: Buffer): void => {
+    output.push(chunk.toString());
+  };
+  worker.stdout.on('data', collect);
+  worker.stderr.on('data', collect);
+
+  const origin = `http://127.0.0.1:${port}`;
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${origin}/not-a-room`);
+      if (response.status === 404) {
+        return {
+          origin,
+          async stop(): Promise<void> {
+            await stopProcess(worker);
+            await removePersistence(persistenceDirectory);
+          },
+        };
+      }
+    } catch {
+      // Wrangler has not opened its port yet.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  await stopProcess(worker);
+  await removePersistence(persistenceDirectory);
+  throw new Error(`wrangler did not start:\n${output.join('')}`);
+}
+
+function openSocket(url: string): Promise<WebSocket> {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(url);
+    socket.once('open', () => resolve(socket));
+    socket.once('error', reject);
+  });
+}
+
+function nextMessage(socket: WebSocket): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    socket.once('message', (data) => {
+      try {
+        resolve(JSON.parse(data.toString()) as Record<string, unknown>);
+      } catch (error) {
+        reject(error);
+      }
+    });
+    socket.once('error', reject);
+  });
+}
+
+async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`message exceeded ${ms} ms`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+describe('RaceRoom roundtrip', () => {
+  let worker: RunningWorker | undefined;
+
+  afterEach(async () => {
+    await worker?.stop();
+  });
+
+  it('broadcasts a persisted lane state to the driver within 500 ms', async () => {
+    worker = await startWorker();
+    const room = 'QA01';
+    const spotter = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=spotter`,
+    );
+    const driver = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=driver`,
+    );
+
+    try {
+      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      await nextMessage(spotter);
+      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      await nextMessage(driver);
+
+      const state = nextMessage(driver);
+      spotter.send(JSON.stringify({ t: 'lane', lane: 'top' }));
+      await expect(within(state, 500)).resolves.toMatchObject({
+        t: 'state',
+        lane: 'top',
+        seq: expect.any(Number),
+      });
+      const received = await state;
+      expect(received.seq).toBeGreaterThan(0);
+    } finally {
+      spotter.close();
+      driver.close();
+    }
+  }, 20_000);
+});
