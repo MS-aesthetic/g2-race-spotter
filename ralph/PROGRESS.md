@@ -37,3 +37,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 10 | 2026-09-03 | T003 | relay-backend-dev | nothing-to-do | n/a | - | A second absent hand-off exhausts the retry; split environment schema/testing from post-simulator repository and CI enforcement. |
 | 11 | 2026-09-03 | T003a | relay-backend-dev | review-blocked | block | 6a2292a | An AC-5 hand-off cannot allow a non-hardware `TBD` or omit its named verifier from CI; repair both before closing the task. |
 | 12 | 2026-09-03 | T003c | relay-backend-dev | nothing-to-do | n/a | - | No worker hand-off or review exists; retain the blocked repair first for its one permitted retry before splitting. |
+| 13 | 2026-09-03 | T003c | relay-backend-dev | failed | n/a | - | The automation server alone is insufficient: without an interactive simulator main window, the exact `bridge.getDeviceInfo()` value cannot be observed; park the repair under Needs simulator. |
