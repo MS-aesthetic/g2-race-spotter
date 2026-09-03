@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -18,8 +18,25 @@ async function outputRoot(): Promise<string> {
   return join(root, 'qa');
 }
 
-function reportPath(root: string): string {
-  return join(root, '2026-09-03', 'sim', 'report.json');
+async function reportPathsUnder(root: string): Promise<string[]> {
+  let entries: Awaited<ReturnType<typeof readdir>>;
+
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+
+  const reportPaths = await Promise.all(
+    entries.map(async (entry) => {
+      const path = join(root, entry.name);
+      if (entry.isDirectory()) return reportPathsUnder(path);
+      return entry.name === 'report.json' ? [path] : [];
+    }),
+  );
+
+  return reportPaths.flat();
 }
 
 function dependencies(
@@ -75,9 +92,7 @@ describe('sim-harness unavailable simulator handling', () => {
     });
     expect(stderr).toHaveBeenCalledWith('sim-unavailable');
     expect(setExitCode).toHaveBeenCalledWith(1);
-    await expect(access(reportPath(selectedOutputRoot))).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    expect(await reportPathsUnder(selectedOutputRoot)).toEqual([]);
   });
 
   it('cleans up after ping failure and exits non-zero without a report at its selected output root', async () => {
@@ -115,8 +130,6 @@ describe('sim-harness unavailable simulator handling', () => {
     expect(stop).toHaveBeenCalledOnce();
     expect(stderr).toHaveBeenCalledWith('sim-unavailable');
     expect(setExitCode).toHaveBeenCalledWith(1);
-    await expect(access(reportPath(selectedOutputRoot))).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    expect(await reportPathsUnder(selectedOutputRoot)).toEqual([]);
   });
 });
