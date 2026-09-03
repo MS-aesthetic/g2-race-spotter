@@ -1,18 +1,16 @@
-# Implementation plan — 2026-09-03T15:57:56-04:00
+# Implementation plan — 2026-09-03T16:05:41-04:00
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 | lease | task | stream | write scope | locks | dependency / integration gate |
 |---|---|---|---|---|---|
-| L003R | T005a | protocol-repair | `packages/protocol/src/reduce.ts`; `packages/protocol/test/reduce.test.ts` | `protocol` | exact base `a1bb73ef4ceec21890c1bbb3098d7c71487dcd17` in `C:/Users/maxx/.cache/g2rs-worktrees/L003`; T005 range `1c4c6d9..a1bb73e` stays quarantined; review the exact combined range, then integrate it atomically only after approval and full root gates |
+| L004 | T004a | protocol-manifest | `packages/protocol/package.json`; `packages/protocol/test/package-resolution.test.ts` | `protocol-manifest` | exact base `42d7d5b8e81eea5266833bf584edf9c491c485ed`; T005/T005a are integrated; review the exact lease base-to-head range, then integrate only after approval and full root gates |
 
-L001/T002h and L002/T004 are retired after approved serial integration. L003/T005 is quarantined after review block; only its two-file root-lint repair lease L003R may run at this boundary.
+L001/T002h, L002/T004, L003/T005, and L003R/T005a are retired after approved serial integration. L004/T004a is the only active lease at this dependency boundary.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
-- [ ] T005a (owner: relay-backend-dev) (spec: 020 AC-2) [stream: protocol-repair; lease: L003R; lock: protocol; exact base: `a1bb73e`] Repair the quarantined reducer candidate within `packages/protocol/src/reduce.ts` and `packages/protocol/test/reduce.test.ts` only. Reviewer finding verbatim: "the new reducer imports `Lane` but never uses it, so the task's required root lint gate fails with `error  'Lane' is defined but never used  @typescript-eslint/no-unused-vars` — scenario: this commit reaches integration and `npm run lint` exits 1, violating T005's green-before-integration gate — fix: remove `Lane` from the type-only import, then rerun the full root gates." After removing that import, apply Prettier formatting to `packages/protocol/test/reduce.test.ts`, which is the next reported root-lint failure. Verify protocol tests plus root test/typecheck/lint; one repair commit only.
-- [ ] T005 (owner: relay-backend-dev) (spec: 020 AC-2) [stream: protocol; quarantined candidate: `a1bb73e`; base: `1c4c6d9`] Implement and export the pure, total reducer with injected clock/id and the normative initial state; cover lane, rounded/clamped gap, trimmed message creation, matching/nonmatching/already-acked ack, clear, peer, expire, no-op sequence behavior, and monotonic `updatedAt` in `packages/protocol/test/reduce.test.ts`; do not integrate until T005a's combined-range review approves and root gates pass.
-- [ ] T004a (owner: relay-backend-dev) (spec: 020 AC-1) [stream: protocol-manifest; lock: protocol-manifest; depends: T005/T005a integrated] Add explicit Node 22 ESM and TypeScript package entry metadata (`main`, `exports`, and `types`) to `packages/protocol/package.json` so a workspace consumer's bare `import '@g2-race-spotter/protocol'` resolves instead of `ERR_MODULE_NOT_FOUND`; prove the package root exposes a guard and reducer from a bare import in `packages/protocol/test/package-resolution.test.ts`, then run root gates.
+- [ ] T004a (owner: relay-backend-dev) (spec: 020 AC-1) [stream: protocol-manifest; lease: L004; lock: protocol-manifest; exact base: `42d7d5b`; depends: T005/T005a integrated] Add explicit Node 22 ESM and TypeScript package entry metadata (`main`, `exports`, and `types`) to `packages/protocol/package.json` so a workspace consumer's bare `import '@g2-race-spotter/protocol'` resolves instead of `ERR_MODULE_NOT_FOUND`; prove the package root exposes a guard and reducer from a bare import in `packages/protocol/test/package-resolution.test.ts`, then run root gates.
 - [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol-client; lock: protocol-client; depends: T004a integrated; may run concurrently with T007] Implement the injected-WebSocket `RoomClient` in `packages/protocol/src/client.ts`, export wiring in `packages/protocol/src/index.ts`, and `packages/protocol/test/client.test.ts` with hello, ping, reconnect/backoff, per-open sequence reset, replay gating, `lastFrameAt`, and disconnected-intent coalescing; verify protocol workspace plus root gates.
 - [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lock: relay-room; depends: T004a integrated; may run concurrently with T006] Build the Worker and SQLite-hibernating `RaceRoom` within `services/relay/**` only, with URL/hello validation, immediate state replay, persisted full-state reduction, and broadcasts; verify `services/relay/test/roundtrip.test.ts` against self-managed `wrangler dev` plus root gates.
 - [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-3; requirement R5) [stream: relay; lock: relay-room; depends: T007 integrated] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response; verify `services/relay/test/routes.test.ts` against self-managed `wrangler dev`.
@@ -46,17 +44,19 @@ L001/T002h and L002/T004 are retired after approved serial integration. L003/T00
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
+- [x] T005 (owner: relay-backend-dev) (spec: 020 AC-2) Implemented and exported the pure, total room-state reducer with injected clock/id and normative state semantics (commit `35e74dc`; combined-range review `approve`).
+- [x] T005a (owner: relay-backend-dev) (spec: 020 AC-2) Removed the unused type import and formatted the reducer test so the approved reducer stack clears every root gate (commit `42d7d5b`; review `approve`).
 - [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened post-readiness device-info and screenshot evidence classification, closing the T002g/T002d blocked repair ancestry without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
 - [x] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Centralized protocol v1 types/constants/guards and valid/invalid fixtures with zero runtime dependencies (commit `019d2e4`; review `approve`).
 
 ## Notes / why
 - After T004, 020 AC-1 is met by `packages/protocol/test/guards.test.ts`; protocol workspace tests (20) and integrated root typecheck/tests (38)/lint pass on Node 22.
 - T002h restores 010 AC-1 and closes the blocked repair chain, but 010 AC-3 remains open until T002c commits real simulator evidence; no `[SIM]` claim was inferred from mocks.
-- T005 candidate `a1bb73e` is not integrated: reducer semantics/tests passed, but an unused `Lane` import and then Prettier drift in `reduce.test.ts` make root lint fail. L003R repairs only those two root-lint blockers before the combined range can leave quarantine.
-- Read-only preflight found `packages/protocol/package.json` has no `main`/`exports`, and a bare workspace import fails with `ERR_MODULE_NOT_FOUND`; T004a is a separate manifest prerequisite rather than an expansion of the root-lint-only T005a repair.
+- T005/T005a are integrated after exact combined-range approval; protocol tests (29), integrated root tests (47), typecheck, and lint pass on Node 22.
+- `packages/protocol/package.json` still has no `main`/`exports`, and a bare workspace import fails with `ERR_MODULE_NOT_FOUND`; L004/T004a is the exact manifest prerequisite before any workspace consumer is built.
 - After T004a integrates, T006 (`protocol-client`) and T007 (`relay-room`) may be leased concurrently because their locks and write scopes are disjoint; their approved commits still integrate serially with root gates after each.
 - Relay tasks remain serialized on `relay-room`; after T007 integrates, T014 may run concurrently with one relay-room task because its tooling scope and lock are disjoint.
 - AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human.
-- AC audit 020: AC-1 met; AC-2–AC-9 unmet; AC-10 under Needs human with local prerequisite T014.
+- AC audit 020: AC-1 and AC-2 met; AC-3–AC-9 unmet; AC-10 under Needs human with local prerequisite T014.
 - AC audits 030–070 remain unchanged: automated criteria are unmet, `[SIM]` evidence is absent, and every `[HW]` criterion remains under Needs human.
 - No criterion is `DISPUTED`; `qa/` remains absent, so no simulator or hardware evidence is claimed.
