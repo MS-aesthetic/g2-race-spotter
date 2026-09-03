@@ -13,6 +13,7 @@ const nodeProcess = (
 ).process;
 
 const workspaceConsumer = new URL('../../../apps/spotter/', import.meta.url);
+const compilerFixture = new URL('./fixtures/consumer/', import.meta.url);
 
 const consumerProgram = `
   import {
@@ -48,6 +49,27 @@ describe('protocol package root', () => {
         nodeProcess.execPath,
         ['--input-type=module', '--eval', consumerProgram],
         { cwd: workspaceConsumer, encoding: 'utf8' },
+      ),
+    ).toBe('');
+  });
+
+  it('compiles from a real consumer tsconfig that imports the package root', async () => {
+    // @ts-expect-error This workspace intentionally has no @types/node dependency.
+    const { execFileSync } = (await import('node:child_process')) as {
+      execFileSync: ExecFileSync;
+    };
+
+    expect(
+      execFileSync(
+        nodeProcess.execPath,
+        [
+          '../../../../../node_modules/typescript/bin/tsc',
+          '--pretty',
+          'false',
+          '--project',
+          'tsconfig.json',
+        ],
+        { cwd: compilerFixture, encoding: 'utf8' },
       ),
     ).toBe('');
   });
