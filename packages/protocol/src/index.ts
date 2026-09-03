@@ -3,6 +3,17 @@
  * and the relay. Keep this package free of runtime dependencies.
  */
 
+export {
+  createInitialState,
+  INITIAL_STATE,
+  reduce,
+  type ClientEvent,
+  type ExpireEvent,
+  type PeerEvent,
+  type ReducerContext,
+  type ReducerEvent,
+} from './reduce.js';
+
 export const PROTOCOL_VERSION = 1;
 
 export const PING_INTERVAL_MS = 2_000;
