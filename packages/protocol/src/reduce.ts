@@ -2,7 +2,6 @@ import type {
   Ack,
   Clear,
   ClientMessage,
-  Lane,
   Role,
   RoomMessage,
   SetGap,
