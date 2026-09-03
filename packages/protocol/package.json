@@ -1,0 +1,9 @@
+{
+  "name": "@g2-race-spotter/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}
