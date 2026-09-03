@@ -48,3 +48,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 18 | 2026-09-03 | T002g | hud-qa | review-blocked | block | 3b683f1 | After automation readiness, missing device info is an evidence failure; the required lint gate must also pass before hand-off. |
 | 19 | 2026-09-03 | T002h | hud-qa | done | approve | 2ef2f63 | Post-readiness device-info absence and dark screenshots now fail as evidence, closing the blocked repair ancestry while preserving the real `[SIM]` gate. |
 | 20 | 2026-09-03 | T004 | relay-backend-dev | done | approve | 019d2e4 | Protocol v1 types, constants, guards, and fixture pairs are centralized with zero runtime dependencies and pass the integrated root gates. |
+| 21 | 2026-09-03 | T005 | relay-backend-dev | review-blocked | block | a1bb73e | Reducer semantics and tests pass, but the unused `Lane` import fails the mandatory root lint gate; quarantine the candidate and repair only that finding before integration. |
