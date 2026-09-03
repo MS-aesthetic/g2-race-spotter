@@ -36,6 +36,7 @@ R6. Node version MUST be enforced via `engines` and `.nvmrc`/`.node-version` (22
 ## Decisions
 
 - 2026-09-03 Use the official `minimal` template rather than hand-rolling — why: it already matches the SDK version conventions and simulator wiring.
+- 2026-09-03 Treat AC-1 as an indivisible end-to-end gate — why: deferring lint or its CI command chain makes the criterion fail even when the workspace smoke tests pass.
 
 ## Open questions
 
