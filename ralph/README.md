@@ -1,6 +1,6 @@
 # The loop: spec-driven development + Ralph
 
-**Specs are truth, the plan is disposable, one task per fresh context, tests are backpressure.** Every iteration runs three fresh CLI processes at three model tiers:
+**Specs are truth, the plan is disposable, one task per fresh context, tests are backpressure.** The trusted Ralph fallback runs three fresh CLI processes serially at three model tiers:
 
 | Stage | Tier | Prompt | Role | Claude Code | Codex CLI |
 |---|---|---|---|---|---|
@@ -41,6 +41,18 @@ RALPH_UNATTENDED=0 ralph/loop.sh once   # Claude asks before edits/commands (def
 ```
 
 Stop it: `touch ralph/STOP` (checked at the start of each iteration, so the current build→review→replan cycle finishes first; delete the file to resume). Watch it: `tail -f ralph/logs/*.log`. Steer it: edit a spec (add a Decision, answer an Open question) and run `ralph/loop.sh plan`. Iteration numbers come from the last row of `ralph/PROGRESS.md`, so they stay continuous across clones and Claude↔Codex hand-offs.
+
+## Interactive parallel streams
+
+The parent agent may accelerate independent plan tasks with subagents. This is a coordinator workflow, not a mode of `ralph/loop.sh`:
+
+1. The planner marks tasks with stream metadata and non-overlapping write scopes. Before dispatch, the coordinator creates one Git worktree per stream and records the lease id, exact base commit, task id, dependency gate, write scope, and exclusive lock(s).
+2. The coordinator prepends that lease block to `PROMPT_build.md`. The exact leased task replaces “first unchecked” for that worker only. The worker still gets one fresh context, changes one task inside its scope, reaches green backpressure, makes one commit, and exits.
+3. A fresh reviewer in the same worktree receives the lease base and worker head, applies `PROMPT_review.md`, and reviews exactly `base..head`. It writes only that stream's ignored `ralph/last-review.md`.
+4. The coordinator integrates only `approve` / `approve with nits` commits, one at a time in declared dependency order. After each integration it runs `npm run typecheck`, `npm test`, and `npm run lint` at the root. A failed integration gate is not advanced or hidden by another stream.
+5. A fresh `plan-updater` reconciles each integrated result serially and is the only agent that writes specs, `IMPLEMENTATION_PLAN.md`, or `ralph/PROGRESS.md`. Review-blocked work is replanned before it is leased again.
+
+Scopes that overlap, tasks sharing an exclusive lock, `[HW]` work, and tasks whose dependency gate has not opened never run concurrently. A stream may begin implementation while waiting for an integration dependency, but it may not make its final commit until its worktree contains that dependency and the full gates are green.
 
 ## Verify before first run (CLI facts this loop assumes — confirm against `claude --help` / `codex exec --help` on your install)
 

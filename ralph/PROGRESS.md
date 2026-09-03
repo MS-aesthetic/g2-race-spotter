@@ -20,6 +20,9 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 ## Simulator update (2026-09-03)
 - Simulator 0.9.5 renders the full 288×144 image; the old 200×100 / 4-container caps were ≤ 0.7. Image mode is the normal simulator path; `[SIM]` evidence class added (constitution §12/§19, specs 010/030/050, skills `g2-hud-display` + `hud-e2e-testing`, roles); hardware criteria unchanged.
 
+## Process decisions
+- 2026-09-03 — Human authorized parallel subagent streams for independent tasks. Each stream uses an isolated Git worktree and an explicit lease (base, dependency, write scope, exclusive locks); one worker still owns one task/commit, exact commit ranges are reviewed, approved commits integrate serially, the planner remains the sole plan/spec/progress writer, and root gates run after each integration. The existing Ralph shell loop remains serial.
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |

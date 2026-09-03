@@ -23,13 +23,14 @@ The invariants every spec, plan, task, and review is measured against. If a task
 ## Process invariants (spec-driven + Ralph loop)
 
 13. **Specs are the source of truth; the plan is disposable.** `specs/*.md` say what "done" means. `IMPLEMENTATION_PLAN.md` is regenerated freely and may be deleted at any time.
-14. **One task, one fresh context, one commit.** A worker iteration takes the first unchecked task in *Next*, implements only that, runs the backpressure commands, commits, writes `ralph/last-build.md`, and exits. It does not pick a second task.
+14. **One task, one fresh context, one commit.** A worker iteration implements exactly one plan task, runs the backpressure commands, commits, writes its hand-off, and exits. The serial Ralph runner takes the first unchecked task in *Next*; an interactive coordinator may instead give a fresh worker the exact task named by an active lease. A worker never picks a second task.
 15. **Don't assume not implemented.** Before writing code, study the tree and tests; much may already exist.
 16. **Tests are backpressure, never decoration.** A task is not done until the tests it names pass. Placeholder implementations that make tests pass without meeting the criterion are a review `block`.
 17. **Specs may be clarified, never weakened, by an agent.** Only a human relaxes an acceptance criterion. An agent that believes a criterion is wrong marks it `DISPUTED:` with a reason.
 18. **Reviews are adversarial and specific.** A review names file:line, the failure scenario, and the minimal fix, then gives one verdict: `approve`, `approve with nits`, or `block`.
 19. **Hardware is human; the simulator is not.** `[HW]` criteria are never assigned to a worker; they live under *Needs human* in the plan and are listed in `ralph/PROGRESS.md`. `[SIM]` criteria are ordinary worker tasks; when the simulator is unreachable the task parks under *Needs simulator* instead of being faked.
 20. **Model routing is a config, not a prompt.** `ralph/models.env` decides which model and effort each tier runs on; role files never name a model.
+21. **Parallelism is leased, isolated, and integrated serially.** An interactive coordinator may run independent worker/reviewer streams concurrently only in separate Git worktrees. Every lease records an exact base commit, task, dependencies, write scope, and exclusive locks before dispatch. Workers stay inside that scope; the planner remains the sole writer of specs, `IMPLEMENTATION_PLAN.md`, and `ralph/PROGRESS.md`. Reviewers inspect the lease's exact base-to-head range. Only approved commits are integrated, one at a time in dependency order, and the full root backpressure gates run on the integration branch after each integration. `ralph/loop.sh` remains the trusted serial fallback.
 
 ## Roles
 

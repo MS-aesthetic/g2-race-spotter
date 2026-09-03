@@ -52,7 +52,7 @@ npx tsx scripts/fake-spotter.ts --url ws://localhost:8787 --room QA01 --scenario
 
 ## Loop protocol (see ralph/README.md)
 
-One task → one fresh context → one commit. Workers take the first unchecked task under `## Next` in `IMPLEMENTATION_PLAN.md`, never `[HW]` tasks; `[SIM]` tasks are worker tasks (report `failed` + `sim-unavailable` if the simulator cannot run, never fake evidence). Reviewers report `approve | approve with nits | block` in `ralph/last-review.md`. The planner alone edits the plan, `ralph/PROGRESS.md`, and spec *Decisions*/*Open questions*; only a human weakens an acceptance criterion. Don't assume not implemented — search first.
+One task → one fresh context → one commit. The serial runner takes the first unchecked task under `## Next` in `IMPLEMENTATION_PLAN.md`. An interactive coordinator may lease independent, explicitly named tasks to parallel subagent streams only in isolated Git worktrees, with the exact base, dependencies, write scope, and exclusive locks recorded before dispatch. Each stream keeps the one-task rule; reviewers inspect the exact leased commit range; approved commits integrate serially in dependency order and must pass the full root gates on the integration branch. `ralph/loop.sh` itself remains serial. Workers never take `[HW]` tasks; `[SIM]` tasks are worker tasks (report `failed` + `sim-unavailable` if the simulator cannot run, never fake evidence). The planner alone edits the plan, `ralph/PROGRESS.md`, and spec *Decisions*/*Open questions*; only a human weakens an acceptance criterion. Don't assume not implemented — search first.
 
 ## Skills and roles by runtime
 

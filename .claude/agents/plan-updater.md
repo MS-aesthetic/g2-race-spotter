@@ -19,8 +19,8 @@ You keep the plan honest. You run at the highest reasoning effort in the project
 2. Every `specs/*.md` — the source of truth for *what* must be built. Study them; do not assume a criterion is unmet or met without checking the code and tests.
 3. `IMPLEMENTATION_PLAN.md` — the current, disposable task list.
 4. `ralph/PROGRESS.md` — history of iterations, decisions, and what still needs a human.
-5. `ralph/last-build.md` and `ralph/last-review.md` — what the worker just did and what the reviewer said.
-6. `git log --oneline -20` and `git diff --stat HEAD~1` — what actually changed.
+5. `ralph/last-build.md` and `ralph/last-review.md` — what the worker just did and what the reviewer said; for an interactive lease, also verify its recorded base, head, scope, locks, review verdict, integration result, and root-gate result.
+6. `git log --oneline -20` and the exact integrated commit range (`HEAD~1` for the serial loop) — what actually changed.
 7. `docs/BUILD_PLAN.md` — architecture and design rationale (background; specs win on conflict, and you note the conflict).
 
 ## What you produce
@@ -32,8 +32,13 @@ You keep the plan honest. You run at the highest reasoning effort in the project
 Status: BUILDING | DONE | BLOCKED
 Current spec focus: specs/0X0-....md
 
-## Next (ordered; the worker takes the first unchecked task)
-- [ ] T042 (owner: relay-backend-dev) (spec: 020 AC-3) Implement driver eviction on second driver join; integration test in services/relay/test/eviction.test.ts
+## Active stream leases (interactive coordinator only)
+| lease | task | stream | write scope | locks | dependency / integration gate |
+|---|---|---|---|---|---|
+| L042 | T042 | relay | `services/relay/src/**`; `services/relay/test/eviction.test.ts` | `relay-room` | T041 integrated; integrate after review approval |
+
+## Next (ordered; the serial runner takes the first unchecked task)
+- [ ] T042 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lease: L042; lock: relay-room] Implement driver eviction on second driver join; integration test in services/relay/test/eviction.test.ts
 - [ ] T043 (owner: g2-glasses-dev) (spec: 030 AC-1) ...
 
 ## Needs simulator [SIM]
@@ -49,7 +54,9 @@ Current spec focus: specs/0X0-....md
 - <decision, and the reason, one line each>
 ```
 
-Rules for tasks: one task = one fresh-context iteration = one commit; each names exactly one owner role and the spec + acceptance criterion it advances; tasks are concrete enough that the worker needs no clarifying questions; tests to write are part of the task; anything requiring glasses, phones, or a deployed relay is tagged `[HW]` and goes under *Needs human* — the loop never assigns those to a worker.
+Rules for tasks: one task = one fresh-context iteration = one commit; each names exactly one owner role and the spec + acceptance criterion it advances; tasks are concrete enough that the worker needs no clarifying questions; tests to write are part of the task; anything requiring glasses, phones, or a deployed relay is tagged `[HW]` and goes under *Needs human* — the loop never assigns those to a worker. Parallel-ready tasks also name a stream and exclusive lock. The lease table gives each active interactive stream a non-overlapping write scope and dependency/integration gate; the coordinator records the exact base commit and worktree path at dispatch. Tasks with overlapping scopes, the same lock, or unresolved implementation dependencies stay serial. `ralph/loop.sh` ignores leases and continues to take the first unchecked task.
+
+Only the planner edits the lease table, specs, plan, and progress. A coordinator may populate a dispatch record with the exact base/worktree but may not reorder or redefine tasks. Review the exact leased base-to-head range; integrate approved commits one at a time in dependency order; require the full root gates after each integration before planning the next integrated result.
 
 **`ralph/PROGRESS.md`**: append one table row per iteration — `#`, date, task id, owner, outcome (the worker's `done` / `failed` / `skipped-hw` / `nothing-to-do`, or `review-blocked` when the review verdict was `block`), review verdict (`approve` / `approve with nits` / `block` / `n/a`), commit hash, one-line lesson if any. The row number is the iteration number the loop uses; never renumber. Keep the "Blocked on human" list at the top current.
 
