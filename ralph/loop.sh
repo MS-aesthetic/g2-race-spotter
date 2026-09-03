@@ -63,8 +63,10 @@ run_stage() {
   # codex: role file + prompt on stdin; effort via config override; retry at high if the model rejects xhigh
   local rc eff=$effort
   while :; do
-    cat "$ROOT/agents/roles/$role.md" "$prompt" | codex --ask-for-approval never exec --model "$model" -c "model_reasoning_effort=\"$eff\"" \
-      --sandbox workspace-write -o "$ROOT/ralph/.last-message.md" - 2>&1 | tee "$logf"
+    cat "$ROOT/agents/roles/$role.md" "$prompt" | NPM_CONFIG_CACHE="${NPM_CONFIG_CACHE:-${TMPDIR:-/tmp}/g2-race-spotter-npm-cache}" \
+      codex --approve-for-me exec --model "$model" -c "model_reasoning_effort=\"$eff\"" \
+      -c 'sandbox_workspace_write.network_access=true' --sandbox workspace-write \
+      -o "$ROOT/ralph/.last-message.md" - 2>&1 | tee "$logf"
     rc=${PIPESTATUS[1]}
     if [ "$rc" -ne 0 ] && [ "$eff" = xhigh ] && grep -qi 'reasoning' "$logf"; then log "$stage: model rejected xhigh, retrying with high"; eff=high; continue; fi
     return "$rc"
