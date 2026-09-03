@@ -1,11 +1,10 @@
-# Implementation plan — 2026-09-03T11:57:11-04:00
+# Implementation plan — 2026-09-03T12:06:38-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T001b (owner: relay-backend-dev) (spec: 010 AC-2) Add `npm run sync:agents:check` to `.github/workflows/ci.yml`; verify `npm run sync:agents`, a clean generated-file diff, `npm run sync:agents:check`, and the full AC-1 gate.
-- [ ] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Add `scripts/check-pins.mjs`, fixture-driven coverage in `scripts/test/check-pins.test.ts`, and a CI step rejecting range specifiers for every dependency named by R2; verify the checker and full gate.
-- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; pin SDK/CLI/Vite and simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts`.
+- [ ] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Add `scripts/check-pins.mjs`, fixture-driven coverage in `scripts/test/check-pins.test.ts`, and a CI step rejecting range specifiers for every dependency named by R2; verify the checker and full AC-1 gate.
+- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts`.
 - [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI, rejecting missing/toolchain/simulator `TBD` fields while allowing hardware `TBD` only while their named `[HW]` criteria remain open.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add the simulator harness launcher/failure foundation in `scripts/sim-harness.ts` and `sim:scenarios`: resolve the pinned local executable, use automation port 9898, and exit non-zero with literal `sim-unavailable` and no partial report when launch/ping fails; verify `scripts/test/sim-harness.test.ts` with a mocked launcher.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the harness smoke success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and record pinned simulator/SDK versions in `report.json`; verify `scripts/test/sim-harness-smoke.test.ts` with mocked automation responses.
@@ -43,17 +42,17 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- [x] T010a (owner: relay-backend-dev) (spec: 010 AC-1) Standardized Git/Prettier on LF and changed the protocol workspace test to discover all Vitest tests (commit 7a4a114; review: approve).
+- [x] T001b (owner: relay-backend-dev) (spec: 010 AC-2) Added `npm run sync:agents:check` to CI and verified the generated outputs and full gate (commit 31a0615; review: approve).
 
 ## Notes / why
-- AC audit 010: AC-1 met by `.github/workflows/ci.yml` plus T010a's passing LF staged-index fresh-checkout gate; AC-2/AC-5/AC-6/AC-7 unmet; AC-3 `[SIM]` open; AC-4 `[HW]` open.
-- AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and tests are placeholders; AC-10 `[HW]` open.
-- AC audit 030: AC-1–AC-6 unmet—`apps/glasses` is absent; AC-7 `[SIM]` open; AC-8–AC-10 `[HW]` open.
+- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the passing 3-test/typecheck/lint gate; AC-2 met by CI commit 31a0615 plus the passing freshness check; AC-5/AC-6/AC-7 unmet; AC-3 `[SIM]` open; AC-4 `[HW]` open.
+- AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and named tests are absent/placeholders; AC-10 `[HW]` open.
+- AC audit 030: AC-1–AC-6 unmet—`apps/glasses` and its named tests are absent; AC-7 `[SIM]` open; AC-8–AC-10 `[HW]` open.
 - AC audit 040: AC-1–AC-5 unmet—the spotter module/test are placeholders; AC-6–AC-7 `[HW]` open.
 - AC audit 050: AC-1–AC-5 unmet; AC-5b `[SIM]` open; AC-6–AC-8 `[HW]` open.
 - AC audit 060: AC-1–AC-4 unmet; AC-5–AC-8 `[HW]` open.
 - AC audit 070: AC-1–AC-3 unmet; AC-4–AC-5 `[HW]` open. No criterion is DISPUTED.
-- T010a's approval closes the T001/T010 review chain; neither blocked repair remains in `Next` because the full AC-1 behavior is now present and passing.
-- CI sync/pin checks lead the queue so every generated artifact and exact dependency added later is guarded; environment documentation follows the scaffold so it records actual pins.
-- The harness is split into AC-7 failure behavior, AC-3 success behavior, and the AC-3 `[SIM]` evidence run so each iteration has one reviewable outcome; simulator output never substitutes for hardware evidence.
+- T001b is complete because the approved diff adds the sync freshness gate to CI and `npm run sync:agents:check` passes on the generated tree.
+- Pin enforcement leads the queue so each exact SDK/CLI/simulator/Worker dependency introduced by later bootstrap tasks is guarded immediately; the glasses scaffold follows because environment and simulator work depend on its actual pins.
+- The harness remains split into failure plumbing, mocked smoke success, and committed `[SIM]` evidence; simulator output never substitutes for hardware nibble, pacing, lifecycle, or visual evidence.
 - Protocol types, reducer, and shared `RoomClient` precede relay and UI consumers; full-state replay and authenticated last-writer-wins remain normative.

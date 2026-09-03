@@ -27,3 +27,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 1 | 2026-09-03 | T001 | relay-backend-dev | review-blocked | block | cc13020 | AC-1 is an end-to-end gate: lint, its CI command chain, and the named workspace test must exist before handoff. |
 | 2 | 2026-09-03 | T010 | relay-backend-dev | review-blocked | block | 6e4c2d9 | Cross-platform lint must be reproduced from LF Git blobs; focused workspace tests must discover future criterion tests. |
 | 3 | 2026-09-03 | T010a | relay-backend-dev | done | approve | 7a4a114 | LF normalization and a discovering workspace test close the cross-platform AC-1 repair chain. |
+| 4 | 2026-09-03 | T001b | relay-backend-dev | done | approve | 31a0615 | CI now rejects stale generated agent and skill outputs after the standard verification gate. |
