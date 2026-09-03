@@ -1,20 +1,20 @@
-# Implementation plan — 2026-09-03T16:26:39-04:00
+# Implementation plan — 2026-09-03T16:36:46-04:00
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
-| lease | task | stream | write scope | locks | dependency / integration gate |
-|---|---|---|---|---|---|
-| L004R2 | T004c | protocol-manifest-repair | `tsconfig.base.json`; `packages/protocol/tsconfig.json`; one real-consumer compile fixture/test under `packages/protocol/test/**`; `packages/protocol/package.json` and `packages/protocol/src/index.ts` only if the repair proves they must change | `protocol-manifest`, `shared-tsconfig` | exact base `62a33ca687f492e7e98aa788044fdcb2cf48f15b`; repairs quarantined stack `42d7d5b..62a33ca`; review the full exact `42d7d5b..repair-head` range, then integrate only after approval and full root gates |
 
-L001/T002h, L002/T004, L003/T005, and L003R/T005a are retired after approved serial integration. L004/T004a and L004R/T004b are retired after review `block`; their combined candidate stack remains quarantined. L004R2/T004c is the only active lease at this dependency boundary.
+| lease | task | stream | exact base | write scope | exclusive locks | review / integration gate |
+|---|---|---|---|---|---|---|
+| L005 | T006 | protocol-client | `ae5f4488ae12b3e987cbec6f583724799e541be6` | `packages/protocol/src/client.ts`; `packages/protocol/src/index.ts`; `packages/protocol/test/client.test.ts` only | `protocol-client` | protocol-keeper reviews exact `ae5f448..T006-head`; integrate first only after approval, then run protocol and every root gate |
+| L006 | T007 | relay | `ae5f4488ae12b3e987cbec6f583724799e541be6` | `services/relay/**`; `package-lock.json` only (L006 is manifest steward; no protocol edits) | `relay-room`, `root-lockfile` | protocol-keeper reviews exact `ae5f448..T007-head`; integrate second only after approval and the post-T006 gates, then run relay integration tests and every root gate |
+
+L005 and L006 may execute concurrently from the same exact code base because their write scopes and locks are disjoint. Reviews remain independent and exact-range; integration is serial in the explicit order L005/T006 then L006/T007. L001–L004R2 are retired; L004R2/T004c retired after the approved package-resolution stack was integrated.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
-- [ ] T004c (owner: relay-backend-dev) (spec: 020 AC-1) [stream: protocol-manifest-repair; lease: L004R2; locks: protocol-manifest, shared-tsconfig; exact base: `62a33ca`; repairs: quarantined stack `42d7d5b..62a33ca`] Repair the blocking finding: "source index imports `./reduce.ts` but `allowImportingTsExtensions` only in protocol tsconfig; real app consumer compile fails TS5097 because option is consumer-program scoped." Move `allowImportingTsExtensions` to `tsconfig.base.json` so every real consumer program inherits it, remove the redundant protocol-local option, and add a regression under `packages/protocol/test/**` that spawns `tsc` against a real consumer-style config importing the bare package and proves compilation succeeds. All current extending projects are `noEmit`; keep the package private/source-based and make no packed-install claim. Change only `tsconfig.base.json`, `packages/protocol/tsconfig.json`, the compile fixture/test under `packages/protocol/test/**`, and `packages/protocol/package.json`/`src/index.ts` only if necessary. Run protocol tests and every root gate; review the full combined `42d7d5b..repair-head` range before serial integration.
-- [ ] T004b (owner: relay-backend-dev) (spec: 020 AC-1) [quarantined after review `block`; do not dispatch] Repair source package resolution with `./reduce.ts` and a plain-Node workspace-consumer check; candidate `62a33ca` remains unintegrated because the TypeScript option is consumer-program scoped.
-- [ ] T004a (owner: relay-backend-dev) (spec: 020 AC-1) [quarantined after review `block`; do not dispatch] Add explicit Node 22 ESM and TypeScript source package entry metadata; candidate `20f5f7c` remains unintegrated until T004c repairs the full stack.
-- [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol-client; lock: protocol-client; depends: T004c integrated; may run concurrently with T007] Implement the injected-WebSocket `RoomClient` in `packages/protocol/src/client.ts`, export wiring in `packages/protocol/src/index.ts`, and `packages/protocol/test/client.test.ts` with hello, ping, reconnect/backoff, per-open sequence reset, replay gating, `lastFrameAt`, and disconnected-intent coalescing; verify protocol workspace plus root gates.
-- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lock: relay-room; depends: T004c integrated; may run concurrently with T006] Build the Worker and SQLite-hibernating `RaceRoom` within `services/relay/**` only, with URL/hello validation, immediate state replay, persisted full-state reduction, and broadcasts; verify `services/relay/test/roundtrip.test.ts` against self-managed `wrangler dev` plus root gates.
+
+- [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol-client; lease: L005; lock: protocol-client; exact base: `ae5f448`; may run concurrently with T007] Implement the injected-WebSocket `RoomClient` in `packages/protocol/src/client.ts`, export it from `packages/protocol/src/index.ts`, and verify it in `packages/protocol/test/client.test.ts`. Cover automatic hello, ping timing, reconnect with jittered backoff, `lastSeen` reset on each open, stale-sequence filtering, replay-before-flush gating, `lastFrameAt`, latest-only offline lane/gap coalescing, ordered offline msg/clear delivery, and no replay of already-delivered intents. Change only the L005 write scope; run protocol tests and every root gate.
+- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [stream: relay; lease: L006; locks: relay-room, root-lockfile; exact base: `ae5f448`; may run concurrently with T006] Build the Worker and SQLite-hibernating `RaceRoom` in `services/relay/**`, using only protocol exports, with URL/hello validation, immediate state replay, persisted full-state reduction, and broadcasts. Add `services/relay/test/roundtrip.test.ts` against self-managed `wrangler dev`; edit `package-lock.json` only when dependency installation requires it and make no protocol edits. Run relay integration tests and every root gate.
 - [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-3; requirement R5) [stream: relay; lock: relay-room; depends: T007 integrated] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response; verify `services/relay/test/routes.test.ts` against self-managed `wrangler dev`.
 - [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4) [stream: relay; lock: relay-room; depends: T007 integrated] Preserve state and sequence across reconnect and Durable Object rehydration, and repoint the empty-room alarm to room TTL; verify `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`.
 - [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay; lock: relay-room; depends: T007 integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth error followed by close 4401; verify `services/relay/test/auth.test.ts`.
@@ -24,10 +24,12 @@ L001/T002h, L002/T004, L003/T005, and L003R/T005a are retired after approved ser
 - [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10) [stream: tooling; lock: fake-spotter; depends: T007 integrated] Implement the local `fake-spotter` prerequisite with every R6 scenario and `--role driver`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
 
 ## Needs simulator [SIM]
+
 - [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` on an interactive machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
 - [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject non-hardware `TBD`, add the root environment check to CI, and validate `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and full AC-1 gates.
 
 ## Needs human [HW]
+
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode, QR-sideload the scaffold, and save the required photo/log under `qa/<date>/`.
 - [ ] T102 (owner: maxx) (spec: 020 AC-10) Deploy the Worker, set `DEBUG_KEY`, run `lanes` with spotter and driver clients, and save `qa/<date>/020-deploy.log`.
 - [ ] T104 (owner: maxx) (spec: 030 AC-8) Run real-glasses `lanes`, `gap-sweep`, `message-ack`, and `link-loss`; record PASS by AC in `qa/<date>/REPORT.md`.
@@ -46,19 +48,19 @@ L001/T002h, L002/T004, L003/T005, and L003R/T005a are retired after approved ser
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- [x] T005 (owner: relay-backend-dev) (spec: 020 AC-2) Implemented and exported the pure, total room-state reducer with injected clock/id and normative state semantics (commit `35e74dc`; combined-range review `approve`).
-- [x] T005a (owner: relay-backend-dev) (spec: 020 AC-2) Removed the unused type import and formatted the reducer test so the approved reducer stack clears every root gate (commit `42d7d5b`; review `approve`).
-- [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened post-readiness device-info and screenshot evidence classification, closing the T002g/T002d blocked repair ancestry without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
-- [x] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Centralized protocol v1 types/constants/guards and valid/invalid fixtures with zero runtime dependencies (commit `019d2e4`; review `approve`).
+
+- [x] T004a (owner: relay-backend-dev) (spec: 020 AC-1) Added explicit Node 22 ESM and TypeScript source-package entry metadata plus a plain-Node workspace-consumer regression (integrated commit `087d31b`; approved as part of exact combined range `42d7d5b..d988cd1`).
+- [x] T004b (owner: relay-backend-dev) (spec: 020 AC-1) Repaired the source export graph and extended package-resolution coverage (integrated commit `3ba292f`; approved as part of exact combined range `42d7d5b..d988cd1`).
+- [x] T004c (owner: relay-backend-dev) (spec: 020 AC-1) Moved TypeScript source-import support to the shared consumer config and proved a real consumer compile succeeds (integrated commit `ae5f448`; protocol-keeper review `approve`, no findings).
+- [x] T005/T005a (owner: relay-backend-dev) (spec: 020 AC-2) Implemented, repaired, and approved the pure room-state reducer stack (commits `35e74dc`, `42d7d5b`).
+- [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened simulator evidence classification without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
+- [x] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Centralized protocol v1 types/constants/guards and fixtures (commit `019d2e4`; review `approve`).
 
 ## Notes / why
-- After T004, 020 AC-1 is met by `packages/protocol/test/guards.test.ts`; protocol workspace tests (20) and integrated root typecheck/tests (38)/lint pass on Node 22.
-- T002h restores 010 AC-1 and closes the blocked repair chain, but 010 AC-3 remains open until T002c commits real simulator evidence; no `[SIM]` claim was inferred from mocks.
-- T005/T005a are integrated after exact combined-range approval; protocol tests (29), integrated root tests (47), typecheck, and lint pass on Node 22.
-- The combined T004a/T004b candidate stack `42d7d5b..62a33ca` is quarantined: plain Node 22 loading and Wrangler bundling pass, but a real TypeScript app consumer fails TS5097 because `allowImportingTsExtensions` is scoped to the protocol program instead of inherited by the consumer.
-- Every current project extending `tsconfig.base.json` has `noEmit: true`, so moving `allowImportingTsExtensions` into the shared base preserves TypeScript's option constraint while covering apps and relay.
-- T004c must compile a consumer-style fixture with spawned `tsc`; runtime-only and Vitest resolution checks cannot prove the consumer compiler path.
-- After T004c integrates, T006 (`protocol-client`) and T007 (`relay-room`) may be leased concurrently because their locks and write scopes are disjoint; their approved commits still integrate serially with root gates after each.
+
+- The approved T004a/T004b/T004c chain resolves source-package loading for Node, Wrangler, Vitest, and real TypeScript consumers; the integrated main branch has protocol 31/root 49 tests plus build, typecheck, lint, pin, and sync checks green on Node 22.
+- T006 and T007 start from exact base `ae5f448` and are independent: T006 alone owns protocol client/index/test; T007 is forbidden from protocol edits and alone stewards relay manifests plus `package-lock.json`.
+- Integrate T006 before T007 so any conflict is resolved against the shared-client source of truth; each candidate receives its own exact-range review and full post-integration gates.
 - Relay tasks remain serialized on `relay-room`; after T007 integrates, T014 may run concurrently with one relay-room task because its tooling scope and lock are disjoint.
 - AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human.
 - AC audit 020: AC-1 and AC-2 met; AC-3–AC-9 unmet; AC-10 under Needs human with local prerequisite T014.
