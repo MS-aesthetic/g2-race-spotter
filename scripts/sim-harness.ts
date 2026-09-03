@@ -333,7 +333,13 @@ export function hasLitPixelsInSmokeTextRegion(screenshot: Uint8Array): boolean {
   const maxY = Math.min(height, SMOKE_TEXT_REGION.y + SMOKE_TEXT_REGION.height);
   for (let y = SMOKE_TEXT_REGION.y; y < maxY; y += 1) {
     for (let x = SMOKE_TEXT_REGION.x; x < maxX; x += 1) {
-      if (pixels[(y * width + x) * 4 + 3] > 0) return true;
+      const offset = (y * width + x) * 4;
+      const brightness = Math.max(
+        pixels[offset],
+        pixels[offset + 1],
+        pixels[offset + 2],
+      );
+      if (pixels[offset + 3] > 0 && brightness > 32) return true;
     }
   }
   return false;
@@ -411,7 +417,7 @@ async function writeSmokeReport(
         assertions: [
           {
             detail:
-              'RGBA alpha channel contains lit pixels in the Hello, driver text region.',
+              'The Hello, driver text region contains opaque pixels with RGB brightness greater than 32.',
             name: 'Hello, driver text region is lit',
             pass: textIsLit,
           },
@@ -445,8 +451,12 @@ export async function runSimulatorHarness(
   try {
     try {
       appServer = await dependencies.launchAppServer();
-      if (!(await waitFor(() => dependencies.appReady(APP_URL), dependencies))) {
-        throw new Error('The scaffold development server did not become ready.');
+      if (
+        !(await waitFor(() => dependencies.appReady(APP_URL), dependencies))
+      ) {
+        throw new Error(
+          'The scaffold development server did not become ready.',
+        );
       }
 
       simulator = await dependencies.launch(
@@ -455,12 +465,9 @@ export async function runSimulatorHarness(
       if (
         !(await waitFor(() => dependencies.ping(AUTOMATION_URL), dependencies))
       ) {
-        throw new Error('The simulator automation server did not become ready.');
-      }
-
-      deviceInfo = await waitForDeviceInfo(dependencies);
-      if (deviceInfo === undefined) {
-        throw new Error('The simulator did not report bridge.getDeviceInfo().');
+        throw new Error(
+          'The simulator automation server did not become ready.',
+        );
       }
     } catch {
       return {
@@ -471,9 +478,21 @@ export async function runSimulatorHarness(
     }
 
     try {
-      const { screenshot, textIsLit } = await waitForSmokeScreenshot(
-        dependencies,
-      );
+      deviceInfo = await waitForDeviceInfo(dependencies);
+      if (deviceInfo === undefined) {
+        throw new Error('The simulator did not report bridge.getDeviceInfo().');
+      }
+    } catch {
+      return {
+        outputRoot: options.outputRoot,
+        success: false,
+        reason: 'evidence-failed',
+      };
+    }
+
+    try {
+      const { screenshot, textIsLit } =
+        await waitForSmokeScreenshot(dependencies);
       const versions = await dependencies.versions();
       const simRoot = resolve(options.outputRoot, dependencies.today(), 'sim');
       await writeSmokeReport(

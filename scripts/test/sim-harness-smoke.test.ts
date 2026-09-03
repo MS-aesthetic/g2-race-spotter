@@ -6,18 +6,28 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  hasLitPixelsInSmokeTextRegion,
+  main,
   runSimulatorHarness,
   type SimulatorHarnessDependencies,
 } from '../sim-harness';
 
 const temporaryRoots: string[] = [];
 
-function pngWithLitTextPixel(): Uint8Array {
+function pngWithTextPixel(
+  red = 0,
+  green = 255,
+  blue = 0,
+  alpha = 255,
+): Uint8Array {
   const width = 576;
   const height = 288;
   const pixels = Buffer.alloc(width * height * 4);
-  pixels[(24 * width + 12) * 4 + 1] = 255;
-  pixels[(24 * width + 12) * 4 + 3] = 255;
+  const offset = (24 * width + 12) * 4;
+  pixels[offset] = red;
+  pixels[offset + 1] = green;
+  pixels[offset + 2] = blue;
+  pixels[offset + 3] = alpha;
   const scanlines = Buffer.alloc((width * 4 + 1) * height);
   for (let row = 0; row < height; row += 1) {
     pixels.copy(scanlines, row * (width * 4 + 1) + 1, row * width * 4);
@@ -81,7 +91,7 @@ function dependencies(
     launchAppServer: vi.fn(),
     ping: vi.fn().mockResolvedValue(true),
     readDeviceInfo: vi.fn().mockResolvedValue({ model: 'g2', sn: 'simulator' }),
-    readScreenshot: vi.fn().mockResolvedValue(pngWithLitTextPixel()),
+    readScreenshot: vi.fn().mockResolvedValue(pngWithTextPixel()),
     resolveSimulator: vi.fn().mockResolvedValue({
       args: ['http://localhost:5173', '--automation-port', '9898'],
       command: 'evenhub-simulator',
@@ -109,7 +119,7 @@ describe('sim-harness smoke success', () => {
     const selectedOutputRoot = await outputRoot();
     const appStop = vi.fn().mockResolvedValue(undefined);
     const simulatorStop = vi.fn().mockResolvedValue(undefined);
-    const screenshot = pngWithLitTextPixel();
+    const screenshot = pngWithTextPixel();
     const automation = dependencies({
       launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
       launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
@@ -148,7 +158,7 @@ describe('sim-harness smoke success', () => {
     const screenshot = vi
       .fn()
       .mockResolvedValueOnce(blankPng())
-      .mockResolvedValueOnce(pngWithLitTextPixel());
+      .mockResolvedValueOnce(pngWithTextPixel());
     const automation = dependencies({
       launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
       launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
@@ -192,5 +202,91 @@ describe('sim-harness smoke success', () => {
     expect(automation.readScreenshot).toHaveBeenCalledTimes(25);
     expect(simulatorStop).toHaveBeenCalledOnce();
     expect(appStop).toHaveBeenCalledOnce();
+  });
+});
+
+describe('sim-harness smoke evidence failures', () => {
+  it('requires RGB brightness above 32 as well as an opaque pixel', () => {
+    expect(hasLitPixelsInSmokeTextRegion(pngWithTextPixel(32, 0, 0))).toBe(
+      false,
+    );
+    expect(hasLitPixelsInSmokeTextRegion(pngWithTextPixel(33, 0, 0))).toBe(
+      true,
+    );
+    expect(hasLitPixelsInSmokeTextRegion(pngWithTextPixel(0, 255, 0, 0))).toBe(
+      false,
+    );
+  });
+
+  it('exits non-zero, cleans up, and writes no success evidence when device info is missing', async () => {
+    const selectedOutputRoot = await outputRoot();
+    const appStop = vi.fn().mockResolvedValue(undefined);
+    const simulatorStop = vi.fn().mockResolvedValue(undefined);
+    const stderr = vi.fn();
+    const setExitCode = vi.fn();
+    const automation = dependencies({
+      launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
+      launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
+      readDeviceInfo: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const result = await main({
+      dependencies: automation,
+      outputRoot: selectedOutputRoot,
+      setExitCode,
+      stderr,
+    });
+
+    expect(result).toEqual({
+      outputRoot: selectedOutputRoot,
+      reason: 'evidence-failed',
+      success: false,
+    });
+    expect(automation.ping).toHaveBeenCalledWith('http://127.0.0.1:9898');
+    expect(automation.readDeviceInfo).toHaveBeenCalledTimes(25);
+    expect(automation.readScreenshot).not.toHaveBeenCalled();
+    expect(stderr).toHaveBeenCalledWith('evidence-failed');
+    expect(setExitCode).toHaveBeenCalledWith(1);
+    expect(simulatorStop).toHaveBeenCalledOnce();
+    expect(appStop).toHaveBeenCalledOnce();
+    await expect(
+      readFile(join(selectedOutputRoot, '2026-09-03', 'sim', 'report.json')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('exits non-zero, cleans up, and writes no success evidence when device info is rejected', async () => {
+    const selectedOutputRoot = await outputRoot();
+    const appStop = vi.fn().mockResolvedValue(undefined);
+    const simulatorStop = vi.fn().mockResolvedValue(undefined);
+    const stderr = vi.fn();
+    const setExitCode = vi.fn();
+    const automation = dependencies({
+      launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
+      launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
+      readDeviceInfo: vi.fn().mockRejectedValue(new Error('console failed')),
+    });
+
+    const result = await main({
+      dependencies: automation,
+      outputRoot: selectedOutputRoot,
+      setExitCode,
+      stderr,
+    });
+
+    expect(result).toEqual({
+      outputRoot: selectedOutputRoot,
+      reason: 'evidence-failed',
+      success: false,
+    });
+    expect(automation.ping).toHaveBeenCalledWith('http://127.0.0.1:9898');
+    expect(automation.readDeviceInfo).toHaveBeenCalledOnce();
+    expect(automation.readScreenshot).not.toHaveBeenCalled();
+    expect(stderr).toHaveBeenCalledWith('evidence-failed');
+    expect(setExitCode).toHaveBeenCalledWith(1);
+    expect(simulatorStop).toHaveBeenCalledOnce();
+    expect(appStop).toHaveBeenCalledOnce();
+    await expect(
+      readFile(join(selectedOutputRoot, '2026-09-03', 'sim', 'report.json')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
