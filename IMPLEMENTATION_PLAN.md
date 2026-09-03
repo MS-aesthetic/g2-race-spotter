@@ -1,8 +1,10 @@
-# Implementation plan — 2026-09-03T14:19:25-04:00
+# Implementation plan — 2026-09-03T14:31:37-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
+- [ ] T002e (owner: hud-qa) (spec: 010 AC-7) Repair T002b by making the named verifier exercise the process-facing `main()`/CLI boundary with injected launcher, output-root, stderr, and exit handling; assert literal `sim-unavailable`, non-zero exit, cleanup, and absence of a report at the harness-selected output root; verify `scripts/test/sim-harness.test.ts` plus the root test/typecheck/lint gates.
+  - Reviewer finding (verbatim): "[block] scripts/test/sim-harness.test.ts:41 — the named verifier only asserts the internal result object; it never exercises or observes `main()`, so AC-7's required non-zero process exit and literal `sim-unavailable` output are unverified, and its no-report check targets an unrelated temporary path that the harness never receives — scenario: remove `console.error`/`process.exitCode = 1` from `main()` (or later write a partial report under the real repo root) → both tests still pass while `npm run sim:scenarios` violates AC-7 — fix: exercise the CLI boundary with an injected failing launcher (or inject dependencies/output/exit handling into `main`) and assert stderr plus non-zero status; point the report assertion at the harness's actual injected output root."
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add `scripts/sim-harness.ts` and the root `sim:scenarios` script with injectable launcher/automation seams; resolve the pinned local simulator, use automation port 9898, and on launch or ping failure exit non-zero with literal `sim-unavailable` and no partial report; verify `scripts/test/sim-harness.test.ts`.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the mocked simulator smoke-success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and write pinned simulator/SDK versions plus simulator `getDeviceInfo()` to `report.json`; verify `scripts/test/sim-harness-smoke.test.ts`.
 - [ ] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Implement protocol v1 wire types, shared constants, guards, and one valid plus invalid fixture per message type without runtime dependencies; verify `packages/protocol/test/guards.test.ts` through root and workspace test commands.
@@ -18,8 +20,8 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10) Implement the local `fake-spotter` prerequisite with every R6 scenario and `--role driver`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
 
 ## Needs simulator [SIM]
-- [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) On an interactive Windows desktop, obtain and record the pinned simulator's exact `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject any non-hardware `TBD`, add a root environment-check script and invoke it in CI, and validate that `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and the full AC-1 gate. This blocked repair also closes T003a.
-- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] After T002b/T002d, run `npm run sim:scenarios -- --smoke` on a machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
+- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] After T002d, run `npm run sim:scenarios -- --smoke` on a machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
+- [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject any non-hardware `TBD`, add a root environment-check script and invoke it in CI, and validate that `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and the full AC-1 gate. This blocked repair also closes T003a.
 
 ## Needs human [HW]
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode, QR-sideload the scaffold, and save the required photo/log under `qa/<date>/`.
@@ -40,12 +42,12 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- (none; T003c failed with `sim-unavailable` and is parked, not complete)
+- (none; T002b is review-blocked at commit 66595a1 and remains unchecked beneath repair T002e)
 
 ## Notes / why
-- Iteration 13 records T003c as `failed`/`n/a`: simulator 0.9.5 answered `/api/ping`, but no main window, WebView screenshot, or bridge activity existed, so the exact DeviceInfo value cannot be inferred.
-- T003c is parked rather than retried; T002b and T002d remain runnable because their launch-failure and smoke-success paths are verified through injected mocks.
-- T002c is also parked after its prerequisites because the observed simulator-window failure is environment-wide; its `[SIM]` report remains distinct from AC-5's automated environment gate.
+- Iteration 14 records T002b as `review-blocked`/`block`: its internal failure-path tests pass, but they do not prove AC-7's required CLI stderr, non-zero exit, or no-report behavior at the actual output root.
+- T002e stays first and quotes the blocking finding verbatim; T002b remains unchecked beneath it as required by the review policy.
+- T002c precedes T003c under Needs simulator because its committed smoke report supplies the exact simulator `getDeviceInfo()` value needed to close AC-5 without inference.
 - AC audit 010: AC-1 is met by `.github/workflows/ci.yml` and the passing root test/typecheck/lint commands; AC-2 is met by the passing `sync:agents:check`; AC-6 is met by `scripts/test/check-pins.test.ts` and `check:pins`; AC-3 is open `[SIM]`, AC-4 is open `[HW]`, and AC-5/AC-7 are unmet automated.
 - AC audit 020: AC-1–AC-9 are unmet because their named verifier files are absent; AC-10 is open `[HW]`, with local CLI prerequisite T014.
 - AC audit 030: AC-1–AC-6 are unmet because their named tests are absent; AC-7 is open `[SIM]`; AC-8–AC-10 are open `[HW]`.

@@ -46,6 +46,7 @@ R7. `scripts/sim-harness.ts` MUST launch the pinned simulator with `--automation
 - 2026-09-03 Treat the startup-page unit test as a scaffold prerequisite, not AC-3 evidence — why: AC-3 specifically requires the committed simulator screenshot and report from `npm run sim:scenarios -- --smoke`.
 - 2026-09-03 Treat AC-5 as a binary repository gate, not an intermediate hand-off — why: its named verifier must reject every non-hardware `TBD` and run in CI before a task citing AC-5 can be approved.
 - 2026-09-03 Park simulator-dependent environment completion on an interactive Windows desktop — why: simulator 0.9.5 can answer its automation ping without creating the main window or exposing bridge activity, so the exact `getDeviceInfo()` value must not be inferred.
+- 2026-09-03 Require AC-7's named verifier to exercise the process-facing CLI boundary and the harness-selected output root — why: internal result-only tests cannot detect missing literal stderr, a zero exit status, or a partial report written at the real output path.
 
 ## Open questions
 
