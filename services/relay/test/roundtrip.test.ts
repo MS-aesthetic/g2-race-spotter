@@ -127,6 +127,42 @@ function nextMessage(socket: WebSocket): Promise<Record<string, unknown>> {
   });
 }
 
+function nextClose(
+  socket: WebSocket,
+): Promise<{ readonly code: number; readonly reason: string }> {
+  return new Promise((resolve) => {
+    socket.once('close', (code, reason) => {
+      resolve({ code, reason: reason.toString() });
+    });
+  });
+}
+
+async function expectNoMessage(socket: WebSocket, ms: number): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const handler = (data: WebSocket.RawData): void => {
+      clearTimeout(timeout);
+      reject(new Error(`unexpected message: ${data.toString()}`));
+    };
+    const timeout = setTimeout(() => {
+      socket.off('message', handler);
+      resolve();
+    }, ms);
+    socket.on('message', handler);
+  });
+}
+
+async function openRejectedSocket(url: string): Promise<{
+  readonly socket: WebSocket;
+  readonly message: Promise<Record<string, unknown>>;
+  readonly closed: Promise<{ readonly code: number; readonly reason: string }>;
+}> {
+  const socket = new WebSocket(url);
+  const message = nextMessage(socket);
+  const closed = nextClose(socket);
+  await once(socket, 'open');
+  return { socket, message, closed };
+}
+
 async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -183,4 +219,60 @@ describe('RaceRoom roundtrip', () => {
       driver.close();
     }
   }, 20_000);
+
+  it('does not broadcast to an unready socket and replays the latest state after hello', async () => {
+    worker = await startWorker();
+    const room = 'QA02';
+    const driver = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=driver`,
+    );
+    const spotter = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=spotter`,
+    );
+
+    try {
+      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      await nextMessage(spotter);
+      await expectNoMessage(driver, 150);
+
+      const replay = nextMessage(driver);
+      spotter.send(JSON.stringify({ t: 'lane', lane: 'bot' }));
+      await nextMessage(spotter);
+      await expectNoMessage(driver, 150);
+
+      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      await expect(within(replay, 500)).resolves.toMatchObject({
+        t: 'state',
+        lane: 'bot',
+        driverOnline: true,
+        spotterOnline: true,
+      });
+    } finally {
+      spotter.close();
+      driver.close();
+    }
+  }, 20_000);
+
+  it.each(['', '?role=crew'])(
+    'accepts a missing or invalid URL role then reports bad_frame and closes 4400 (%s)',
+    async (query) => {
+      worker = await startWorker();
+      const rejected = await openRejectedSocket(
+        `${worker.origin.replace('http', 'ws')}/room/QA03${query}`,
+      );
+      rejected.socket.send(
+        JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }),
+      );
+
+      await expect(within(rejected.message, 500)).resolves.toEqual({
+        t: 'error',
+        code: 'bad_frame',
+      });
+      await expect(within(rejected.closed, 2_000)).resolves.toMatchObject({
+        code: 4400,
+      });
+      rejected.socket.terminate();
+    },
+    20_000,
+  );
 });

@@ -12,7 +12,7 @@ import {
 } from '@g2-race-spotter/protocol';
 
 interface SocketAttachment {
-  readonly role: Role;
+  readonly role: Role | null;
   readonly name: string | undefined;
   readonly lastPing: number;
   readonly ready: boolean;
@@ -29,7 +29,9 @@ function isSocketAttachment(value: unknown): value is SocketAttachment {
 
   const attachment = value as Record<string, unknown>;
   return (
-    (attachment.role === 'spotter' || attachment.role === 'driver') &&
+    (attachment.role === 'spotter' ||
+      attachment.role === 'driver' ||
+      attachment.role === null) &&
     (attachment.name === undefined || typeof attachment.name === 'string') &&
     typeof attachment.lastPing === 'number' &&
     typeof attachment.ready === 'boolean'
@@ -47,12 +49,17 @@ export class RaceRoom extends DurableObject<Env> {
     return this.state;
   }
 
-  private async persistAndBroadcast(next: State): Promise<void> {
+  private async persistAndBroadcast(
+    next: State,
+    exclude?: WebSocket,
+  ): Promise<void> {
     await this.ctx.storage.put('state', next);
     this.state = next;
     const frame = serialize(next);
     for (const socket of this.ctx.getWebSockets()) {
-      socket.send(frame);
+      if (socket !== exclude && this.attachment(socket)?.ready === true) {
+        socket.send(frame);
+      }
     }
   }
 
@@ -69,6 +76,7 @@ export class RaceRoom extends DurableObject<Env> {
 
   private async refreshPeer(
     role: Role,
+    exclude?: WebSocket,
   ): Promise<{ readonly state: State; readonly changed: boolean }> {
     const state = await this.loadState();
     const next = reduce(
@@ -77,7 +85,7 @@ export class RaceRoom extends DurableObject<Env> {
       { now: Date.now(), newId: crypto.randomUUID },
     );
     if (next !== state) {
-      await this.persistAndBroadcast(next);
+      await this.persistAndBroadcast(next, exclude);
     }
     return { state: next, changed: next !== state };
   }
@@ -90,10 +98,11 @@ export class RaceRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const role = url.searchParams.get('role');
-    if (role !== 'spotter' && role !== 'driver') {
-      return new Response('role must be spotter or driver', { status: 400 });
-    }
+    const requestedRole = url.searchParams.get('role');
+    const role: Role | null =
+      requestedRole === 'spotter' || requestedRole === 'driver'
+        ? requestedRole
+        : null;
 
     const name = url.searchParams.get('name') ?? undefined;
     const pair = new WebSocketPair();
@@ -104,7 +113,7 @@ export class RaceRoom extends DurableObject<Env> {
       lastPing: Date.now(),
       ready: false,
     };
-    this.ctx.acceptWebSocket(server, [role]);
+    this.ctx.acceptWebSocket(server, role === null ? [] : [role]);
     server.serializeAttachment(attachment);
 
     return new Response(null, { status: 101, webSocket: client });
@@ -115,7 +124,11 @@ export class RaceRoom extends DurableObject<Env> {
     raw: string | ArrayBuffer,
   ): Promise<void> {
     const attachment = this.attachment(socket);
-    if (attachment === undefined || typeof raw !== 'string') {
+    if (
+      attachment === undefined ||
+      attachment.role === null ||
+      typeof raw !== 'string'
+    ) {
       this.sendBadHello(socket);
       return;
     }
@@ -139,10 +152,8 @@ export class RaceRoom extends DurableObject<Env> {
       }
 
       socket.serializeAttachment({ ...attachment, ready: true });
-      const peer = await this.refreshPeer(attachment.role);
-      if (!peer.changed) {
-        socket.send(serialize(peer.state));
-      }
+      const peer = await this.refreshPeer(attachment.role, socket);
+      socket.send(serialize(peer.state));
       return;
     }
 
@@ -163,14 +174,14 @@ export class RaceRoom extends DurableObject<Env> {
 
   async webSocketClose(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
-    if (attachment?.ready === true) {
+    if (attachment?.ready === true && attachment.role !== null) {
       await this.refreshPeer(attachment.role);
     }
   }
 
   async webSocketError(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
-    if (attachment?.ready === true) {
+    if (attachment?.ready === true && attachment.role !== null) {
       await this.refreshPeer(attachment.role);
     }
   }
