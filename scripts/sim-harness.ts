@@ -26,9 +26,22 @@ export interface SimulatorHarnessDependencies {
   sleep(ms: number): Promise<void>;
 }
 
+export interface SimulatorHarnessOptions {
+  outputRoot: string;
+}
+
 export interface SimulatorHarnessResult {
+  outputRoot: string;
   reason?: 'sim-unavailable';
   success: boolean;
+}
+
+export interface SimulatorHarnessMainOptions {
+  dependencies?: SimulatorHarnessDependencies;
+  outputRoot?: string;
+  runHarness?: typeof runSimulatorHarness;
+  setExitCode?: (code: number) => void;
+  stderr?: (message: string) => void;
 }
 
 interface SimulatorManifest {
@@ -123,6 +136,9 @@ const defaultDependencies: SimulatorHarnessDependencies = {
 
 export async function runSimulatorHarness(
   dependencies: SimulatorHarnessDependencies = defaultDependencies,
+  options: SimulatorHarnessOptions = {
+    outputRoot: resolve(process.cwd(), 'qa'),
+  },
 ): Promise<SimulatorHarnessResult> {
   let simulator: LaunchedSimulator | undefined;
 
@@ -133,25 +149,45 @@ export async function runSimulatorHarness(
 
     for (let attempt = 0; attempt < PING_ATTEMPTS; attempt += 1) {
       if (await dependencies.ping(AUTOMATION_URL)) {
-        return { success: true };
+        return { outputRoot: options.outputRoot, success: true };
       }
       await dependencies.sleep(PING_INTERVAL_MS);
     }
   } catch {
-    return { success: false, reason: 'sim-unavailable' };
+    return {
+      outputRoot: options.outputRoot,
+      success: false,
+      reason: 'sim-unavailable',
+    };
   } finally {
     await simulator?.stop();
   }
 
-  return { success: false, reason: 'sim-unavailable' };
+  return {
+    outputRoot: options.outputRoot,
+    success: false,
+    reason: 'sim-unavailable',
+  };
 }
 
-export async function main(): Promise<void> {
-  const result = await runSimulatorHarness();
+export async function main(
+  options: SimulatorHarnessMainOptions = {},
+): Promise<SimulatorHarnessResult> {
+  const result = await (options.runHarness ?? runSimulatorHarness)(
+    options.dependencies,
+    { outputRoot: options.outputRoot ?? resolve(process.cwd(), 'qa') },
+  );
   if (!result.success) {
-    console.error(result.reason);
-    process.exitCode = 1;
+    (options.stderr ?? console.error)(result.reason ?? 'sim-unavailable');
+    (
+      options.setExitCode ??
+      ((code) => {
+        process.exitCode = code;
+      })
+    )(1);
   }
+
+  return result;
 }
 
 if (

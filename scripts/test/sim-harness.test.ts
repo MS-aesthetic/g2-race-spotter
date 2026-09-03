@@ -5,16 +5,21 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  main,
   runSimulatorHarness,
   type SimulatorHarnessDependencies,
 } from '../sim-harness';
 
 const temporaryRoots: string[] = [];
 
-async function reportPath(): Promise<string> {
+async function outputRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'g2-sim-harness-'));
   temporaryRoots.push(root);
-  return join(root, 'qa', '2026-09-03', 'sim', 'report.json');
+  return join(root, 'qa');
+}
+
+function reportPath(root: string): string {
+  return join(root, '2026-09-03', 'sim', 'report.json');
 }
 
 function dependencies(
@@ -38,33 +43,54 @@ afterEach(async () => {
 });
 
 describe('sim-harness unavailable simulator handling', () => {
-  it('returns sim-unavailable without a report when the launcher fails', async () => {
-    const expectedReportPath = await reportPath();
+  it('writes sim-unavailable to stderr and exits non-zero without a report when the launcher fails', async () => {
+    const selectedOutputRoot = await outputRoot();
     const launch = vi.fn().mockRejectedValue(new Error('not installed'));
-    const result = await runSimulatorHarness(
-      dependencies({
+    const runHarness = vi.fn(runSimulatorHarness);
+    const stderr = vi.fn();
+    const setExitCode = vi.fn();
+
+    const result = await main({
+      dependencies: dependencies({
         launch,
         resolveSimulator: vi.fn().mockResolvedValue({
           command: 'evenhub-simulator',
           args: [],
         }),
       }),
-    );
+      outputRoot: selectedOutputRoot,
+      runHarness,
+      setExitCode,
+      stderr,
+    });
 
-    expect(result).toEqual({ success: false, reason: 'sim-unavailable' });
     expect(launch).toHaveBeenCalledOnce();
-    await expect(access(expectedReportPath)).rejects.toMatchObject({
+    expect(result).toEqual({
+      outputRoot: selectedOutputRoot,
+      success: false,
+      reason: 'sim-unavailable',
+    });
+    expect(runHarness).toHaveBeenCalledWith(expect.anything(), {
+      outputRoot: selectedOutputRoot,
+    });
+    expect(stderr).toHaveBeenCalledWith('sim-unavailable');
+    expect(setExitCode).toHaveBeenCalledWith(1);
+    await expect(access(reportPath(selectedOutputRoot))).rejects.toMatchObject({
       code: 'ENOENT',
     });
   });
 
-  it('returns sim-unavailable and stops the simulator when automation ping fails', async () => {
-    const expectedReportPath = await reportPath();
+  it('cleans up after ping failure and exits non-zero without a report at its selected output root', async () => {
+    const selectedOutputRoot = await outputRoot();
     const stop = vi.fn().mockResolvedValue(undefined);
     const ping = vi.fn().mockResolvedValue(false);
     const sleep = vi.fn().mockResolvedValue(undefined);
-    const result = await runSimulatorHarness(
-      dependencies({
+    const runHarness = vi.fn(runSimulatorHarness);
+    const stderr = vi.fn();
+    const setExitCode = vi.fn();
+
+    const result = await main({
+      dependencies: dependencies({
         launch: vi.fn().mockResolvedValue({ stop }),
         ping,
         resolveSimulator: vi.fn().mockResolvedValue({
@@ -73,13 +99,23 @@ describe('sim-harness unavailable simulator handling', () => {
         }),
         sleep,
       }),
-    );
+      outputRoot: selectedOutputRoot,
+      runHarness,
+      setExitCode,
+      stderr,
+    });
 
-    expect(result).toEqual({ success: false, reason: 'sim-unavailable' });
     expect(ping).toHaveBeenCalledWith('http://127.0.0.1:9898');
+    expect(result).toEqual({
+      outputRoot: selectedOutputRoot,
+      success: false,
+      reason: 'sim-unavailable',
+    });
     expect(sleep).toHaveBeenCalledTimes(25);
     expect(stop).toHaveBeenCalledOnce();
-    await expect(access(expectedReportPath)).rejects.toMatchObject({
+    expect(stderr).toHaveBeenCalledWith('sim-unavailable');
+    expect(setExitCode).toHaveBeenCalledWith(1);
+    await expect(access(reportPath(selectedOutputRoot))).rejects.toMatchObject({
       code: 'ENOENT',
     });
   });
