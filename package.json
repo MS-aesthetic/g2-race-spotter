@@ -18,7 +18,8 @@
     "lint": "eslint . && prettier --check \"{apps,packages,services,scripts}/**/*.{ts,js,mjs,json}\" \"*.{js,mjs,json,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
     "check:pins": "node scripts/check-pins.mjs",
     "sync:agents": "node scripts/sync-agents.mjs",
-    "sync:agents:check": "node scripts/sync-agents.mjs --check"
+    "sync:agents:check": "node scripts/sync-agents.mjs --check",
+    "sim:scenarios": "node --experimental-strip-types scripts/sim-harness.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
