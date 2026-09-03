@@ -1,0 +1,15 @@
+{
+  "t": "state",
+  "seq": 4,
+  "lane": "mid",
+  "gap": 72,
+  "msg": {
+    "id": "01J0MESSAGE",
+    "text": "Pit this lap",
+    "ts": 1725408000000,
+    "ackedAt": null
+  },
+  "spotterOnline": true,
+  "driverOnline": false,
+  "updatedAt": 1725408000100
+}
