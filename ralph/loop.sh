@@ -77,7 +77,7 @@ run_stage() {
 next_owner() {   # owner of the first unchecked task under "## Next"
   awk '/^## Next/{f=1;next} /^## /{f=0} f && /^- \[ \]/{ if (match($0,/owner: *[a-z0-9-]+/)) { s=substr($0,RSTART+6,RLENGTH-6); gsub(/ /,"",s); print s; exit } }' IMPLEMENTATION_PLAN.md
 }
-next_is_hw() { awk '/^## Next/{f=1;next} /^## /{f=0} f && /^- \[ \]/{ print ($0 ~ /\[HW\]/) ? "yes" : "no"; exit }' IMPLEMENTATION_PLAN.md; }
+next_is_hw() { awk '/^## Next/{f=1;next} /^## /{f=0} f && /^- \[ \]/{ print ($0 ~ /\) *\[HW\]( |$)/) ? "yes" : "no"; exit }' IMPLEMENTATION_PLAN.md; }
 plan_status() { sed -n 's/^Status: *//p' IMPLEMENTATION_PLAN.md | head -1 | tr -d '\r '; }
 reviewer_for_last_commit() {
   if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -Eq '^(packages/protocol/|services/relay/src/)|client\.ts$'; then echo protocol-keeper; else echo hud-qa; fi
