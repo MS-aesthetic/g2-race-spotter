@@ -47,7 +47,7 @@ export interface SimulatorHarnessOptions {
 
 export interface SimulatorHarnessResult {
   outputRoot: string;
-  reason?: 'sim-unavailable';
+  reason?: 'assertion-failed' | 'evidence-failed' | 'sim-unavailable';
   success: boolean;
 }
 
@@ -374,6 +374,64 @@ async function waitForDeviceInfo(
   return undefined;
 }
 
+async function waitForSmokeScreenshot(
+  dependencies: SimulatorHarnessDependencies,
+): Promise<{ screenshot: Uint8Array; textIsLit: boolean }> {
+  let screenshot: Uint8Array | undefined;
+  for (let attempt = 0; attempt < PING_ATTEMPTS; attempt += 1) {
+    screenshot = await dependencies.readScreenshot(AUTOMATION_URL);
+    if (hasLitPixelsInSmokeTextRegion(screenshot)) {
+      return { screenshot, textIsLit: true };
+    }
+    if (attempt < PING_ATTEMPTS - 1) {
+      await dependencies.sleep(PING_INTERVAL_MS);
+    }
+  }
+
+  if (!screenshot) {
+    throw new Error('The simulator did not return a glasses screenshot.');
+  }
+  return { screenshot, textIsLit: false };
+}
+
+async function writeSmokeReport(
+  simRoot: string,
+  screenshot: Uint8Array,
+  deviceInfo: unknown,
+  textIsLit: boolean,
+  versions: SimulatorVersions,
+): Promise<void> {
+  const screenshotPath = resolve(simRoot, 'image', 'smoke-01.png');
+  await mkdir(dirname(screenshotPath), { recursive: true });
+  await writeFile(screenshotPath, screenshot);
+  await writeFile(
+    resolve(simRoot, 'report.json'),
+    `${JSON.stringify(
+      {
+        assertions: [
+          {
+            detail:
+              'RGBA alpha channel contains lit pixels in the Hello, driver text region.',
+            name: 'Hello, driver text region is lit',
+            pass: textIsLit,
+          },
+        ],
+        deviceInfo,
+        evidenceClass: '[SIM]',
+        generatedAt: new Date().toISOString(),
+        mode: 'image',
+        scenario: 'smoke',
+        sdkVersion: versions.sdkVersion,
+        simulatorCaveat:
+          'Simulator evidence is functional only; it does not prove on-device image limits, LZ4, BLE pacing, or pixel-perfect rendering.',
+        simulatorVersion: versions.simulatorVersion,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 export async function runSimulatorHarness(
   dependencies: SimulatorHarnessDependencies = defaultDependencies,
   options: SimulatorHarnessOptions = {
@@ -382,69 +440,63 @@ export async function runSimulatorHarness(
 ): Promise<SimulatorHarnessResult> {
   let appServer: LaunchedProcess | undefined;
   let simulator: LaunchedSimulator | undefined;
+  let deviceInfo: unknown;
 
   try {
-    appServer = await dependencies.launchAppServer();
-    if (!(await waitFor(() => dependencies.appReady(APP_URL), dependencies))) {
-      throw new Error('The scaffold development server did not become ready.');
+    try {
+      appServer = await dependencies.launchAppServer();
+      if (!(await waitFor(() => dependencies.appReady(APP_URL), dependencies))) {
+        throw new Error('The scaffold development server did not become ready.');
+      }
+
+      simulator = await dependencies.launch(
+        await dependencies.resolveSimulator(),
+      );
+      if (
+        !(await waitFor(() => dependencies.ping(AUTOMATION_URL), dependencies))
+      ) {
+        throw new Error('The simulator automation server did not become ready.');
+      }
+
+      deviceInfo = await waitForDeviceInfo(dependencies);
+      if (deviceInfo === undefined) {
+        throw new Error('The simulator did not report bridge.getDeviceInfo().');
+      }
+    } catch {
+      return {
+        outputRoot: options.outputRoot,
+        success: false,
+        reason: 'sim-unavailable',
+      };
     }
 
-    simulator = await dependencies.launch(
-      await dependencies.resolveSimulator(),
-    );
-    if (
-      !(await waitFor(() => dependencies.ping(AUTOMATION_URL), dependencies))
-    ) {
-      throw new Error('The simulator automation server did not become ready.');
+    try {
+      const { screenshot, textIsLit } = await waitForSmokeScreenshot(
+        dependencies,
+      );
+      const versions = await dependencies.versions();
+      const simRoot = resolve(options.outputRoot, dependencies.today(), 'sim');
+      await writeSmokeReport(
+        simRoot,
+        screenshot,
+        deviceInfo,
+        textIsLit,
+        versions,
+      );
+      return textIsLit
+        ? { outputRoot: options.outputRoot, success: true }
+        : {
+            outputRoot: options.outputRoot,
+            success: false,
+            reason: 'assertion-failed',
+          };
+    } catch {
+      return {
+        outputRoot: options.outputRoot,
+        success: false,
+        reason: 'evidence-failed',
+      };
     }
-
-    const deviceInfo = await waitForDeviceInfo(dependencies);
-    if (deviceInfo === undefined) {
-      throw new Error('The simulator did not report bridge.getDeviceInfo().');
-    }
-    const screenshot = await dependencies.readScreenshot(AUTOMATION_URL);
-    if (!hasLitPixelsInSmokeTextRegion(screenshot)) {
-      throw new Error('Hello, driver text region has no lit pixels.');
-    }
-
-    const versions = await dependencies.versions();
-    const simRoot = resolve(options.outputRoot, dependencies.today(), 'sim');
-    const screenshotPath = resolve(simRoot, 'image', 'smoke-01.png');
-    await mkdir(dirname(screenshotPath), { recursive: true });
-    await writeFile(screenshotPath, screenshot);
-    await writeFile(
-      resolve(simRoot, 'report.json'),
-      `${JSON.stringify(
-        {
-          assertions: [
-            {
-              detail:
-                'RGBA alpha channel contains lit pixels in the Hello, driver text region.',
-              name: 'Hello, driver text region is lit',
-              pass: true,
-            },
-          ],
-          deviceInfo,
-          evidenceClass: '[SIM]',
-          generatedAt: new Date().toISOString(),
-          mode: 'image',
-          scenario: 'smoke',
-          sdkVersion: versions.sdkVersion,
-          simulatorCaveat:
-            'Simulator evidence is functional only; it does not prove on-device image limits, LZ4, BLE pacing, or pixel-perfect rendering.',
-          simulatorVersion: versions.simulatorVersion,
-        },
-        null,
-        2,
-      )}\n`,
-    );
-    return { outputRoot: options.outputRoot, success: true };
-  } catch {
-    return {
-      outputRoot: options.outputRoot,
-      success: false,
-      reason: 'sim-unavailable',
-    };
   } finally {
     await simulator?.stop();
     await appServer?.stop();

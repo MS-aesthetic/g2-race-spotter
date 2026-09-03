@@ -42,6 +42,30 @@ function pngWithLitTextPixel(): Uint8Array {
   );
 }
 
+function blankPng(): Uint8Array {
+  const width = 576;
+  const height = 288;
+  const scanlines = Buffer.alloc((width * 4 + 1) * height);
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    return Buffer.concat([length, Buffer.from(type), data, Buffer.alloc(4)]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return new Uint8Array(
+    Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      chunk('IHDR', header),
+      chunk('IDAT', deflateSync(scanlines)),
+      chunk('IEND', Buffer.alloc(0)),
+    ]),
+  );
+}
+
 async function outputRoot(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'g2-sim-smoke-'));
   temporaryRoots.push(root);
@@ -113,6 +137,59 @@ describe('sim-harness smoke success', () => {
     expect(report).toContain('"sdkVersion": "0.0.12"');
     expect(report).toContain('"simulatorVersion": "0.9.5"');
     expect(report).toContain('"Hello, driver text region is lit"');
+    expect(simulatorStop).toHaveBeenCalledOnce();
+    expect(appStop).toHaveBeenCalledOnce();
+  });
+
+  it('waits for rendered pixels even when device info arrives before page readiness', async () => {
+    const selectedOutputRoot = await outputRoot();
+    const appStop = vi.fn().mockResolvedValue(undefined);
+    const simulatorStop = vi.fn().mockResolvedValue(undefined);
+    const screenshot = vi
+      .fn()
+      .mockResolvedValueOnce(blankPng())
+      .mockResolvedValueOnce(pngWithLitTextPixel());
+    const automation = dependencies({
+      launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
+      launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
+      readDeviceInfo: vi.fn().mockResolvedValue({ model: 'g2', sn: 'early' }),
+      readScreenshot: screenshot,
+    });
+
+    await expect(
+      runSimulatorHarness(automation, { outputRoot: selectedOutputRoot }),
+    ).resolves.toEqual({ outputRoot: selectedOutputRoot, success: true });
+
+    expect(screenshot).toHaveBeenCalledTimes(2);
+    expect(automation.sleep).toHaveBeenCalledWith(200);
+    expect(simulatorStop).toHaveBeenCalledOnce();
+    expect(appStop).toHaveBeenCalledOnce();
+  });
+
+  it('records a blank screenshot as a failed assertion, not simulator unavailability', async () => {
+    const selectedOutputRoot = await outputRoot();
+    const appStop = vi.fn().mockResolvedValue(undefined);
+    const simulatorStop = vi.fn().mockResolvedValue(undefined);
+    const automation = dependencies({
+      launch: vi.fn().mockResolvedValue({ stop: simulatorStop }),
+      launchAppServer: vi.fn().mockResolvedValue({ stop: appStop }),
+      readScreenshot: vi.fn().mockResolvedValue(blankPng()),
+    });
+
+    await expect(
+      runSimulatorHarness(automation, { outputRoot: selectedOutputRoot }),
+    ).resolves.toEqual({
+      outputRoot: selectedOutputRoot,
+      reason: 'assertion-failed',
+      success: false,
+    });
+
+    const report = await readFile(
+      join(selectedOutputRoot, '2026-09-03', 'sim', 'report.json'),
+      'utf8',
+    );
+    expect(report).toContain('"pass": false');
+    expect(automation.readScreenshot).toHaveBeenCalledTimes(25);
     expect(simulatorStop).toHaveBeenCalledOnce();
     expect(appStop).toHaveBeenCalledOnce();
   });

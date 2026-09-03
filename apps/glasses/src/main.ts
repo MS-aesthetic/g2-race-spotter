@@ -22,13 +22,15 @@ const startPage = createStartupPage({
   },
 });
 
-void startPage();
-
-void bridge
-  .getDeviceInfo()
-  .then((deviceInfo) => {
-    console.info('g2rs.device-info', JSON.stringify(deviceInfo));
-  })
-  .catch((error: unknown) => {
-    console.warn('g2rs.device-info unavailable', error);
-  });
+if (await startPage()) {
+  void bridge
+    .getDeviceInfo()
+    .then((deviceInfo) => {
+      console.info('g2rs.device-info', JSON.stringify(deviceInfo));
+    })
+    .catch((error: unknown) => {
+      console.warn('g2rs.device-info unavailable', error);
+    });
+} else {
+  console.warn('g2rs.startup-page unavailable');
+}
