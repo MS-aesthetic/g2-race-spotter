@@ -12,7 +12,7 @@ export {
   type PeerEvent,
   type ReducerContext,
   type ReducerEvent,
-} from './reduce.js';
+} from './reduce.ts';
 
 export const PROTOCOL_VERSION = 1;
 
