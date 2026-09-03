@@ -1,4 +1,1 @@
-* text=auto
-*.sh text eol=lf
-ralph/models.env text eol=lf
-ralph/PROMPT_*.md text eol=lf
+* text=auto eol=lf
