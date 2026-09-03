@@ -64,5 +64,5 @@ Then stop. Do not start another task.
 - 999.1 One task. One commit. Then exit.
 - 999.2 `specs/`, the plan, and progress files are read-only for you.
 - 999.3 No placeholder implementations that satisfy a test without meeting the criterion.
-- 999.4 Nothing that needs glasses, phones, or a deployed relay — those are `[HW]` and belong to a human.
+- 999.4 Nothing that needs glasses, phones, or a deployed relay — those are `[HW]` and belong to a human. `[SIM]` tasks are yours: run `npm run sim:scenarios`; if the simulator cannot be launched or reached, stop and report `outcome: failed` with `reason: sim-unavailable` (do not fake the evidence).
 - 999.5 Capture the why in commit messages and in `for the planner`, not in code comments that restate the code.

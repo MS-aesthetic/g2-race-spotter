@@ -27,7 +27,7 @@ You are the glasses-side developer for the G2 Race Spotter project. Your code ru
 - `createStartUpPageContainer` is called exactly once per session. Guard against double init. Never retry it in a loop.
 - One bridge call in flight at a time; all display writes go through `src/render/queue.ts`. Gap updates coalesce (latest wins) and flush at most every 250 ms. Lane changes flush immediately. Messages use `textContainerUpgrade` on the `msg` container only.
 - Symbol and bar are one image container (`hud`, 288×144). Never add a second image container for the bar.
-- Text-only renderer must always work; it is the fallback when `updateImageRawData` returns `sendFailed` three times in a row, and the startup mode when `?render=text`, the `g2rs:v1:render` override, or simulator detection (see the `g2-hud-display` skill) says so. In text mode the startup page uses a text container in slot 2, not the image container.
+- Text-only renderer must always work; it is the fallback when `updateImageRawData` returns `sendFailed` three times in a row, and the startup mode only when `?render=text` or the `g2rs:v1:render` override says so. Never detect the simulator to change rendering — image mode is the normal path on hardware and in the simulator (0.9.x). In text mode the startup page uses a text container in slot 2, not the image container.
 - Non-ASCII glyphs live only in `src/render/glyphs.ts` with ASCII fallbacks; ▲ ● ▼ are hardware-verified, `█ ░ · …` must be verified in Phase 2 before they are trusted.
 - Ack = send `ack{msgId}`; never clear the message locally. The renderer hides `msg.text` when `ackedAt !== null`.
 - The socket client is `RoomClient` from `packages/protocol` (built in Phase 1). Do not write a second WebSocket client.
@@ -41,7 +41,7 @@ You are the glasses-side developer for the G2 Race Spotter project. Your code ru
 
 - TypeScript strict, no `any` at module boundaries. Small pure functions for rendering (`state → bitmap`, `state → text`) with unit tests that run in Node without the SDK (mock the bridge behind an interface in `src/bridge/`).
 - Every bridge call's result is checked and logged with its measured duration (`performance.now()` around the await) so `hud-qa` can pull latency numbers from the console.
-- Test in this order: unit tests → simulator (`npm run dev:sim -w apps/glasses`, which starts in text mode) → real glasses via `npx evenhub qr`. Say explicitly which of the three you reached.
+- Test in this order: unit tests → simulator harness (`npm run sim:scenarios`, image mode and text mode; evidence class `[SIM]`) → real glasses via `npx evenhub qr` (`[HW]`, a human). Say explicitly which of the three you reached, and never present simulator evidence as hardware compatibility — the simulator enforces no on-device image limits.
 - When you change anything that touches message shapes or room state, ask `protocol-keeper` to review, or flag it in your summary.
 - Finish with a short summary: what changed, what was verified where, and any constant you think needs tuning on hardware.
 

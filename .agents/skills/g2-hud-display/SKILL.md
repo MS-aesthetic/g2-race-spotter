@@ -57,10 +57,11 @@ If hardware shows a mirrored/garbled image, the first two things to flip are nib
 
 1. `?render=text` or `?render=image` in the page URL → that.
 2. Bridge KV `g2rs:v1:render` set → that (manual override from the phone companion UI).
-3. Simulator detection → `text`. Detection: Vite `import.meta.env.MODE === 'simulator'` (the `dev:sim` script sets it) **or** `bridge.getDeviceInfo()` reporting no glasses firmware/serial. Log which branch fired; Phase 0 confirms what `getDeviceInfo()` returns in the simulator and records it in `docs/ENVIRONMENT.md`.
-4. Otherwise `image`.
+3. Otherwise `image` — **on hardware and in the simulator alike**. The simulator (≥ 0.9.x; 0.9.5 is what the project pins) accepts the 288×144 image container and our 4-container page, so image mode is the normal simulator path. Do not detect the simulator to change rendering; `import.meta.env.MODE === 'simulator'` (set by the `dev:sim` script) may only affect logging verbosity and the relay URL default.
 
-In **text mode the startup page is built with a text container in slot 2 instead of the image container** (same rect 144,8,288,144, `textColor: 4`) — the simulator would reject a 288×144 image at startup. `rebuildPageContainer` is only used for the *mid-session* fallback described next.
+Simulator success is **functional** evidence only: the simulator explicitly does not enforce on-device image-size limits, does not decode LZ4, and is faster than hardware. Anything about size limits, nibble order, pacing, or `sendFailed` behaviour is still proven on glasses (`[HW]` criteria in specs 030/050).
+
+In **text mode the startup page is built with a text container in slot 2 instead of the image container** (same rect 144,8,288,144, `textColor: 4`). `rebuildPageContainer` is only used for the *mid-session* fallback described next. Text mode exists for the exit-dialogue wedge defect and as a manual override — it is no longer needed to run in the simulator, but it must keep working there (the harness runs every scenario in both modes).
 
 ## Text-mode fallback (`renderText(state): string`)
 

@@ -30,6 +30,9 @@ Current spec focus: specs/0X0-....md
 - [ ] T042 (owner: relay-backend-dev) (spec: 020 AC-3) Implement driver eviction on second driver join; integration test in services/relay/test/eviction.test.ts
 - [ ] T043 (owner: g2-glasses-dev) (spec: 030 AC-1) ...
 
+## Needs simulator [SIM]
+- (tasks whose harness run reported sim-unavailable)
+
 ## Needs human [HW]
 - [ ] T031 (owner: maxx) (spec: 030 AC-6) Render glyph sheet on real glasses; paste console log to qa/<date>/glasses.log
 
@@ -46,6 +49,8 @@ Rules for tasks: one task = one fresh-context iteration = one commit; each names
 
 **`specs/*.md`**: you may append to *Decisions* and *Open questions*, and mark a criterion `DISPUTED: <reason>`. Nothing else in a spec changes without a human. You may **not** weaken an acceptance criterion to make the plan converge.
 
+**`[SIM]` criteria** are worker-runnable: assign them to `hud-qa` (or the owning worker) as normal tasks; the harness produces the evidence under `qa/<date>/sim/`. If the worker reports `outcome: failed` with `reason: sim-unavailable`, do not retry blindly — move the task to a `## Needs simulator` section (a human or a machine with the simulator installed runs `npm run sim:scenarios` and commits the output), and continue with other tasks. Never re-tag a `[SIM]` criterion as `[HW]` or vice versa; never let `[SIM]` evidence satisfy an `[HW]` criterion.
+
 **`[HW]` criteria** count as met when either the evidence path the spec names exists under `qa/` (e.g. `qa/<date>/REPORT.md` stating the AC id and PASS), or "Blocked on human" in `ralph/PROGRESS.md` marks the item done. Otherwise they stay under *Needs human*.
 
 ## Review handling
@@ -58,7 +63,7 @@ Rules for tasks: one task = one fresh-context iteration = one commit; each names
 
 ## DONE decision
 
-Set `Status: DONE` only when every acceptance criterion in every spec is either verified by an automated test that passes in CI (`npm test` and `npm run typecheck` green) or is tagged `[HW]` and listed under *Needs human*. When DONE, write `ralph/DONE` containing the plan status block and stop.
+Set `Status: DONE` only when every acceptance criterion in every spec is either verified by an automated test that passes in CI (`npm test` and `npm run typecheck` green), or is `[SIM]` with a passing `qa/<date>/sim/report.json` committed (or parked under *Needs simulator*), or is tagged `[HW]` and listed under *Needs human*. When DONE, write `ralph/DONE` containing the plan status block and stop.
 
 ## Working style
 

@@ -5,7 +5,7 @@ Spotter-to-driver comms for Even Realities G2 glasses: the spotter's phone (PWA)
 ## Truth, in order
 
 1. `specs/000-constitution.md` — invariants and process rules.
-2. `specs/0X0-*.md` — what "done" means (acceptance criteria `AC-n`; `[HW]` = needs a human with hardware).
+2. `specs/0X0-*.md` — what "done" means (acceptance criteria `AC-n`; evidence classes: automated test, `[SIM]` = simulator harness output, `[HW]` = a human with hardware; `[SIM]` never satisfies `[HW]`).
 3. `.agents/skills/*/SKILL.md` — project decisions: `race-relay-protocol` (wire schema, normative), `g2-hud-display` (container layout, bitmap, queue), `spotter-ui`, `hud-e2e-testing`, `cloudflare-relay-deploy`.
 4. `docs/BUILD_PLAN.md` and `docs/RESEARCH_NOTES.md` — design rationale and SDK facts with sources. Specs win on conflict.
 5. `IMPLEMENTATION_PLAN.md` — disposable task list. `ralph/PROGRESS.md` — history.
@@ -33,7 +33,8 @@ npm run lint
 npm run sync:agents        # regenerate .claude/agents, .codex/agents, .claude/skills from canonical sources
 npm run sync:agents:check  # CI: fail if generated files are stale
 npm run dev -w apps/glasses        # Vite on 0.0.0.0:5173 for `npx evenhub qr` sideload (hardware)
-npm run dev:sim -w apps/glasses    # Vite --mode simulator (text-mode HUD) for the Even Hub simulator
+npm run dev:sim -w apps/glasses    # Vite --mode simulator (logging/relay-URL defaults only; image mode is normal in the simulator)
+npm run sim:scenarios              # simulator harness: launches evenhub-simulator 0.9.5 --automation-port 9898, runs fake-spotter scenarios in image+text mode, writes qa/<date>/sim/report.json  → [SIM] evidence
 npm run dev -w services/relay      # wrangler dev on :8787
 npx tsx scripts/fake-spotter.ts --url ws://localhost:8787 --room QA01 --scenario lanes
 ```
@@ -51,7 +52,7 @@ npx tsx scripts/fake-spotter.ts --url ws://localhost:8787 --room QA01 --scenario
 
 ## Loop protocol (see ralph/README.md)
 
-One task → one fresh context → one commit. Workers take the first unchecked task under `## Next` in `IMPLEMENTATION_PLAN.md`, never `[HW]` tasks. Reviewers report `approve | approve with nits | block` in `ralph/last-review.md`. The planner alone edits the plan, `ralph/PROGRESS.md`, and spec *Decisions*/*Open questions*; only a human weakens an acceptance criterion. Don't assume not implemented — search first.
+One task → one fresh context → one commit. Workers take the first unchecked task under `## Next` in `IMPLEMENTATION_PLAN.md`, never `[HW]` tasks; `[SIM]` tasks are worker tasks (report `failed` + `sim-unavailable` if the simulator cannot run, never fake evidence). Reviewers report `approve | approve with nits | block` in `ralph/last-review.md`. The planner alone edits the plan, `ralph/PROGRESS.md`, and spec *Decisions*/*Open questions*; only a human weakens an acceptance criterion. Don't assume not implemented — search first.
 
 ## Skills and roles by runtime
 

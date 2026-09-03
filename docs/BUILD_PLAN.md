@@ -51,7 +51,7 @@ Canvas 576×288, 4-bit grey. All coordinates absolute.
 | 3 | `msg` | text | 16,160,544,96 | 4 | Message line from spotter (`textColor` 4). Empty string when none. |
 | 4 | `status` | text | 16,258,544,28 | 5 | `LINK OK · SPOTTER ON` / `LINK OK · SPOTTER OFF` / `NO LINK` / `CONNECTING…` — small status strip (28 px is an assumption to confirm with `/font-measurement` in Phase 0) |
 
-In text mode (simulator, `?render=text`, or the stored override) slot 2 is a text container with the same rect instead of the image container, so the simulator's 200×100 image cap is never hit at startup.
+In text mode (`?render=text` or the stored override) slot 2 is a text container with the same rect instead of the image container. Image mode is the default on hardware **and** in the simulator (pinned 0.9.5 renders the full 288×144 image); the simulator is never detected to change rendering.
 
 Status text is the only thing that should ever be visible when the link is dead; the HUD image is dimmed (see below) so the driver never trusts stale data.
 
@@ -65,7 +65,7 @@ The symbol + bar go in **one** image container on purpose: one `updateImageRawDa
 
 ### Text fallback path
 
-Because the image channel can wedge after the exit dialogue (known firmware defect) and the simulator caps images at 200×100, the renderer must also support a **text-only mode**: a single text container showing `▲` / `●` / `▼` followed by a bar made of `█` and `░` characters (e.g. `▲\n████████████░░░░░░░░  62` — 20 cells, `round(gap/5)` filled). Switch to this mode automatically after 3 consecutive `sendFailed` results (in-memory, until restart), and select it at startup via `?render=text`, the stored `g2rs:v1:render` override, or simulator detection (Vite mode `simulator` / `getDeviceInfo()` heuristics — see the `g2-hud-display` skill). `▲ ● ▼` are hardware-verified glyphs; `█ ░ · …` are not yet, so every non-ASCII character sits behind `src/render/glyphs.ts` with an ASCII fallback, and Phase 2 verifies them on real glasses.
+Because the image channel can wedge after the exit dialogue (known firmware defect), the renderer must also support a **text-only mode**: a single text container showing `▲` / `●` / `▼` followed by a bar made of `█` and `░` characters (e.g. `▲\n████████████░░░░░░░░  62` — 20 cells, `round(gap/5)` filled). Switch to this mode automatically after 3 consecutive `sendFailed` results (in-memory, until restart), and select it at startup via `?render=text` or the stored `g2rs:v1:render` override (never by detecting the simulator — see the `g2-hud-display` skill). `▲ ● ▼` are hardware-verified glyphs; `█ ░ · …` are not yet, so every non-ASCII character sits behind `src/render/glyphs.ts` with an ASCII fallback, and Phase 2 verifies them on real glasses.
 
 ### Update policy
 
@@ -116,16 +116,16 @@ Canonical definition lives in `packages/protocol` and in the `race-relay-protoco
 Each phase ends with a demo and a checked exit criterion. Estimated effort is for one focused developer using the agents.
 
 ### Phase 0 — Bootstrap (½ day)
-Monorepo skeleton (`npm init -w`), TypeScript strict config shared via `tsconfig.base.json`, Node 22, ESLint + Prettier, `README.md` pointing at this plan. Install the official `everything-evenhub` Claude Code plugin. Scaffold `apps/glasses` from the `minimal` template with two scripts — `dev` (hardware) and `dev:sim` (`vite --mode simulator`) — prove the simulator runs it, prove QR sideload works on real glasses with Developer Mode on. Record in `docs/ENVIRONMENT.md`: SDK, CLI, simulator, Even app and firmware versions, what `getDeviceInfo()` returns in the simulator vs hardware, and whether one line of the baked font fits in 28 px (`/font-measurement`).
-*Exit:* "Hello, driver" renders on real glasses via QR sideload; simulator runs from `npm run dev:sim -w apps/glasses`; `docs/ENVIRONMENT.md` exists.
+Monorepo skeleton (`npm init -w`), TypeScript strict config shared via `tsconfig.base.json`, Node 22, ESLint + Prettier, `README.md` pointing at this plan. Install the official `everything-evenhub` Claude Code plugin. Scaffold `apps/glasses` from the `minimal` template with two scripts — `dev` (hardware) and `dev:sim` (`vite --mode simulator`, logging/relay-URL only, never rendering) — pin the simulator at 0.9.5 (verify with `npm view`), build the simulator scenario harness skeleton (`scripts/sim-harness.ts`, `npm run sim:scenarios`: launch with `--automation-port`, `/api/ping`, screenshot, `report.json`), prove the harness's smoke run shows "Hello, driver", and prove QR sideload works on real glasses with Developer Mode on. Record in `docs/ENVIRONMENT.md`: SDK, CLI, simulator, Even app and firmware versions, what `getDeviceInfo()` returns in the simulator vs hardware, and whether one line of the baked font fits in 28 px (`/font-measurement`). Simulator-derived fields are automated; hardware fields are a human's.
+*Exit:* `npm run sim:scenarios -- --smoke` passes (`[SIM]`); "Hello, driver" renders on real glasses via QR sideload (`[HW]`); `docs/ENVIRONMENT.md` exists with all non-hardware fields filled.
 
 ### Phase 1 — Protocol + relay (1 day)
 `packages/protocol` with types, guards, reducer (injected `ctx`), the shared `RoomClient` (injected `WebSocket` constructor, offline intent queue, `seq` filtering), and unit tests. `services/relay` with the DO, local dev via `wrangler dev`, an integration test using two `ws` clients (spotter joins, sends `lane`, driver receives `state` with the lane set and `seq > 0`; reconnect replays state; a second driver evicts the first). A `scripts/fake-spotter.ts` CLI that scripts lane/gap/msg sequences against any relay URL — this becomes the workhorse for testing the glasses without a second person.
 *Exit:* integration tests green locally and against a deployed `wrangler deploy` on `*.workers.dev`.
 
 ### Phase 2 — Glasses app, text mode (1 day)
-`apps/glasses`: bridge init, room join screen (room code via `bridge.getLocalStorage`, entered on the phone companion UI — the WebView page itself is visible on the phone, so a plain HTML form there is fine), the shared `RoomClient` wired to the bridge lifecycle, state store, **text-only renderer** first (fast to validate, works in the simulator), render-mode selection, `glyphs.ts` with ASCII fallbacks. Status strip and NO LINK behaviour. Single-tap ack. Double-tap exit dialogue.
-*Exit:* fake-spotter drives lane/gap/msg on the simulator and on real glasses; NO LINK appears within 5 s of killing the relay; every non-ASCII glyph verified on hardware (or its fallback enabled); confirmed whether an `https://` whitelist entry also covers the `wss://` upgrade.
+`apps/glasses`: bridge init, room join screen (room code via `bridge.getLocalStorage`, entered on the phone companion UI — the WebView page itself is visible on the phone, so a plain HTML form there is fine), the shared `RoomClient` wired to the bridge lifecycle, state store, **text-only renderer** first (fast to validate; the permanent fallback), render-mode selection (image is the default everywhere, text only by flag/override), `glyphs.ts` with ASCII fallbacks. Status strip and NO LINK behaviour. Single-tap ack. Double-tap exit dialogue.
+*Exit:* `npm run sim:scenarios` passes in text mode (`[SIM]`); fake-spotter drives lane/gap/msg on real glasses (`[HW]`); NO LINK appears within 5 s of killing the relay; every non-ASCII glyph verified on hardware (or its fallback enabled); confirmed whether an `https://` whitelist entry also covers the `wss://` upgrade.
 
 ### Phase 3 — Spotter PWA (1 day)
 Join + Console screens per §5, service worker, manifest, hosted from the Worker. Driver-online and ack indicators. Latency readout from `ping/pong`.
@@ -133,7 +133,7 @@ Join + Console screens per §5, service worker, manifest, hosted from the Worker
 
 ### Phase 4 — Image HUD (1–2 days)
 gray4 bitmap renderer (`apps/glasses/src/render/hud-bitmap.ts`): draw symbol + bar into an offscreen canvas or a plain `Uint8Array` framebuffer, pack to 4-bit, send with `updateImageRawData`; coalescing queue; automatic fallback to text mode; half-intensity stale rendering. Measure and log per-call bridge latency. Verify on hardware that the pacing (100 ms) and the 250 ms gap flush feel right in a moving car — tune constants, not code.
-*Exit:* ≤4 image sends/sec sustained for 10 min with no `sendFailed`; symbol readable at a glance; ack flow works.
+*Exit:* `npm run sim:scenarios` passes in image mode (`[SIM]`: shapes, bar widths, inversion, dim, message); on hardware ≤4 image sends/sec sustained for 10 min with no `sendFailed`, symbol readable at a glance, ack flow works (`[HW]`).
 
 ### Phase 5 — Hardening (1 day)
 Android background survival (persist room/PIN/name via `bridge.setLocalStorage`, re-arm socket on `FOREGROUND_ENTER_EVENT`, cold-start restores last state from the room's replay), room PIN, per-socket rate limit in the DO (e.g. 30 msg/s), payload validation everywhere, error UX on both ends, the 5-minute-lock beta test from the Even docs, `wrangler tail` review after a session.
@@ -150,7 +150,7 @@ Custom domain on the Worker, final `app.json` whitelist, `evenhub pack` → `.eh
 | Android suspends the Even app WebView | Silent loss of feed | Driver runs iOS if possible; on Android keep screen on and Even app foreground; auto-restore on foreground. Documented in race-day checklist. |
 | Image channel wedges after exit dialogue | HUD stops updating | Automatic text fallback after 3 `sendFailed`; avoid triggering the exit dialogue mid-session. |
 | SDK/simulator drift (0.0.x) | Build breaks | Pin exact SDK/CLI/simulator versions; `docs/ENVIRONMENT.md` records tested versions; re-run `/sdk-reference` when bumping. |
-| Simulator ≠ hardware (image size, container count) | False confidence | Text mode for simulator, image mode gated behind a hardware check; hardware test is a phase exit criterion. |
+| Simulator ≠ hardware (no on-device image-size enforcement, no LZ4, no BLE pacing, not pixel-perfect) | False confidence | Two evidence classes: `[SIM]` from the automated harness proves function; `[HW]` proves compatibility and readability and stays a phase exit criterion. Image mode runs in both. |
 | Even App < 2.2.7 garbles LZ4 images | Corrupt HUD | Require Even App ≥ 2.2.7 on the driver phone; check `getDeviceInfo` and warn. |
 | Font glyph coverage | Symbols dropped in text mode | ▲ ● ▼ are hardware-verified; `█ ░ · …` are verified on hardware in Phase 2 and every non-ASCII glyph has an ASCII fallback in `glyphs.ts`; `/font-measurement` to confirm widths. |
 | Room hijack | Prankster pushes bad lane calls | PIN, obscure room codes, rate limiting, spotter name shown on the driver's phone companion screen. |

@@ -15,10 +15,16 @@ Evidence over opinion. Every phase exit criterion in `docs/BUILD_PLAN.md` §7 ma
 | Relay integration (two `ws` clients vs `wrangler dev`) | `services/relay/test` | `npm test -w services/relay` |
 | Glasses render unit (`drawHud`, `renderText`, queue) — no SDK, bridge mocked | `apps/glasses/test` | `npm test -w apps/glasses` |
 | Spotter UI unit (`view`, slider throttle) — jsdom | `apps/spotter/test` | `npm test -w apps/spotter` |
-| Simulator E2E | `qa/` | see below |
-| Hardware E2E | real glasses + phones | see below |
+| Simulator E2E — automated harness (`[SIM]` evidence) | `scripts/sim-harness.ts`, output `qa/<date>/sim/` | `npm run sim:scenarios` |
+| Hardware E2E (`[HW]` evidence) | real glasses + phones | see below |
 
-Use `vitest` everywhere (Vite is already present). Keep hardware-only assertions out of CI.
+Use `vitest` everywhere (Vite is already present). Keep hardware-only assertions out of CI; the simulator harness runs locally (it needs the simulator process) and in CI only if a runner can launch the simulator headless — otherwise it is a local gate whose output is committed as evidence.
+
+## Evidence classes
+
+- **Automated unit/integration** — runs in `npm test`; the criterion's named test file.
+- **`[SIM]`** — produced by `npm run sim:scenarios` against the Even Hub simulator: screenshots + a JSON report with pixel assertions. Proves the app *drives the display correctly* (containers, text, bitmap content, queue behaviour, link watchdog). It does **not** prove hardware compatibility: the simulator does not enforce on-device image-size limits, does not decode LZ4, has no BLE pacing, and is not pixel-perfect. A worker may produce `[SIM]` evidence when the simulator is reachable; if it is not, the task reports `outcome: failed` with `reason: sim-unavailable` and the planner parks it under *Needs simulator* until someone runs it.
+- **`[HW]`** — real glasses/phones/deployed relay; a human runs it and commits evidence under `qa/<date>/`. Never assigned to a worker. Human *visual* approval (symbol readable at a glance, brightness, glyph rendering) stays here even when the same scenario has `[SIM]` evidence.
 
 ## fake-spotter CLI (`scripts/fake-spotter.ts`)
 
@@ -36,14 +42,29 @@ Scenarios (each prints a timestamped log and exits non-zero on protocol errors):
 
 Also `--role driver` mode that just prints every `state` frame and auto-acks after 1 s, for testing the spotter PWA without glasses.
 
-## Simulator runs
+## Simulator harness (`scripts/sim-harness.ts`, `npm run sim:scenarios`)
 
-1. Follow `/test-with-simulator` to start `@evenrealities/evenhub-simulator` with `apps/glasses` (`npm run dev:sim -w apps/glasses`, which sets Vite mode `simulator` so the app starts in text mode; `?render=text` forces it regardless).
-2. Point the app at a local relay (`wrangler dev` on `ws://localhost:8787`) — remember the simulator has no `app.json` whitelist enforcement, real hardware does.
-3. Drive with `fake-spotter`. At each scenario checkpoint capture a screenshot through the simulator HTTP API (see `/simulator-automation`) into `qa/<YYYY-MM-DD>/<scenario>-<step>.png`.
-4. Pull the simulator console log for `{call, ms, result}` lines.
+Pinned simulator: `@evenrealities/evenhub-simulator` **0.9.5** (`docs/ENVIRONMENT.md` is authoritative; bump = its own task). It accepts the full 288×144 image and our 4-container page, so the app runs in **image mode** in the simulator by default; text mode is exercised too via `?render=text`.
 
-Simulator caveats: caps images at 200×100 and pages at 4 containers (our page uses exactly 4 — if a fifth is ever added the simulator will reject it). Image mode and true latency are hardware-only.
+What the harness does, in order:
+
+1. Starts `wrangler dev` (relay on `ws://localhost:8787`) and `npm run dev:sim -w apps/glasses` (Vite on :5173, `--mode simulator`) unless `--reuse` says they are already up.
+2. Launches `evenhub-simulator http://localhost:5173?room=QA01&relay=ws://localhost:8787 --automation-port 9898`, polls `GET /api/ping` until `pong`, then waits ~4 s (SDK init + `createStartUpPageContainer`) before doing anything.
+3. For each scenario in `lanes`, `gap-sweep`, `message-ack`, `link-loss`, `reconnect-replay` (and `soak --minutes 2` when `--soak`), runs `fake-spotter` with a `--checkpoint` hook; at each checkpoint it `GET /api/screenshot/glasses` (576×288 RGBA PNG) into `qa/<date>/sim/<mode>/<scenario>-<nn>.png` and evaluates the pixel assertions below.
+4. `POST /api/input {action:"click"}` for the ack step of `message-ack`; `double_click` is *not* sent (exit dialogue).
+5. Reads `GET /api/console?since_id=N` and extracts `{call, ms, result}` lines into `qa/<date>/sim/console.log` (simulator timings are not hardware timings — record them, never compare them to the hardware budget).
+6. Repeats the scenario set with `?render=text`.
+7. Writes `qa/<date>/sim/report.json` (`{simulatorVersion, sdkVersion, mode, scenario, checkpoint, assertions:[{name, pass, detail}]}`) and exits non-zero on any failed assertion. `DELETE /api/console` between scenarios.
+
+Pixel assertions (on the glasses screenshot; grey = max(R,G,B) of a pixel, lit = grey > 32). The HUD image occupies x 144–431, y 8–151; symbol region rows 8–103, bar region rows 116–148:
+
+- `lane:"top"` → lit pixels in the symbol region form a shape wider at the bottom row than at the top row; `bot` → the reverse; `mid` → lit bounding box roughly square (aspect 0.8–1.2); `null` → < 1 % of symbol-region pixels lit.
+- `gap:g` → lit width of the fill row (y ≈ 132) inside the bar ≈ `(288-6) * g/100` ± 6 px; `g ≥ 90` → the bar outline rows are brighter than the fill rows.
+- `linkOk:false` (after `link-loss` / relay kill) → mean grey of the HUD region ≤ 55 % of the previous checkpoint's, and the status strip region (y 258–286) contains lit pixels.
+- `msg` set → lit pixels in the message region (y 160–255); after ack → none.
+- Text mode: the same checks, but symbol/bar assertions reduce to "lit pixels present in the expected rows" (glyph shapes are font-dependent).
+
+Simulator caveats that remain true: no on-device image-size enforcement, no LZ4, faster than hardware, list-scroll focus differs, error handling under abnormal conditions differs, no real background lifecycle. Everything under "Hardware runs" stays mandatory.
 
 ## Hardware runs
 
@@ -69,7 +90,8 @@ Simulator caveats: caps images at 200×100 and pages at 4 containers (our page u
 # QA <date> — Phase N
 Verdict: PASS | FAIL against: "<exit criterion verbatim>"
 Environment: SDK x.y.z, CLI, simulator, Even app, firmware, relay commit, glasses commit
-Scenarios: table of scenario → result → evidence file
+Evidence class per row: unit | [SIM] | [HW]
+Scenarios: table of scenario → mode (image/text) → result → evidence file
 Latency: p50/p95 per call type (hardware only)
 Defects: ranked, each with owner agent (g2-glasses-dev | relay-backend-dev | spotter-pwa-dev)
 ```

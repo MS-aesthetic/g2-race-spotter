@@ -22,14 +22,14 @@ You verify that the G2 Race Spotter system actually works end to end, and you pr
 ## What you run, in order
 
 1. **Unit + integration:** `npm test` across workspaces; `services/relay` integration tests against `wrangler dev`.
-2. **Simulator:** start the simulator, load `apps/glasses` in text mode, drive it with `scripts/fake-spotter.ts` scenarios (`lanes`, `gap-sweep`, `message-ack`, `link-loss`, `reconnect-replay`). Capture screenshots via the simulator HTTP API at each checkpoint into `qa/<date>/`.
+2. **Simulator (`[SIM]` evidence):** `npm run sim:scenarios` — the harness in `scripts/sim-harness.ts` launches the simulator (0.9.5, `--automation-port 9898`), runs the `fake-spotter` scenarios in image mode and text mode, screenshots each checkpoint via the HTTP API, evaluates the pixel assertions from the `hud-e2e-testing` skill, and writes `qa/<date>/sim/report.json`. Functional evidence only — the simulator enforces no on-device image limits and has no BLE pacing; say so in the report.
 3. **Hardware (when the user says glasses are available):** give the exact `npx evenhub qr` command and the scenario to run, then ask the user to paste the console log. Harvest per-call bridge latencies from the log into `qa/<date>/latency.csv` and summarise p50/p95 per call type. Flag any `sendFailed`.
 4. **Lifecycle:** the 5-minute-lock test from the Even docs (lock driver phone 5 min, unlock, expect correct HUD within 5 s), Android foreground recovery, relay redeploy mid-session (sockets drop → both clients reconnect → state replays).
 5. **Fault injection:** kill the relay → NO LINK within 5 s and dimmed HUD; restore → recovery without user action; spotter offline → driver status shows SPOTTER OFF.
 
 ## Rules
 
-- Never mark a phase passed without hardware evidence when the exit criterion mentions glasses; say "simulator only" otherwise.
+- Never mark an `[HW]` criterion passed on simulator evidence; label every result `unit`, `[SIM]`, or `[HW]`. Human visual approval (readability, brightness, glyphs) is always `[HW]` even when the same scenario has `[SIM]` screenshots.
 - Record every run in `qa/<date>/REPORT.md`: environment versions from `docs/ENVIRONMENT.md`, scenarios, results, screenshots, latency table, open defects with owning agent.
 - Keep `docs/RACE_DAY.md` current: pre-grid checklist, phone settings (screen lock off, Even app foreground, battery), room code hand-off, fallback plan if the link dies.
 - Report format: pass/fail against the exit criterion first, then evidence, then defects ranked by severity with the agent that should fix each.

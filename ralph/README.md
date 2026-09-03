@@ -57,6 +57,7 @@ Everything an agent needs is in plain markdown in the repo; nothing lives in a c
 ## What a human does
 
 - `[HW]` tasks under *Needs human* (glasses, phones, Cloudflare account). Do them, put the evidence file the spec names in `qa/<date>/` (or mark the item done under "Blocked on human" in `ralph/PROGRESS.md`), then rerun `ralph/loop.sh plan` — the planner recognises either; a ticked box in the plan itself is lost on regeneration.
+- `[SIM]` tasks parked under *Needs simulator* (the loop's machine could not launch the Even Hub simulator): on a machine that has it, run `npm run sim:scenarios`, commit `qa/<date>/sim/`, rerun `ralph/loop.sh plan`. Simulator evidence is functional proof only; it never closes an `[HW]` item.
 - Answer *Open questions* in specs; relax an acceptance criterion if it is wrong (agents may only mark it `DISPUTED`).
 - Read `ralph/last-review.md` occasionally. Repeated `block`s on the same area mean a spec is ambiguous — fix the spec, not the worker.
 

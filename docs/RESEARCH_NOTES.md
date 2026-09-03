@@ -17,7 +17,7 @@ Key packages:
 
 - `@evenrealities/even_hub_sdk` (npm) — the bridge SDK. Community notes reference `^0.0.13`; docs mention behaviors introduced in 0.0.12 (LZ4, zOrder) and 0.0.14 (image pacing).
 - `@evenrealities/evenhub-cli` — `evenhub qr` (sideload dev server via QR), `evenhub pack app.json dist -o app.ehpk`.
-- `@evenrealities/evenhub-simulator` — desktop simulator (≥0.7.1). Limitations: rejects >4 containers, image containers capped at 200×100 (hardware allows 288×144 and more containers on SDK ≥0.0.10).
+- `@evenrealities/evenhub-simulator` — desktop simulator. **Project pins 0.9.5** (Maxx's verified install; hub docs describe 0.9.3, the registry lagged at 0.8.0 when checked — confirm with `npm view` at pin time). Older notes about a 200×100 image cap and a 4-container cap applied to ≤ 0.7 and are obsolete: current versions render the full 288×144 image and our page. See §7 for what the simulator does and does not prove.
 - Node 20 LTS or 22+.
 - **Official Claude Code plugin:** `even-realities/everything-evenhub` — 13 skills (`/quickstart`, `/template`, `/build-and-deploy`, `/glasses-ui`, `/handle-input`, `/device-features`, `/test-with-simulator`, `/simulator-automation`, `/font-measurement`, `/background-state`, `/sdk-reference`, `/cli-reference`, `/design-guidelines`). Install with `/plugin marketplace add even-realities/everything-evenhub` then `/plugin install everything-evenhub@everything-evenhub`. Our project skills layer on top of it and do not duplicate it.
 
@@ -72,6 +72,14 @@ Spotter and driver are never in BLE range of each other, so a cloud relay is req
 - Same Worker can serve the spotter PWA's static assets, so one domain covers relay + spotter UI, and one origin goes into the glasses app's `app.json` whitelist.
 - Alternative considered: Supabase Realtime Broadcast (less code, but adds a second vendor and the Supabase JS client to the glasses bundle). Rejected for now; the protocol package is transport-agnostic so it can be swapped.
 
+## 7. Simulator: what it proves and what it does not (Sept 2026)
+
+Package `@evenrealities/evenhub-simulator`, launched as `evenhub-simulator http://localhost:5173 --automation-port 9898`. HTTP automation API (v0.7.0+): `GET /api/ping` → `pong`, `GET /api/screenshot/glasses` (576×288 RGBA PNG of the framebuffer), `GET /api/screenshot/webview`, `GET /api/console[?since_id=N]`, `DELETE /api/console`, `POST /api/input` with actions `up`, `down`, `click`, `double_click`, `long_press`, `long_press_release`, `context_menu`. Allow ~4 s after launch before sending input (SDK init + `createStartUpPageContainer`).
+
+The docs state the simulator does **not** enforce: performance, frame pacing, BLE timing or real-device quirks; on-device image-size limits for `updateImageRawData`; LZ4 decompression (it decodes uncompressed payloads); status events (user/device profiles hardcoded); photometrically matched brightness. Acknowledged discrepancies: rendering is not pixel-perfect, list-scroll focus positioning differs, image processing is faster than hardware, error handling under abnormal conditions differs. Quote: "headless runs do not replace Beta Testing before submission … Always validate on real hardware before deployment."
+
+Consequence for this project: the simulator is the **functional** gate (containers, text, bitmap content, queue and watchdog behaviour — evidence class `[SIM]`, produced by `scripts/sim-harness.ts`), and hardware remains the **compatibility** gate (image limits, nibble order, pacing, `sendFailed`, LZ4, background lifecycle, readability — `[HW]`). Image mode is the normal path in both.
+
 ## Sources
 
 - Even Hub docs: https://hub.evenrealities.com/docs — quickstart (`/docs/get-started/quickstart`), architecture (`/docs/get-started/architecture`), display (`/docs/build/display`), device APIs (`/docs/build/device-apis`), networking (`/docs/build/networking`), background & lifecycle (`/docs/build/background-lifecycle`)
@@ -83,5 +91,7 @@ Spotter and driver are never in BLE range of each other, so a cloud relay is req
 - SDK feature verification: https://zenn.dev/bigdra/articles/eveng2-sdk-features?locale=en
 - Curated list: https://github.com/pangoleen/awesome-even-realities-g2
 - Local simulator wrapper: https://github.com/BxNxM/even-dev
+- Simulator reference (limits not enforced, automation API): https://hub.evenrealities.com/docs/test/simulator
+- Simulator package: https://www.npmjs.com/package/@evenrealities/evenhub-simulator
 - Cloudflare DO WebSockets: https://developers.cloudflare.com/durable-objects/best-practices/websockets
 - Cloudflare DO pricing / free plan: https://developers.cloudflare.com/durable-objects/platform/pricing/

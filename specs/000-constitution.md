@@ -18,7 +18,7 @@ The invariants every spec, plan, task, and review is measured against. If a task
 9. Node 22, npm workspaces, TypeScript `strict`, vitest. `npm test` and `npm run typecheck` must be green before any commit.
 10. Pinned SDK/CLI/simulator versions in `docs/ENVIRONMENT.md`; bumping is its own task with a note in *Decisions*.
 11. No secrets in the repo. Cloudflare secrets via `wrangler secret put`; `.dev.vars` is git-ignored.
-12. Every acceptance criterion is either automated (a named test that CI runs) or tagged `[HW]` (needs glasses, phones, or a deployed relay) and executed by a human with evidence saved under `qa/<date>/`.
+12. Every acceptance criterion carries exactly one evidence class: **automated** (a named test that CI runs), **`[SIM]`** (produced by the simulator harness `npm run sim:scenarios`, evidence under `qa/<date>/sim/`; functional proof only — the simulator enforces no on-device image limits, no LZ4, no BLE pacing), or **`[HW]`** (glasses, phones, or a deployed relay; executed by a human with evidence under `qa/<date>/`). `[SIM]` evidence never satisfies an `[HW]` criterion; human visual approval of the display is always `[HW]`.
 
 ## Process invariants (spec-driven + Ralph loop)
 
@@ -28,7 +28,7 @@ The invariants every spec, plan, task, and review is measured against. If a task
 16. **Tests are backpressure, never decoration.** A task is not done until the tests it names pass. Placeholder implementations that make tests pass without meeting the criterion are a review `block`.
 17. **Specs may be clarified, never weakened, by an agent.** Only a human relaxes an acceptance criterion. An agent that believes a criterion is wrong marks it `DISPUTED:` with a reason.
 18. **Reviews are adversarial and specific.** A review names file:line, the failure scenario, and the minimal fix, then gives one verdict: `approve`, `approve with nits`, or `block`.
-19. **Hardware is human.** `[HW]` criteria are never assigned to a worker; they live under *Needs human* in the plan and are listed in `ralph/PROGRESS.md`.
+19. **Hardware is human; the simulator is not.** `[HW]` criteria are never assigned to a worker; they live under *Needs human* in the plan and are listed in `ralph/PROGRESS.md`. `[SIM]` criteria are ordinary worker tasks; when the simulator is unreachable the task parks under *Needs simulator* instead of being faked.
 20. **Model routing is a config, not a prompt.** `ralph/models.env` decides which model and effort each tier runs on; role files never name a model.
 
 ## Roles
@@ -36,5 +36,5 @@ The invariants every spec, plan, task, and review is measured against. If a task
 | Tier | Roles | Does |
 |---|---|---|
 | worker | `g2-glasses-dev`, `relay-backend-dev`, `spotter-pwa-dev` | Implements exactly one plan task |
-| reviewer | `protocol-keeper`, `hud-qa` | Reviews the iteration's diff against the spec it claims to advance |
+| reviewer | `protocol-keeper`, `hud-qa` | Reviews the iteration's diff against the spec it claims to advance (`hud-qa` also owns `[SIM]` harness tasks when the plan names it — as a worker-tier run) |
 | planner | `plan-updater` | Reconciles specs ↔ code ↔ review; rewrites the plan; decides DONE |

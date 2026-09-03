@@ -19,7 +19,8 @@ R1. MUST follow the bitmap layout in the `g2-hud-display` skill (symbol region, 
 R2. MUST issue at most one image send per 250 ms for gap-only changes; lane changes bypass the debounce; a pending HUD job is replaced, never queued behind another HUD job.
 R3. MUST switch to text mode after 3 consecutive `sendFailed` and stay there until restart.
 R4. Nibble order and row stride MUST be confirmed on hardware with a test pattern and recorded in `docs/ENVIRONMENT.md`.
-R5. MUST require Even App ≥ 2.2.7 for image mode (warn on the companion page otherwise) because of the LZ4 regression.
+R5. MUST require Even App ≥ 2.2.7 for image mode (warn on the companion page otherwise) because of the LZ4 regression. The simulator does not decode LZ4 and does not enforce on-device image-size limits, so neither can be verified there.
+R6. Image mode MUST be the default everywhere (hardware and simulator); text mode only via `?render=text`, the stored override, or the `sendFailed` fallback.
 
 ## Acceptance criteria
 
@@ -30,13 +31,15 @@ R5. MUST require Even App ≥ 2.2.7 for image mode (warn on the companion page o
 | AC-3 | Given a 288×144 frame, when packed, then the output is 20 736 bytes and a single bright column at x=0 packs to the expected nibble in byte 0 of each row | `apps/glasses/test/gray4.test.ts` |
 | AC-4 | Given a mocked bridge, when 20 gap states arrive in 1 s, then ≤ 5 `updateImageRawData` calls are made and the final frame reflects the last value; a lane change mid-burst is sent immediately | `apps/glasses/test/queue-image.test.ts` |
 | AC-5 | Given a mocked bridge returning `sendFailed` three times, then the app rebuilds the page in text mode and subsequent HUD updates use `textContainerUpgrade` | `apps/glasses/test/fallback.test.ts` |
-| AC-6 | Given real glasses, when the test pattern is sent, then the bright column appears at the left edge (else flip nibble order/stride and re-test) | `[HW]` `docs/ENVIRONMENT.md` |
+| AC-5b | Given `npm run sim:scenarios` in **image mode** (the default), when `lanes`, `gap-sweep`, `message-ack`, `link-loss`, `reconnect-replay` run, then the symbol-shape, bar-width, ≥ 90 inversion, dim-on-NO-LINK and message assertions from the `hud-e2e-testing` skill pass and `report.json` is committed — functional proof of the bitmap and queue, **not** of hardware size limits or pacing | `[SIM]` `qa/<date>/sim/image/*.png`, `qa/<date>/sim/report.json` |
+| AC-6 | Given real glasses, when the test pattern is sent, then the bright column appears at the left edge (else flip nibble order/stride and re-test); the simulator's decode of the same pattern is recorded alongside but does not substitute | `[HW]` `docs/ENVIRONMENT.md` |
 | AC-7 | Given real glasses and `gap-sweep` + `soak` for 10 min, then no `sendFailed`, image p95 ≤ 300 ms, and the symbol is readable at a glance | `[HW]` `qa/<date>/latency.csv`, `REPORT.md` |
 | AC-8 | Given the exit dialogue is opened and cancelled on hardware, when the next image send fails, then the app is in text mode within 3 sends | `[HW]` `qa/<date>/REPORT.md` |
 
 ## Decisions
 
 - 2026-09-03 One image for symbol+bar — why: image cost is per call (~185 ms), not per byte.
+- 2026-09-03 Simulator evidence (`[SIM]`) covers bitmap content and queue behaviour; size limits, nibble order, pacing and `sendFailed` fallback stay `[HW]` — why: the simulator explicitly does not enforce on-device image limits or LZ4 and is faster than hardware.
 
 ## Open questions
 
