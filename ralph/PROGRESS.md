@@ -3,6 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
+- Environment prerequisite for T002 (not `[HW]`) — install the official `even-realities/everything-evenhub` Codex plugin, confirm `$sdk-reference` and `$glasses-ui` are available, then rerun planning so the blocked scaffold task can resume
 - T101b — QR sideload plus hardware/device/font fields in `docs/ENVIRONMENT.md` (spec 010 AC-4); simulator evidence is automated by T002b/T002d/T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -30,3 +31,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 4 | 2026-09-03 | T001b | relay-backend-dev | done | approve | 31a0615 | CI now rejects stale generated agent and skill outputs after the standard verification gate. |
 | 5 | 2026-09-03 | T015 | relay-backend-dev | review-blocked | block | 62ea204 | AC-6's `@evenrealities/*` requirement is namespace-wide; a fixed allowlist leaves future SDK packages unguarded. |
 | 6 | 2026-09-03 | T015a | relay-backend-dev | done | approve | 4cc5ffb | A namespace predicate plus an unknown scoped-package fixture closes the future `@evenrealities/*` pinning gap. |
+| 7 | 2026-09-03 | T002 | g2-glasses-dev | failed | n/a | - | Mandatory official SDK plugin skills were unavailable, so the worker correctly stopped before undocumented bridge work; install the plugin before retrying. |

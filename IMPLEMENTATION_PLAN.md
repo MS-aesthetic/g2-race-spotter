@@ -1,9 +1,9 @@
-# Implementation plan — 2026-09-03T12:26:57-04:00
-Status: BUILDING
+# Implementation plan — 2026-09-03T12:33:05-04:00
+Status: BLOCKED
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) Scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts` and the full AC-1 gate.
+- [ ] T002 (owner: g2-glasses-dev) (spec: 010 AC-3) After the official `even-realities/everything-evenhub` Codex plugin is installed and `$sdk-reference` plus `$glasses-ui` are available, scaffold `apps/glasses` from the official `minimal` template; confirm and pin SDK/CLI/Vite/simulator 0.9.5 exactly; add `dev` and `dev:sim` where simulator mode changes only logging/relay defaults; render “Hello, driver” in one text container; verify `apps/glasses/test/startup-page.test.ts` and the full AC-1 gate.
 - [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI, rejecting missing/toolchain/simulator `TBD` fields while allowing hardware `TBD` only while their named `[HW]` criteria remain open; verify the checker and full AC-1 gate.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add the simulator harness launcher/failure foundation in `scripts/sim-harness.ts` and `sim:scenarios`: resolve the pinned local executable, use automation port 9898, and exit non-zero with literal `sim-unavailable` and no partial report when launch/ping fails; verify `scripts/test/sim-harness.test.ts` with a mocked launcher.
 - [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the harness smoke success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and record pinned simulator/SDK versions in `report.json`; verify `scripts/test/sim-harness-smoke.test.ts` with mocked automation responses.
@@ -41,17 +41,12 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- [x] T015a (owner: relay-backend-dev) (spec: 010 AC-6) Enforced namespace-wide `@evenrealities/*` pins and added the unknown-package regression fixture (commit 4cc5ffb; review approve).
-- [x] T015 (owner: relay-backend-dev) (spec: 010 AC-6) Added the exact-version checker, fixture coverage, and CI gate; completed by the original commit plus approved fix (commits 62ea204, 4cc5ffb).
+- (none; T002 changed no files, produced no commit, and remains open after a failed hand-off with review `n/a`)
 
 ## Notes / why
-- AC audit 010: AC-1 met by `.github/workflows/ci.yml` plus the green local `npm ci`/test/typecheck/lint gate; AC-2 met by the green `sync:agents:check`; AC-6 met by `scripts/test/check-pins.test.ts` and the green checker; AC-5/AC-7 unmet because their named scripts/tests are absent; AC-3 `[SIM]` and AC-4 `[HW]` remain open.
-- AC audit 020: AC-1–AC-9 unmet—the protocol and relay modules and named tests are absent/placeholders; AC-10 `[HW]` remains open.
-- AC audit 030: AC-1–AC-6 unmet—`apps/glasses` and its named tests are absent; AC-7 `[SIM]` remains open; AC-8–AC-10 `[HW]` remain open.
-- AC audit 040: AC-1–AC-5 unmet—the spotter module and named tests are placeholders/absent; AC-6–AC-7 `[HW]` remain open.
-- AC audit 050: AC-1–AC-5 unmet; AC-5b `[SIM]` remains open; AC-6–AC-8 `[HW]` remain open.
-- AC audit 060: AC-1–AC-4 unmet; AC-5–AC-8 `[HW]` remain open.
-- AC audit 070: AC-1–AC-3 unmet; AC-4–AC-5 `[HW]` remain open. No criterion is DISPUTED.
-- T015a closes the sole review block, so T015 is complete and the glasses scaffold is now the first dependency-ordered task.
-- T002 precedes environment and harness work because those tasks must inspect the actual pinned scaffold and loadable app; failure plumbing precedes successful simulator automation and committed `[SIM]` evidence.
-- Protocol types, reducer, and shared `RoomClient` precede relay and UI consumers; full-state replay and authenticated last-writer-wins remain normative.
+- Iteration 7 is blocked on a non-spec environment prerequisite: the mandatory official `even-realities/everything-evenhub` plugin skills are unavailable, and the `g2-glasses-dev` role correctly forbids undocumented SDK work.
+- Resume by running `codex plugin marketplace add even-realities/everything-evenhub` from a normal user shell, confirming `$sdk-reference` and `$glasses-ui` are available, and rerunning the planning stage; this prerequisite is neither `[SIM]` nor `[HW]`.
+- T002 remains the first task because T003 and the simulator harness must inspect the scaffold's actual exact pins/loadable app, while spec 020 depends on completion of bootstrap spec 010.
+- AC audit 010 is unchanged: AC-1, AC-2, and AC-6 are met; AC-3, AC-5, and AC-7 remain unmet; AC-4 remains `[HW]`.
+- AC audits 020–070 are unchanged: automated and `[SIM]` criteria remain unmet, and every `[HW]` criterion remains listed under *Needs human*. No criterion is DISPUTED.
+- Protocol tasks retain full-state replay, per-open sequence reset, accepted-socket auth errors, and authenticated last-writer-wins driver eviction; HUD tasks retain one 288×144 image container, 250 ms latest-wins gap coalescing, state-only rendering, NO LINK dimming, and permanent text fallback.
