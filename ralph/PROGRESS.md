@@ -3,7 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- T101b–T101c — QR sideload and the hardware fields of `docs/ENVIRONMENT.md` (spec 010 AC-4/AC-5); simulator evidence is now automated by T002b/T002c (`[SIM]`)
+- T101b — QR sideload plus hardware/device/font fields in `docs/ENVIRONMENT.md` (spec 010 AC-4); simulator evidence is automated by T002b/T002d/T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
 - T107–T108 — mobile PWA installation/layout and LTE end-to-end evidence (spec 040 AC-6/AC-7)
@@ -26,3 +26,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 0 | 2026-09-03 | bootstrap plan | (hand-written) | — | — | — | Specs and loop scaffolding created; no application code yet |
 | 1 | 2026-09-03 | T001 | relay-backend-dev | review-blocked | block | cc13020 | AC-1 is an end-to-end gate: lint, its CI command chain, and the named workspace test must exist before handoff. |
 | 2 | 2026-09-03 | T010 | relay-backend-dev | review-blocked | block | 6e4c2d9 | Cross-platform lint must be reproduced from LF Git blobs; focused workspace tests must discover future criterion tests. |
+| 3 | 2026-09-03 | T010a | relay-backend-dev | done | approve | 7a4a114 | LF normalization and a discovering workspace test close the cross-platform AC-1 repair chain. |
