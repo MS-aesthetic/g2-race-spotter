@@ -1,12 +1,13 @@
-# Implementation plan — 2026-09-03T13:41:22-04:00
+# Implementation plan — 2026-09-03T13:45:54-04:00
 Status: BUILDING
 Current spec focus: specs/010-monorepo-bootstrap.md
 
 ## Next (ordered; the worker takes the first unchecked task)
-- [ ] T003 (owner: relay-backend-dev) (spec: 010 AC-5) Add `docs/ENVIRONMENT.md` with every R5 field and exact non-hardware version/device values, plus `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts`; wire the checker into CI and allow `TBD` only for hardware fields whose `[HW]` criteria remain open; verify the focused test and the AC-1 gate. This is the single retry after iteration 9 produced no worker hand-off.
+- [ ] T003a (owner: relay-backend-dev) (spec: 010 AC-5) Create `docs/ENVIRONMENT.md` with every R5 field, exact known SDK/CLI/simulator/Node values, explicit `TBD` only for simulator `getDeviceInfo()` and the named hardware fields, and an exact compatible `wrangler` dependency/version; add fixture-driven `scripts/check-environment.mjs` and `scripts/test/check-environment.test.ts` coverage for required fields, manifest-version consistency, and the hardware-only `TBD` allowlist, but leave the repository/CI invocation for T003b so the intermediate gate stays green.
 - [ ] T002b (owner: hud-qa) (spec: 010 AC-7) Add `scripts/sim-harness.ts` and the root `sim:scenarios` script with injectable launcher/automation seams; resolve the pinned local simulator, use automation port 9898, and on launch or ping failure exit non-zero with literal `sim-unavailable` and no partial report; verify `scripts/test/sim-harness.test.ts`.
-- [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the mocked simulator smoke-success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and write pinned simulator/SDK versions to `report.json`; verify `scripts/test/sim-harness-smoke.test.ts`.
-- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` and commit `qa/<date>/sim/` plus simulator fields in `docs/ENVIRONMENT.md`; if the command reports `sim-unavailable`, hand off `failed` with that literal reason so this task is parked rather than retried.
+- [ ] T002d (owner: hud-qa) (spec: 010 AC-3) Complete the mocked simulator smoke-success path: poll `/api/ping`, load the scaffold app, capture `qa/<date>/sim/image/smoke-01.png`, assert lit pixels in the “Hello, driver” text region, and write pinned simulator/SDK versions plus simulator `getDeviceInfo()` to `report.json`; verify `scripts/test/sim-harness-smoke.test.ts`.
+- [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` and commit `qa/<date>/sim/` plus the actual simulator `getDeviceInfo()` value in `docs/ENVIRONMENT.md`; if the command reports `sim-unavailable`, hand off `failed` with that literal reason so this task is parked rather than retried.
+- [ ] T003b (owner: relay-backend-dev) (spec: 010 AC-5) After T002c, remove every non-hardware `TBD`, add the repository-success assertion, wire `scripts/check-environment.mjs` into the root scripts and CI, and verify the focused test plus the full AC-1 gate.
 - [ ] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Implement protocol v1 wire types, shared constants, guards, and one valid plus invalid fixture per message type without runtime dependencies; verify `packages/protocol/test/guards.test.ts` through root and workspace test commands.
 - [ ] T005 (owner: relay-backend-dev) (spec: 020 AC-2) Implement the pure, total reducer with injected clock/id and every event, no-op, sequence, ack, peer, and expiry semantic from the normative protocol skill; verify `packages/protocol/test/reduce.test.ts`.
 - [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) Implement the injected-WebSocket `RoomClient` with hello, ping, reconnect/backoff, per-open sequence reset, replay gating, `lastFrameAt`, and disconnected-intent coalescing; verify `packages/protocol/test/client.test.ts`.
@@ -41,11 +42,11 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - [ ] T117 (owner: maxx) (spec: 070 AC-5) Archive full-session logs, latency table, defects, and open-question disposition under `qa/<date>/` with human sign-off.
 
 ## Done this cycle
-- (none; iteration 9 had no worker hand-off or review)
+- (none; iteration 10 again had no worker hand-off or review)
 
 ## Notes / why
-- Iteration 9 is `nothing-to-do`/`n/a`: `ralph/last-build.md` and `ralph/last-review.md` are absent, `HEAD` remains planner commit `234c473`, and there is no post-plan diff; per the role rule T003 stays first for one retry before any split.
-- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the passing 5-file/8-test root gate; AC-2 met by passing `sync:agents:check`; AC-6 met by `scripts/test/check-pins.test.ts`; AC-3 unmet `[SIM]`, AC-5 and AC-7 unmet automated, AC-4 open `[HW]`.
+- Iteration 10 is `nothing-to-do`/`n/a`: `ralph/last-build.md` and `ralph/last-review.md` are absent, `HEAD` remains planner commit `b368e2b`, and the worktree had no post-plan diff; this is T003's second consecutive missing hand-off, so its one retry is exhausted and it is replaced by T003a/T003b.
+- AC audit 010: AC-1 met by `.github/workflows/ci.yml` and the passing 5-file/8-test root gate; AC-2 met by passing `sync:agents:check`; AC-6 met by `scripts/test/check-pins.test.ts`, though R2 still lacks a `wrangler` dependency; AC-3 unmet `[SIM]`, AC-5 and AC-7 unmet automated, AC-4 open `[HW]`.
 - AC audit 020: AC-1–AC-9 unmet because their named verifier files are absent; AC-10 open `[HW]`, with local CLI prerequisite T014.
 - AC audit 030: AC-1–AC-6 unmet because their named tests are absent; AC-7 unmet `[SIM]`; AC-8–AC-10 open `[HW]`.
 - AC audit 040: AC-1–AC-5 unmet because their named tests are absent; AC-6–AC-7 open `[HW]`.
@@ -53,6 +54,6 @@ Current spec focus: specs/010-monorepo-bootstrap.md
 - AC audit 060: AC-1–AC-4 unmet because their named tests are absent; AC-5–AC-8 open `[HW]`.
 - AC audit 070: AC-1–AC-3 unmet because their named tests are absent; AC-4–AC-5 open `[HW]`.
 - No criterion is `DISPUTED`; no committed `qa/` evidence exists. Current verification is green: 5 test files/8 tests, typecheck, lint, generated-agent sync, and dependency pins.
-- T003 remains first because the checked environment schema must exist before the simulator records its non-hardware fields; the harness failure contract follows, then mocked smoke assertions, then the real `[SIM]` run.
+- T003a is deliberately a green intermediate slice: it establishes and tests the environment schema before the harness records actual simulator device data; T003b makes the repository check mandatory only after T002c supplies that non-hardware value.
 - Protocol work remains ordered types/guards → reducer → client → relay so all consumers share wire shapes and reducer semantics; HUD tasks later must preserve state-only rendering, one image container, 250 ms latest-wins coalescing, stale dimming, and permanent text fallback.
-- No spec Decision or Open question changed: this iteration produced only a process retry, not a product or acceptance-criterion clarification.
+- No spec Decision or Open question changed: this iteration produced a process split and exposed missing implementation, not a product or acceptance-criterion clarification.

@@ -34,3 +34,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 7 | 2026-09-03 | T002 | g2-glasses-dev | failed | n/a | - | Mandatory official SDK plugin skills were unavailable, so the worker correctly stopped before undocumented bridge work; install the plugin before retrying. |
 | 8 | 2026-09-03 | T002 | g2-glasses-dev | done | approve with nits | f0adb01 | The pinned startup scaffold and one-call guard pass; AC-3 remains separate `[SIM]` evidence, and the README greeting nit affects no criterion. |
 | 9 | 2026-09-03 | T003 | relay-backend-dev | nothing-to-do | n/a | - | No worker hand-off, review, or post-plan commit exists; retain T003 first for its one permitted retry before splitting. |
+| 10 | 2026-09-03 | T003 | relay-backend-dev | nothing-to-do | n/a | - | A second absent hand-off exhausts the retry; split environment schema/testing from post-simulator repository and CI enforcement. |
