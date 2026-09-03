@@ -48,6 +48,8 @@ R7. `scripts/sim-harness.ts` MUST launch the pinned simulator with `--automation
 - 2026-09-03 Park simulator-dependent environment completion on an interactive Windows desktop — why: simulator 0.9.5 can answer its automation ping without creating the main window or exposing bridge activity, so the exact `getDeviceInfo()` value must not be inferred.
 - 2026-09-03 Require AC-7's named verifier to exercise the process-facing CLI boundary and the harness-selected output root — why: internal result-only tests cannot detect missing literal stderr, a zero exit status, or a partial report written at the real output path.
 - 2026-09-03 Require AC-7's no-partial-report check to search beneath the runtime-selected output root rather than a fixed date — why: a date-bound assertion can pass while a later run writes invalid evidence elsewhere in that root.
+- 2026-09-03 Treat rendered pixels, not the `getDeviceInfo()` console marker, as smoke display readiness — why: bridge metadata can resolve before `createStartUpPageContainer()`, causing a premature blank capture.
+- 2026-09-03 Reserve `sim-unavailable` for launch and automation-readiness failures — why: display assertions and evidence writes are product/test failures and must remain distinguishable so they cannot be parked as infrastructure problems.
 
 ## Open questions
 

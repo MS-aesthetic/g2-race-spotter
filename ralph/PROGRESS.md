@@ -41,3 +41,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 14 | 2026-09-03 | T002b | hud-qa | review-blocked | block | 66595a1 | AC-7's named verifier must exercise the CLI boundary and actual output root; internal-result tests cannot prove stderr, non-zero exit, or absence of a partial report. |
 | 15 | 2026-09-03 | T002e | hud-qa | review-blocked | block | 6f3b4b3 | A fixed-date no-report assertion cannot prove the harness leaves no partial report beneath its selected output root on later dates. |
 | 16 | 2026-09-03 | T002f | hud-qa | done | approve | 1c56c26 | Recursive search beneath the injected output root now proves launcher and ping failures cannot leave a partial report on any run date. |
+| 17 | 2026-09-03 | T002d | hud-qa | review-blocked | block | 3c22234 | Device info can precede startup rendering, and broad `sim-unavailable` mapping hides product assertion or evidence failures. |
