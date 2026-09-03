@@ -43,10 +43,21 @@ function dependencies(
   overrides: Partial<SimulatorHarnessDependencies>,
 ): SimulatorHarnessDependencies {
   return {
+    appReady: vi.fn().mockResolvedValue(true),
     launch: vi.fn(),
+    launchAppServer: vi.fn().mockResolvedValue({
+      stop: vi.fn().mockResolvedValue(undefined),
+    }),
     ping: vi.fn(),
+    readDeviceInfo: vi.fn(),
+    readScreenshot: vi.fn(),
     resolveSimulator: vi.fn(),
     sleep: vi.fn(),
+    today: vi.fn().mockReturnValue('2026-09-03'),
+    versions: vi.fn().mockResolvedValue({
+      sdkVersion: '0.0.12',
+      simulatorVersion: '0.9.5',
+    }),
     ...overrides,
   } as SimulatorHarnessDependencies;
 }

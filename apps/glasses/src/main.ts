@@ -23,3 +23,12 @@ const startPage = createStartupPage({
 });
 
 void startPage();
+
+void bridge
+  .getDeviceInfo()
+  .then((deviceInfo) => {
+    console.info('g2rs.device-info', JSON.stringify(deviceInfo));
+  })
+  .catch((error: unknown) => {
+    console.warn('g2rs.device-info unavailable', error);
+  });
