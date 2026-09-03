@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/protocol" },
     { "path": "./services/relay" },
-    { "path": "./apps/spotter" }
+    { "path": "./apps/spotter" },
+    { "path": "./apps/glasses" }
   ]
 }
