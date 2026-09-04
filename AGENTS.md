@@ -9,6 +9,7 @@ Spotter-to-driver comms for Even Realities G2 glasses: the spotter's phone (PWA)
 3. `.agents/skills/*/SKILL.md` — project decisions: `race-relay-protocol` (wire schema, normative), `g2-hud-display` (container layout, bitmap, queue), `spotter-ui`, `hud-e2e-testing`, `cloudflare-relay-deploy`.
 4. `docs/BUILD_PLAN.md` and `docs/RESEARCH_NOTES.md` — design rationale and SDK facts with sources. Specs win on conflict.
 5. `IMPLEMENTATION_PLAN.md` — disposable task list. `ralph/PROGRESS.md` — history.
+6. `HANDOFF.md` — current cross-instance snapshot and local worktree disposition; it never overrides the sources above.
 
 ## Layout (npm workspaces, Node 22, TypeScript strict, vitest)
 

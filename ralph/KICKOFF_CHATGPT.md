@@ -1,4 +1,6 @@
-# Kick-off prompt — ChatGPT Cowork / Codex
+# Historical bootstrap prompt — ChatGPT Cowork / Codex
+
+This file records the original first-run/bootstrap procedure. The repository has already been initialized and development is underway. For a current cross-instance pickup, begin with `HANDOFF.md`, then follow `AGENTS.md`, the specs, `IMPLEMENTATION_PLAN.md`, and `ralph/PROGRESS.md`; do not repeat the import or mandatory one-iteration bootstrap steps below.
 
 Paste everything below the line into a new ChatGPT Cowork session with the `EVEN G2 HUD` folder (or a local clone of it) connected. It is written for GPT running as the driver of the loop; the same text works for Claude Code if you swap "codex" for "claude" in the runner line.
 

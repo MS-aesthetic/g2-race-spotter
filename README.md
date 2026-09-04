@@ -1,10 +1,11 @@
 # G2 Race Spotter
 
-Spotter → driver HUD on Even Realities G2 glasses. This repo currently holds the specs, plan, research, and the agent/skill/loop scaffolding that will build it — no application code yet.
+Spotter → driver HUD on Even Realities G2 glasses. Development is active: the shared protocol, reducer, Cloudflare relay foundation, route and persistence coverage, simulator harness, and glasses scaffold are present. The implementation plan tracks what remains.
 
 | What | Where |
 |---|---|
 | Operational guide (every runtime reads this) | `AGENTS.md` (Claude Code enters via `CLAUDE.md`) |
+| Current cross-instance handoff | `HANDOFF.md` |
 | Invariants + per-phase specs with acceptance criteria | `specs/` |
 | Disposable task list / progress | `IMPLEMENTATION_PLAN.md`, `ralph/PROGRESS.md` |
 | The loop: prompts, model routing, runner | `ralph/` (`ralph/README.md` explains it) |
