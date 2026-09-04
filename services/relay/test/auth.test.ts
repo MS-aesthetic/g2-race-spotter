@@ -286,7 +286,9 @@ describe('RaceRoom PIN authentication', () => {
       const rejected = await openRejectedSocket(roomUrl(worker, 'QA17', query));
 
       try {
-        rejected.socket.send(JSON.stringify({ t: 'hello', v: 999, role: 'driver' }));
+        rejected.socket.send(
+          JSON.stringify({ t: 'hello', v: 999, role: 'driver' }),
+        );
         await expect(within(rejected.message, 500)).resolves.toEqual({
           t: 'error',
           code: 'version',
