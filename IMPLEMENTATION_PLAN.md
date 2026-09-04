@@ -19,8 +19,8 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Active stream leases (interactive coordinator only)
 
-- L017 — T030 — base `<set at dispatch>` — write scope: `apps/glasses/**` (+ root `vitest.config.ts`/`package.json` only if discovery or a dev dependency needs it) — lock: `glasses-app` — worker: g2-glasses-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
-- L018 — T040 — base `<set at dispatch>` — write scope: `apps/spotter/**`, `services/relay/wrangler.*` assets config only if hosting needs it — lock: `spotter-app` — worker: spotter-pwa-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
+- L017 — T030 — base `da6df0e` — write scope: `apps/glasses/**` (+ root `vitest.config.ts`/`package.json` only if discovery or a dev dependency needs it) — lock: `glasses-app` — worker: g2-glasses-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
+- L018 — T040 — base `da6df0e` — write scope: `apps/spotter/**`, `services/relay/wrangler.*` assets config only if hosting needs it — lock: `spotter-app` — worker: spotter-pwa-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
