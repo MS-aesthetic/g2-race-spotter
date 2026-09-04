@@ -3,6 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
+- T011-review-cap — decide whether to authorize a fourth T011 repair after three review blocks. L014 is closed at `581bead`; the quarantined candidate still checks a missing URL role before a structurally valid mismatched-version hello, yielding `bad_frame`/4400 instead of `version`/4426. This is a process/retry-cap decision, not `[HW]`.
 - T006c-scope — decide whether to authorize one fifth, adapter-only edit in `packages/protocol/src/client.ts:73-78`; the four authorized T006c edits are recoverable at L009 `stash@{0}` (`d84a200`) and no application commit was made. This is a process/scope decision, not `[HW]`.
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
@@ -80,3 +81,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 37 | 2026-09-04 | T011 | relay-backend-dev | review-blocked | block | 5a614b0 | Green gates do not prove an accepted rejection closes: require close 4401/4400 with no client activity, and reject any supplied PIN that is not exactly four digits without creating room storage or state. |
 | 38 | 2026-09-04 | T011a | relay-backend-dev | failed | n/a | - | Accepted-socket close deferral from `fetch` is not live-boundary reliable and an alarm violates isolation; perform auth rejection during the mandatory first `hello` event instead. |
 | 39 | 2026-09-04 | T011b | relay-backend-dev | review-blocked | block | 2d1edb6 | Validate `PROTOCOL_VERSION` before role/name/PIN work and atomically persist fresh-room `pin` plus `createdAt`; the failed/n/a T011a attempt does not count as a review block, so this is the chain's second block. |
+| 40 | 2026-09-04 | T011c | relay-backend-dev | review-blocked | block | 581bead | Missing/invalid URL role is still rejected before a structurally valid mismatched version; the third chain block closes L014 and escalates any fourth repair to Maxx. |
