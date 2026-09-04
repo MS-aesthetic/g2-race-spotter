@@ -1,11 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
 
+import { nextAlarmAt } from './alarm.js';
+
 import {
   CLOSE_CODE_BAD_HELLO,
   createInitialState,
   isClientMessage,
   isHello,
   reduce,
+  ROOM_TTL_MS,
   type ErrorMessage,
   type Role,
   type State,
@@ -63,6 +66,13 @@ export class RaceRoom extends DurableObject<Env> {
     }
   }
 
+  private async scheduleAlarm(state?: State): Promise<void> {
+    const current = state ?? (await this.loadState());
+    await this.ctx.storage.setAlarm(
+      nextAlarmAt(this.ctx.getWebSockets().length, current, Date.now()),
+    );
+  }
+
   private attachment(socket: WebSocket): SocketAttachment | undefined {
     const attachment = socket.deserializeAttachment();
     return isSocketAttachment(attachment) ? attachment : undefined;
@@ -82,7 +92,7 @@ export class RaceRoom extends DurableObject<Env> {
     const next = reduce(
       state,
       { t: 'peer', role, online: this.hasReadyPeer(role) },
-      { now: Date.now(), newId: crypto.randomUUID },
+      { now: Date.now(), newId: () => crypto.randomUUID() },
     );
     if (next !== state) {
       await this.persistAndBroadcast(next, exclude);
@@ -98,7 +108,15 @@ export class RaceRoom extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('X-G2RS-Internal-Debug') === '1') {
-      return Response.json(await this.loadState());
+      const state = await this.loadState();
+      const url = new URL(request.url);
+      if (url.searchParams.has('alarm')) {
+        return Response.json({
+          state,
+          alarm: await this.ctx.storage.getAlarm(),
+        });
+      }
+      return Response.json(state);
     }
 
     const url = new URL(request.url);
@@ -119,6 +137,7 @@ export class RaceRoom extends DurableObject<Env> {
     };
     this.ctx.acceptWebSocket(server, role === null ? [] : [role]);
     server.serializeAttachment(attachment);
+    await this.scheduleAlarm();
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -158,6 +177,7 @@ export class RaceRoom extends DurableObject<Env> {
       socket.serializeAttachment({ ...attachment, ready: true });
       const peer = await this.refreshPeer(attachment.role, socket);
       socket.send(serialize(peer.state));
+      await this.scheduleAlarm(peer.state);
       return;
     }
 
@@ -169,24 +189,47 @@ export class RaceRoom extends DurableObject<Env> {
     const next = reduce(
       state,
       { ...value, role: attachment.role },
-      { now: Date.now(), newId: crypto.randomUUID },
+      { now: Date.now(), newId: () => crypto.randomUUID() },
     );
     if (next !== state) {
       await this.persistAndBroadcast(next);
     }
+    await this.scheduleAlarm(next);
   }
 
-  async webSocketClose(socket: WebSocket): Promise<void> {
+  async webSocketClose(
+    socket: WebSocket,
+    code: number,
+    reason: string,
+  ): Promise<void> {
+    socket.close(code, reason);
     const attachment = this.attachment(socket);
     if (attachment?.ready === true && attachment.role !== null) {
-      await this.refreshPeer(attachment.role);
+      const peer = await this.refreshPeer(attachment.role);
+      await this.scheduleAlarm(peer.state);
     }
   }
 
   async webSocketError(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
     if (attachment?.ready === true && attachment.role !== null) {
-      await this.refreshPeer(attachment.role);
+      const peer = await this.refreshPeer(attachment.role);
+      await this.scheduleAlarm(peer.state);
     }
+  }
+
+  async alarm(): Promise<void> {
+    const state = await this.loadState();
+    if (this.ctx.getWebSockets().length === 0) {
+      if (Date.now() >= state.updatedAt + ROOM_TTL_MS) {
+        await this.ctx.storage.deleteAll();
+        this.state = undefined;
+        return;
+      }
+      await this.scheduleAlarm(state);
+      return;
+    }
+
+    await this.scheduleAlarm(state);
   }
 }
