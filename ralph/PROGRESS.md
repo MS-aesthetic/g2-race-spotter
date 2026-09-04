@@ -41,6 +41,11 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 - `scripts/sync-agents.mjs` now treats only files it generated as orphans (`a88832c`); the three untracked `.claude/agents/cavecrew-*.md` files are preserved and no longer fail `sync:agents:check`.
 - Spec 030 gained the reconnect-blip decision (`lastFrameAt` is per socket session; the HUD dims during a blip).
 
+## Round 2 (2026-09-04, Fable 5.1 coordinating; Sonnet 5 workers, Opus 5 reviewers)
+- Maxx: "i want you to do this next round" and list both Claude and OpenAI models per tier in the plan/SDD docs → `d633a5d` (constitution Roles table, plan header, AGENTS.md, README, models.env comment; auditor tier added). Leases L015 (T009) and L016 (T017) recorded (`1801ef2`), built in parallel container worktrees, reviewed as exact ranges, integrated serially (`b28cc2c`, `c9fb8b6`, `8bf5531`). Record: `docs/reviews/2026-09-04-round-2-T009-T017.md`.
+- Lesson: the Windows gate run filtered the prettier output from `npm run lint`, so a formatting failure in `auth.test.ts` (from `4181e34`) was reported green; fixed `9fd612b`. Never grep a gate's output for "error" — read its exit code.
+- Housekeeping: `_to_delete/` (stale copies imported with the planning package) removed from the tree (`d447981`).
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |
@@ -92,3 +97,5 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 44 | 2026-09-04 | T006d | relay-backend-dev | done | approve with nits | fa63af2 | lastFrameAt is reset per socket session (open and disconnect) so a stale LINK OK cannot survive a reconnect; blip semantics recorded in spec 030. |
 | 45 | 2026-09-04 | tooling | relay-backend-dev | done | approve | a88832c | sync-agents orphan rule keys on the generator banner; untracked hand-written agents no longer break the check. |
 | 46 | 2026-09-04 | T006e | relay-backend-dev | done | approve | c1218e7 | Client type exports restored; lastFrameAt cleared on a terminal close so an evicted driver reads NO LINK immediately. |
+| 47 | 2026-09-04 | T009 | relay-backend-dev | done | approve with nits | b28cc2c | Eviction lives in the `!ready` hello branch after the PIN compare; `persistAndBroadcast`/`hasReadyPeer` still filter on `ready` only — T012 adds the `rejected` filter. 020 AC-5 met (86/86 in lease). |
+| 48 | 2026-09-04 | T017 | relay-backend-dev | done | approve with nits | c9fb8b6 | `onError`, `{code, terminal}` on `closed`, queue cleared on terminal close, `connect()` requires a replayed session; auditor froze the shared detail object (`8bf5531`); T018 collects the verifier nits. 060 R3 / 030 R3 client side met (92/92 on master). |
