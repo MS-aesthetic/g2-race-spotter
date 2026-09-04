@@ -7,6 +7,7 @@ import type {
   SetGap,
   SetLane,
   SetMsg,
+  SetSide,
   State,
 } from './index.js';
 
@@ -36,6 +37,7 @@ export const INITIAL_STATE: Readonly<State> = {
   t: 'state',
   seq: 0,
   lane: null,
+  side: null,
   gap: 0,
   msg: null,
   spotterOnline: false,
@@ -50,7 +52,10 @@ export function createInitialState(): State {
 function changed(
   state: State,
   changes: Partial<
-    Pick<State, 'lane' | 'gap' | 'msg' | 'spotterOnline' | 'driverOnline'>
+    Pick<
+      State,
+      'lane' | 'side' | 'gap' | 'msg' | 'spotterOnline' | 'driverOnline'
+    >
   >,
   now: number,
 ): State {
@@ -72,6 +77,18 @@ function reduceLane(
   }
 
   return changed(state, { lane: event.lane }, ctx.now);
+}
+
+function reduceSide(
+  state: State,
+  event: SetSide & { readonly role: Role },
+  ctx: ReducerContext,
+): State {
+  if (event.role !== 'spotter' || event.side === state.side) {
+    return state;
+  }
+
+  return changed(state, { side: event.side }, ctx.now);
 }
 
 function reduceGap(
@@ -151,6 +168,8 @@ export function reduce(
   switch (event.t) {
     case 'lane':
       return reduceLane(state, event, ctx);
+    case 'side':
+      return reduceSide(state, event, ctx);
     case 'gap':
       return reduceGap(state, event, ctx);
     case 'msg':

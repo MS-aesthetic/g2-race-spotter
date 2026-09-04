@@ -255,6 +255,46 @@ describe('RaceRoom roundtrip', () => {
     }
   }, 20_000);
 
+  it('broadcasts a spotter side call and ignores one from the driver', async () => {
+    worker = await startWorker();
+    const room = 'QA05';
+    const spotter = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=spotter`,
+    );
+    const driver = await openSocket(
+      `${worker.origin.replace('http', 'ws')}/room/${room}?role=driver`,
+    );
+
+    try {
+      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      await nextMessage(spotter);
+      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      await nextMessage(driver);
+
+      const called = nextMessage(driver);
+      spotter.send(JSON.stringify({ t: 'side', side: 'inside' }));
+      await expect(within(called, 500)).resolves.toMatchObject({
+        t: 'state',
+        side: 'inside',
+      });
+
+      // Role check: the driver cannot call a side on itself, so the frame is
+      // dropped without a state broadcast.
+      driver.send(JSON.stringify({ t: 'side', side: 'outside' }));
+      await expectNoMessage(driver, 250);
+
+      const cleared = nextMessage(driver);
+      spotter.send(JSON.stringify({ t: 'side', side: null }));
+      await expect(within(cleared, 500)).resolves.toMatchObject({
+        t: 'state',
+        side: null,
+      });
+    } finally {
+      spotter.close();
+      driver.close();
+    }
+  }, 20_000);
+
   it('does not broadcast to an unready socket and replays the latest state after hello', async () => {
     worker = await startWorker();
     const room = 'QA02';

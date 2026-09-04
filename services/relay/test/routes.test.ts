@@ -180,6 +180,7 @@ describe('relay HTTP routes', () => {
       driverOnline: false,
       gap: 0,
       lane: null,
+      side: null,
       msg: null,
       seq: 0,
       spotterOnline: false,

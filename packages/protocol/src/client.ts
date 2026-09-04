@@ -19,6 +19,7 @@ import {
   type SetGap,
   type SetLane,
   type SetMsg,
+  type SetSide,
   type State,
 } from './index.ts';
 
@@ -29,7 +30,8 @@ export type ConnectionState = 'connecting' | 'open' | 'closed';
  * are not a durable user intent and must not acknowledge a later message
  * after the room replay establishes the current state.
  */
-export type RoomClientIntent = SetLane | SetGap | SetMsg | Clear | Ack;
+export type RoomClientIntent =
+  SetLane | SetSide | SetGap | SetMsg | Clear | Ack;
 
 /**
  * Second argument to every `onConnection` callback. Only meaningful when
@@ -174,6 +176,7 @@ export class RoomClient {
   private status: ConnectionState = 'closed';
   private replayed = false;
   private pendingLane: SetLane | undefined;
+  private pendingSide: SetSide | undefined;
   private pendingGap: SetGap | undefined;
   private readonly pendingMessages: Array<SetMsg | Clear> = [];
 
@@ -351,8 +354,12 @@ export class RoomClient {
     }
 
     this.lastSeen = message.seq;
+    // `isState` tolerates a relay that predates the additive `side` field;
+    // consumers are handed the field either way, never `undefined`.
+    const state: State =
+      message.side === undefined ? { ...message, side: null } : message;
     for (const listener of this.stateListeners) {
-      listener(message);
+      listener(state);
     }
 
     if (!this.replayed) {
@@ -413,6 +420,11 @@ export class RoomClient {
       return;
     }
 
+    if (intent.t === 'side') {
+      this.pendingSide = intent;
+      return;
+    }
+
     if (intent.t === 'gap') {
       this.pendingGap = intent;
       return;
@@ -424,6 +436,7 @@ export class RoomClient {
   private flushPending(): void {
     const pending = [
       this.pendingLane,
+      this.pendingSide,
       this.pendingGap,
       ...this.pendingMessages,
     ].filter(
@@ -432,6 +445,7 @@ export class RoomClient {
     );
 
     this.pendingLane = undefined;
+    this.pendingSide = undefined;
     this.pendingGap = undefined;
     this.pendingMessages.length = 0;
 
@@ -486,6 +500,7 @@ export class RoomClient {
 
   private clearPending(): void {
     this.pendingLane = undefined;
+    this.pendingSide = undefined;
     this.pendingGap = undefined;
     this.pendingMessages.length = 0;
   }

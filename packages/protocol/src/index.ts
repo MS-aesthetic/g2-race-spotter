@@ -50,6 +50,8 @@ export const CLOSE_CODE_DRIVER_EVICTED = 4_409;
 export const CLOSE_CODE_VERSION = 4_426;
 
 export type Lane = 'top' | 'mid' | 'bot';
+/** Which side a car is trying to pass on, from the driver's point of view. */
+export type Side = 'inside' | 'outside';
 export type Role = 'spotter' | 'driver';
 export type ErrorCode =
   'version' | 'auth' | 'role_taken' | 'bad_frame' | 'rate';
@@ -64,6 +66,13 @@ export interface Hello {
 export interface SetLane {
   t: 'lane';
   lane: Lane | null;
+}
+
+/** Spotter-only: a car is trying to pass, or has cleared (`null`). */
+
+export interface SetSide {
+  t: 'side';
+  side: Side | null;
 }
 
 export interface SetGap {
@@ -91,7 +100,7 @@ export interface Ping {
 }
 
 export type ClientMessage =
-  Hello | SetLane | SetGap | SetMsg | Clear | Ack | Ping;
+  Hello | SetLane | SetSide | SetGap | SetMsg | Clear | Ack | Ping;
 
 export interface RoomMessage {
   id: string;
@@ -104,6 +113,8 @@ export interface State {
   t: 'state';
   seq: number;
   lane: Lane | null;
+  /** Car alongside: `inside` / `outside`, `null` when nobody is there. */
+  side: Side | null;
   gap: number;
   msg: RoomMessage | null;
   spotterOnline: boolean;
@@ -148,6 +159,10 @@ export function isLane(value: unknown): value is Lane {
   return value === 'top' || value === 'mid' || value === 'bot';
 }
 
+export function isSide(value: unknown): value is Side {
+  return value === 'inside' || value === 'outside';
+}
+
 export function isRole(value: unknown): value is Role {
   return value === 'spotter' || value === 'driver';
 }
@@ -180,6 +195,15 @@ export function isSetLane(value: unknown): value is SetLane {
     value.t === 'lane' &&
     hasOnlyKeys(value, ['t', 'lane']) &&
     (value.lane === null || isLane(value.lane))
+  );
+}
+
+export function isSetSide(value: unknown): value is SetSide {
+  return (
+    isRecord(value) &&
+    value.t === 'side' &&
+    hasOnlyKeys(value, ['t', 'side']) &&
+    (value.side === null || isSide(value.side))
   );
 }
 
@@ -231,6 +255,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   return (
     isHello(value) ||
     isSetLane(value) ||
+    isSetSide(value) ||
     isSetGap(value) ||
     isSetMsg(value) ||
     isClear(value) ||
@@ -260,6 +285,10 @@ export function isState(value: unknown): value is State {
     isInteger(value.seq) &&
     value.seq >= 0 &&
     (value.lane === null || isLane(value.lane)) &&
+    // `side` was added within PROTOCOL_VERSION 1 (additive field, relay ships
+    // first): a frame from a relay that predates it is still a valid state
+    // with no side call, so absence is accepted and read as `null`.
+    (value.side === undefined || value.side === null || isSide(value.side)) &&
     isFiniteNumber(value.gap) &&
     value.gap >= 0 &&
     value.gap <= 100 &&

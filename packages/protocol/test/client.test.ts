@@ -276,6 +276,8 @@ describe('RoomClient', () => {
     first.fail();
 
     client.send({ t: 'lane', lane: 'top' });
+    client.send({ t: 'side', side: 'outside' });
+    client.send({ t: 'side', side: 'inside' });
     client.send({ t: 'gap', value: 20 });
     client.send({ t: 'gap', value: 80 });
     client.send({ t: 'ack', msgId: 'old-message' });
@@ -302,6 +304,8 @@ describe('RoomClient', () => {
     expect(sent(second)).toEqual([
       { t: 'hello', v: 1, role: 'spotter', name: 'Pit wall' },
       { t: 'lane', lane: 'top' },
+      // Only the latest side survives the outage, like lane and gap.
+      { t: 'side', side: 'inside' },
       { t: 'gap', value: 80 },
       { t: 'msg', text: 'first offline' },
       { t: 'clear' },
@@ -357,6 +361,23 @@ describe('RoomClient', () => {
     second.receive(state(1));
     expect(received).toEqual([2, 1]);
     expect(client.lastFrameAt).toBe(104);
+  });
+
+  it('hands consumers a side on every state frame', () => {
+    FakeWebSocket.reset();
+    const timers = new FakeTimers();
+    const client = createClient(timers);
+    const sides: Array<string | null> = [];
+    client.onState((value) => sides.push(value.side));
+
+    client.connect('ws://relay.test/room/CAR42?role=spotter');
+    const socket = FakeWebSocket.sockets[0];
+    socket.open();
+    // `state()` predates the additive field; the relay that has it sends it.
+    socket.receive(state(1));
+    socket.receive({ ...state(2), side: 'outside' });
+
+    expect(sides).toEqual([null, 'outside']);
   });
 
   it('uses one ping timer for the current socket and ignores stale replacement events', () => {

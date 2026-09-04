@@ -18,6 +18,8 @@ import pingInvalid from './fixtures/ping.invalid.json';
 import pingValid from './fixtures/ping.valid.json';
 import pongInvalid from './fixtures/pong.invalid.json';
 import pongValid from './fixtures/pong.valid.json';
+import sideInvalid from './fixtures/side.invalid.json';
+import sideValid from './fixtures/side.valid.json';
 import stateInvalid from './fixtures/state.invalid.json';
 import stateValid from './fixtures/state.valid.json';
 
@@ -27,6 +29,7 @@ import {
   isPong,
   isSetGap,
   isSetMsg,
+  isSetSide,
   isState,
   isWireMessage,
 } from '../src/index';
@@ -50,6 +53,12 @@ const fixtures: readonly FixtureExpectation[] = [
     guard: isClientMessage,
     valid: laneValid,
     invalid: laneInvalid,
+  },
+  {
+    name: 'side',
+    guard: isSetSide,
+    valid: sideValid,
+    invalid: sideInvalid,
   },
   { name: 'gap', guard: isSetGap, valid: gapValid, invalid: gapInvalid },
   { name: 'msg', guard: isSetMsg, valid: msgValid, invalid: msgInvalid },
@@ -92,4 +101,23 @@ describe('protocol v1 guards', () => {
       expect(isWireMessage(invalid)).toBe(false);
     },
   );
+
+  it('accepts a cleared side call and rejects a malformed one', () => {
+    expect(isSetSide({ t: 'side', side: null })).toBe(true);
+    expect(isClientMessage({ t: 'side', side: 'outside' })).toBe(true);
+    expect(isSetSide({ t: 'side' })).toBe(false);
+    expect(isSetSide({ t: 'side', side: 'inside', extra: 1 })).toBe(false);
+  });
+
+  it('treats `side` as additive on state frames', () => {
+    const withoutSide: Record<string, unknown> = {
+      ...(stateValid as Record<string, unknown>),
+    };
+    delete withoutSide.side;
+
+    // A relay that predates the field still speaks PROTOCOL_VERSION 1.
+    expect(isState(withoutSide)).toBe(true);
+    expect(isState({ ...stateValid, side: null })).toBe(true);
+    expect(isState({ ...stateValid, side: 'left' })).toBe(false);
+  });
 });

@@ -32,6 +32,7 @@ describe('reduce', () => {
       t: 'state',
       seq: 0,
       lane: null,
+      side: null,
       gap: 0,
       msg: null,
       spotterOnline: false,
@@ -64,6 +65,56 @@ describe('reduce', () => {
         context(2_000),
       ),
     ).toBe(lane);
+  });
+
+  it('sets side only for the spotter and leaves the same side alone', () => {
+    const initial = createInitialState();
+    const inside = reduce(
+      initial,
+      event({ t: 'side', role: 'spotter', side: 'inside' }),
+      context(),
+    );
+
+    expect(inside).toMatchObject({ side: 'inside', seq: 1, updatedAt: 1_000 });
+    // A repeat is not news: no `seq` bump, so no broadcast.
+    expect(
+      reduce(
+        inside,
+        event({ t: 'side', role: 'spotter', side: 'inside' }),
+        context(2_000),
+      ),
+    ).toBe(inside);
+    // The driver may not call a side on itself.
+    expect(
+      reduce(
+        inside,
+        event({ t: 'side', role: 'driver', side: 'outside' }),
+        context(2_000),
+      ),
+    ).toBe(inside);
+
+    const outside = reduce(
+      inside,
+      event({ t: 'side', role: 'spotter', side: 'outside' }),
+      context(2_000),
+    );
+    expect(outside).toMatchObject({ side: 'outside', seq: 2 });
+
+    const cleared = reduce(
+      outside,
+      event({ t: 'side', role: 'spotter', side: null }),
+      context(3_000),
+    );
+    expect(cleared).toMatchObject({ side: null, seq: 3 });
+    expect(
+      reduce(
+        cleared,
+        event({ t: 'side', role: 'spotter', side: null }),
+        context(4_000),
+      ),
+    ).toBe(cleared);
+    // Side and lane are independent calls.
+    expect(cleared.lane).toBeNull();
   });
 
   it('rounds and clamps spotter gap changes', () => {

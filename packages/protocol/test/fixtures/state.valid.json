@@ -2,6 +2,7 @@
   "t": "state",
   "seq": 4,
   "lane": "mid",
+  "side": "outside",
   "gap": 72,
   "msg": {
     "id": "01J0MESSAGE",
