@@ -49,6 +49,11 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 ## Consolidation (2026-09-04, Maxx)
 - "That seems way too low… this is a simple app… can we consolidate some of these tasks so it doesn't cost so many iterations and tokens?" → one task per app/subsystem (T030 glasses, T040 spotter, T050 relay heartbeat+validation), Opus-tier workers for consolidated tasks, one exact-range review per task, auditor over the batch. Image HUD first, drawn from primitives with the layout in one editable `hud-design.ts`; text mode is an ASCII fallback (030 AC-9 dropped). Rate limiting dropped from 020 R4. Fake-spotter scenarios, client verifier polish, 060, 070 deferred until after the first hardware session. Update-rate tuning deferred ("timers/update rates later"). Simulator runs are Maxx's on his machine.
 
+## Round 3 (2026-09-04, consolidated tasks; Opus 5 workers + hud-qa reviewers; Fable 5.1 auditor)
+- T030 (glasses app, image-first) and T040 (spotter PWA) built in parallel leases in one iteration each, reviewed as exact ranges (approve with nits), nits fixed by the same workers in one follow-up commit each, integrated serially. First visual of the HUD design rendered from `drawHud` and shared with Maxx. Record: `docs/reviews/2026-09-04-round-3-T030-T040.md`.
+- Consolidation worked: 2 app-sized tasks → 2 iterations + 2 nit commits, versus ~12 iterations under the old slicing. Keep it.
+- Flake fixed: `eviction.test.ts` raced a `peer` broadcast; live tests now wait for the matching frame.
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |
@@ -102,3 +107,5 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 46 | 2026-09-04 | T006e | relay-backend-dev | done | approve | c1218e7 | Client type exports restored; lastFrameAt cleared on a terminal close so an evicted driver reads NO LINK immediately. |
 | 47 | 2026-09-04 | T009 | relay-backend-dev | done | approve with nits | b28cc2c | Eviction lives in the `!ready` hello branch after the PIN compare; `persistAndBroadcast`/`hasReadyPeer` still filter on `ready` only — T012 adds the `rejected` filter. 020 AC-5 met (86/86 in lease). |
 | 48 | 2026-09-04 | T017 | relay-backend-dev | done | approve with nits | c9fb8b6 | `onError`, `{code, terminal}` on `closed`, queue cleared on terminal close, `connect()` requires a replayed session; auditor froze the shared detail object (`8bf5531`); T018 collects the verifier nits. 060 R3 / 030 R3 client side met (92/92 on master). |
+| 49 | 2026-09-04 | T030 | g2-glasses-dev | done | approve with nits | 9fe6c90 | Whole glasses app in one lease (render primitives + editable `hud-design.ts`, gray4, queue, watchdog, input, settings, companion); nits (ack latch after a blip, double send on recovery) fixed in-lease with tests. 030 AC-1–6 + 050 AC-1–5 met. |
+| 50 | 2026-09-04 | T040 | spotter-pwa-dev | done | approve with nits | c000566 | Whole spotter PWA in one lease (6 KB gz JS); nits (banner toggle killing a drag, terminal-close handling, SW precache) fixed in-lease with tests. 040 AC-1–5 met. |

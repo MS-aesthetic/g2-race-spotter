@@ -16,7 +16,7 @@ Canvas 576×288, 4-bit grey (0 off … 15 brightest). `zOrderIndex` must be set 
 | 1 | `bg` | text | 0 | 0 | 576 | 288 | 1 | `content: ' '`, `isEventCapture: 1`, `textColor: 0`, no border. The only event-capture container. |
 | 2 | `hud` | image | 144 | 8 | 288 | 144 | 3 | Created empty; populated via `updateImageRawData` after startup returns. |
 | 3 | `msg` | text | 16 | 160 | 544 | 96 | 4 | `textColor: 4`. `''` when no message. |
-| 4 | `status` | text | 16 | 258 | 544 | 28 | 5 | `textColor: 2` normally, `4` when NO LINK. |
+| 4 | `status` | text | 16 | 258 | 544 | 28 | 5 | `textColor: 2`. (The "4 when NO LINK" idea is not implemented: `textContainerUpgrade` carries content only and the app never rebuilds for text — the dimmed HUD bitmap is the NO LINK cue.) |
 
 Exactly one image container. Do not add more; each extra image costs ~100 ms per update and serialises.
 

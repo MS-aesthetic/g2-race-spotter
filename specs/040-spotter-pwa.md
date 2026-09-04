@@ -39,6 +39,8 @@ R7. Bundle MUST be ≤ 40 KB gzipped for JS; service worker MUST never intercept
 
 - 2026-09-03 PWA, not native — why: no store, same TypeScript, the socket client is shared with the glasses app.
 
+- 2026-09-04 Round-trip latency is derived in the spotter's `RoomClient` wrapper by teeing inbound `pong` frames through the injected `WebSocket` constructor — why: `RoomClient` treats `pong` as liveness only; promoting an `onLatency` hook into `packages/protocol` is a separate task if a third client ever needs it.
+
 ## Open questions
 
 - Haptic feedback on lane tap: Android only via `navigator.vibrate`; acceptable?

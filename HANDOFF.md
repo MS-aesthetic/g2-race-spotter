@@ -9,39 +9,18 @@ Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside 
 
 ## Current status
 
-- Branch `master`; plan status `BUILDING`; no active lease; no Git remote.
-- No spec is `DISPUTED`; no Cloudflare deployment occurred; no secrets were added.
-- 020 AC-1–AC-6 and AC-8 are met; 060 R3 / 030 R3 client side (T017) is met. Open in 020: AC-7 (T012), AC-9 (T013), AC-10 (`[HW]` T102 after T014). Spec 030 is sliced into T020–T025 (automated) + T026 `[SIM]`.
-- Main passes on Node 22: typecheck, `packages/protocol` 49/49, root suite 92/92 (18 files, live `wrangler dev`), lint (0 errors, 2 pre-existing generated-d.ts warnings) and prettier clean, `check:pins`, `sync:agents:check`, `wrangler types --check`, isolated-assets deploy dry-run. Read gate exit codes — do not grep their output for "error" (a prettier failure hid that way for two iterations).
-- Three untracked `.claude/agents/cavecrew-*.md` files are Maxx's and are preserved. `sync:agents:check` no longer reports them (`a88832c`); do not delete, commit, or regenerate over them.
-- No human decision is pending. Model routing lists both vendors per tier (constitution Roles table, plan header); either may run any tier.
+- Branch `master`; plan status `BUILDING` (consolidated plan since 2026-09-04); no active lease; no Git remote.
+- **Both apps exist now.** Glasses app (`apps/glasses`, image-first HUD drawn from primitives; edit `src/render/hud-design.ts` to change the look) and spotter PWA (`apps/spotter`, 6 KB gz) are integrated with the relay and the shared `RoomClient`. Automated criteria met: 010 AC-1/2/6/7; 020 AC-1–6, 8; 030 AC-1–6; 040 AC-1–5; 050 AC-1–5.
+- Main passes on Node 22: typecheck, **205/205** tests (33 files, live `wrangler dev`), lint (0 errors, 2 pre-existing generated-d.ts warnings) + prettier, `check:pins`, `sync:agents:check`, both app builds, `wrangler deploy --dry-run` with the real spotter assets. Read gate exit codes, never grep their output.
+- Reviews for every application commit live under `docs/reviews/` (`2026-09-04-repair-iteration.md`, `-round-2-T009-T017.md`, `-round-3-T030-T040.md`; `ralph/last-review.md` is git-ignored scratch). HUD preview: `docs/reviews/hud-design-preview.png`.
+- Three untracked `.claude/agents/cavecrew-*.md` files are Maxx's and are preserved; never delete, commit, or regenerate over them.
+- No human decision is pending. Human decisions recorded today in the specs: image-first HUD; ASCII-only text fallback (030 AC-9 dropped); rate limiting dropped (020 R4); fake-spotter, T018, 060, 070 deferred to after the first hardware session.
 
-## What changed on 2026-09-04
+## Next work
 
-| Commit | Task | Result |
-|---|---|---|
-| `7bab61a` | T011c-precedence | version mismatch rejected before a bad URL role on the first hello |
-| `68d9776` | T006c | `RoomClient` repair (backoff reset after replay, delay floor, `connect()` no-op, timer adapter typing) — 020 AC-8 |
-| `4181e34` | T011d | room PIN auth integrated; null-role decision after version check; pinned live precedence test — 020 AC-6 |
-| `fa63af2` | T006d | `lastFrameAt` reset per socket session |
-| `a88832c` | tooling | sync-agents orphan rule keyed on the generator banner |
-| `c1218e7` | T006e | client type exports restored; `lastFrameAt` cleared on terminal close |
-| `d633a5d` | docs | Claude + OpenAI models per tier; auditor tier |
-| `9fd612b` | T011d | prettier fix in `auth.test.ts` |
-| `b28cc2c` | T009 | PIN-checked last-writer-wins driver eviction — 020 AC-5 |
-| `c9fb8b6` + `8bf5531` | T017 | `onError`, `{code, terminal}` on `closed`, terminal close clears queue, `connect()` requires a replayed session |
-| `d447981` | chore | stale `_to_delete/` removed |
+**Maxx (this is now the critical path):** T101b QR-sideload the glasses app; T102 first Cloudflare deploy (Worker + spotter assets) — never done by an agent; T026 / T002c simulator scenarios on the machine with simulator 0.9.5 open; then T104/T109 on real glasses. Findings feed T051.
 
-Every application commit carries a `protocol-keeper` or auditor verdict under `docs/reviews/` (`2026-09-04-repair-iteration.md`, `2026-09-04-round-2-T009-T017.md`; `ralph/last-review.md` is git-ignored loop scratch) (approve / approve with nits; every nit is either fixed or assigned to T012/T017 in the plan). Quarantined worktrees `L009` and `L014` are superseded; keep them, do not lease from them.
-
-## Next work (see the plan for the full task lines and the reviewer's traps)
-
-Two independent streams; a coordinator may run one worker per stream at once, the serial runner alternates them in plan order.
-
-1. **Relay stream** — **T012** silent-peer alarm (`services/relay/test/heartbeat.test.ts`, 020 AC-7; also adds the `rejected` filter to `persistAndBroadcast`/`hasReadyPeer` and owns the accept-time-alarm gap + the `alarm: null` assertions in `auth.test.ts`) → **T013** validation + rate limiting → **T014** fake-spotter scenarios → **T018** client verifier hardening.
-2. **Glasses stream** (spec 030, owner `g2-glasses-dev`) — **T020** `glyphs.ts` + pure `renderText` → **T021** `resolveRenderMode` + text-container startup → **T022** coalescing update queue → **T023** link watchdog + status strip → **T024** input mapping (ack, exit dialogue, debounced foreground `connect()`) → **T025** companion page + `main.ts` wiring. **T026** `[SIM]` text-mode scenarios parks with T002c until an interactive simulator window exists.
-
-Hardware/deployment work remains under `## Needs human [HW]`.
+**Agents:** T050 — relay heartbeat + validation (020 AC-7, AC-9) in one task; Sonnet-tier is fine. Then nothing until hardware evidence arrives.
 
 ## Workflow and gates
 
@@ -64,4 +43,4 @@ Relay work also requires its focused live Wrangler test, `npx wrangler types src
 
 ## Prompt for the receiving LLM
 
-> Read `HANDOFF.md`, `AGENTS.md`, the constitution, `IMPLEMENTATION_PLAN.md`, `ralph/PROGRESS.md`, `ralph/last-review.md`, spec 020, and the race-relay-protocol skill. Do not edit yet. Confirm `master` matches the plan's `Done this cycle` and that every root gate is green. Then take the first unchecked task under `## Next` (T012) with an isolated lease and a fresh worker; T020 (glasses stream) may run in parallel on its own lease. Quote the task line's reviewer guidance in the worker prompt. Run every Node 22 and live Wrangler gate, obtain a fresh exact-range `protocol-keeper` review written to `ralph/last-review.md`, integrate only on approval, and have the planner reconcile the result. Preserve the untracked `cavecrew-*` agents and the quarantined worktrees.
+> Read `HANDOFF.md`, `AGENTS.md`, the constitution, `IMPLEMENTATION_PLAN.md`, `ralph/PROGRESS.md`, the latest file under `docs/reviews/`, spec 020, and the race-relay-protocol skill. Do not edit yet. Confirm `master` matches the plan's `Done this cycle` and that every root gate is green. Then take the first unchecked task under `## Next` (T050) with an isolated lease and a fresh worker; do not start T051 until Maxx has recorded hardware evidence. Quote the task line's reviewer guidance in the worker prompt. Run every Node 22 and live Wrangler gate, obtain a fresh exact-range `protocol-keeper` review written to `ralph/last-review.md`, integrate only on approval, and have the planner reconcile the result. Preserve the untracked `cavecrew-*` agents and the quarantined worktrees.
