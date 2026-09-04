@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "dev": "vite --host 0.0.0.0 --port 5174",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@g2-race-spotter/protocol": "file:../../packages/protocol"
+  },
+  "devDependencies": {
+    "vite": "8.2.2"
   }
 }
