@@ -284,6 +284,7 @@ export function stateFrame(overrides: Partial<State> = {}): State {
     t: 'state',
     seq: 1,
     lane: null,
+    side: null,
     gap: 0,
     msg: null,
     spotterOnline: true,

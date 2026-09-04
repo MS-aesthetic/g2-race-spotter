@@ -4,60 +4,75 @@ import { renderText } from '../src/render/text.ts';
 
 /**
  * 030 AC-1/AC-2 with the ASCII layout decided on 2026-09-04 (AC-9 dropped):
- * `^ o v` for the lane and `#`/`-` for the bar, so nothing here needs a
- * hardware glyph check.
+ * `^ o v` for the lane, `#`/`-` for the bar and `<`/`>` for the side call, so
+ * nothing here needs a hardware glyph check.
  */
 describe('renderText', () => {
   it('renders lane top and 12 of 20 cells for gap 62 (AC-1)', () => {
-    expect(renderText({ lane: 'top', gap: 62 })).toBe(
-      '^\n############--------  62',
+    expect(renderText({ lane: 'top', side: null, gap: 62 })).toBe(
+      '^\n############--------  62\n',
     );
   });
 
   it('uses o for mid and v for bot', () => {
-    expect(renderText({ lane: 'mid', gap: 0 })).toBe(
-      'o\n--------------------  0',
+    expect(renderText({ lane: 'mid', side: null, gap: 0 })).toBe(
+      'o\n--------------------  0\n',
     );
-    expect(renderText({ lane: 'bot', gap: 5 })).toBe(
-      'v\n#-------------------  5',
+    expect(renderText({ lane: 'bot', side: null, gap: 5 })).toBe(
+      'v\n#-------------------  5\n',
     );
   });
 
   it('leaves the first line blank when no lane is called (AC-2)', () => {
-    expect(renderText({ lane: null, gap: 40 })).toBe(
-      '\n########------------  40',
+    expect(renderText({ lane: null, side: null, gap: 40 })).toBe(
+      '\n########------------  40\n',
+    );
+  });
+
+  it('shows the side call as < or > on the third line', () => {
+    expect(renderText({ lane: 'top', side: 'inside', gap: 20 })).toBe(
+      '^\n####----------------  20\n<',
+    );
+    expect(renderText({ lane: 'top', side: 'outside', gap: 20 })).toBe(
+      '^\n####----------------  20\n>',
+    );
+    // The line stays, empty, so the bar never moves when a car clears.
+    expect(renderText({ lane: 'top', side: null, gap: 20 })).toBe(
+      '^\n####----------------  20\n',
     );
   });
 
   it('prefixes the bar line with !! at gap >= 90 (AC-2)', () => {
-    expect(renderText({ lane: 'top', gap: 89 })).toBe(
-      '^\n##################--  89',
+    expect(renderText({ lane: 'top', side: null, gap: 89 })).toBe(
+      '^\n##################--  89\n',
     );
-    expect(renderText({ lane: 'top', gap: 90 })).toBe(
-      '^\n!!##################--  90',
+    expect(renderText({ lane: 'top', side: null, gap: 90 })).toBe(
+      '^\n!!##################--  90\n',
     );
-    expect(renderText({ lane: null, gap: 100 })).toBe(
-      '\n!!####################  100',
+    expect(renderText({ lane: null, side: null, gap: 100 })).toBe(
+      '\n!!####################  100\n',
     );
   });
 
   it('is ASCII only', () => {
     for (const gap of [0, 33, 62, 90, 100]) {
       for (const lane of ['top', 'mid', 'bot', null] as const) {
-        expect(renderText({ lane, gap })).toMatch(/^[\x20-\x7e\n]*$/);
+        for (const side of ['inside', 'outside', null] as const) {
+          expect(renderText({ lane, side, gap })).toMatch(/^[\x20-\x7e\n]*$/);
+        }
       }
     }
   });
 
   it('clamps and rounds out-of-range gaps', () => {
-    expect(renderText({ lane: null, gap: -5 })).toBe(
-      '\n--------------------  0',
+    expect(renderText({ lane: null, side: null, gap: -5 })).toBe(
+      '\n--------------------  0\n',
     );
-    expect(renderText({ lane: null, gap: 137 })).toBe(
-      '\n!!####################  100',
+    expect(renderText({ lane: null, side: null, gap: 137 })).toBe(
+      '\n!!####################  100\n',
     );
-    expect(renderText({ lane: null, gap: 62.4 })).toBe(
-      '\n############--------  62',
+    expect(renderText({ lane: null, side: null, gap: 62.4 })).toBe(
+      '\n############--------  62\n',
     );
   });
 });

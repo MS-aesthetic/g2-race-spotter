@@ -16,6 +16,12 @@ export interface AsciiOptions {
   readonly width?: number;
   readonly height?: number;
   readonly scale?: number;
+  /**
+   * `max` (the default) keeps thin features; `min` takes the DIMMEST pixel in
+   * the block, which is what makes the dither visible in a snapshot: a solid
+   * area stays `#` while a dithered one drops to its `off` level.
+   */
+  readonly sample?: 'max' | 'min';
 }
 
 function cell(level: number): string {
@@ -30,21 +36,20 @@ export function toAscii(frame: Uint8Array, options: AsciiOptions = {}): string {
   const width = options.width ?? HUD_WIDTH;
   const height = options.height ?? HUD_HEIGHT;
   const scale = options.scale ?? SNAPSHOT_SCALE;
+  const takeMin = options.sample === 'min';
   const rows: string[] = [];
 
   for (let y = 0; y < height; y += scale) {
     let row = '';
     for (let x = 0; x < width; x += scale) {
-      let brightest = 0;
+      let level = takeMin ? Number.POSITIVE_INFINITY : 0;
       for (let dy = 0; dy < scale && y + dy < height; dy += 1) {
         for (let dx = 0; dx < scale && x + dx < width; dx += 1) {
-          brightest = Math.max(
-            brightest,
-            frame[(y + dy) * width + x + dx] as number,
-          );
+          const value = frame[(y + dy) * width + x + dx] as number;
+          level = takeMin ? Math.min(level, value) : Math.max(level, value);
         }
       }
-      row += cell(brightest);
+      row += cell(Number.isFinite(level) ? level : 0);
     }
     rows.push(row);
   }

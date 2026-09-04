@@ -20,7 +20,9 @@ function brightColumn(x: number): Uint8Array {
 
 describe('gray4 packing', () => {
   it('packs a 288x144 frame into 20736 bytes (050 AC-3)', () => {
-    const packed = pack(drawHud({ lane: 'mid', gap: 40 }, { linkOk: true }));
+    const packed = pack(
+      drawHud({ lane: 'mid', side: null, gap: 40 }, { linkOk: true }),
+    );
 
     expect(PACKED_BYTE_LENGTH).toBe(20_736);
     expect(packed.length).toBe(20_736);
@@ -62,7 +64,9 @@ describe('gray4 packing', () => {
 
 describe('sdk quirks', () => {
   it('carries the size and the SDK compress mode in one payload builder', () => {
-    const imageData = pack(drawHud({ lane: 'top', gap: 10 }, { linkOk: true }));
+    const imageData = pack(
+      drawHud({ lane: 'top', side: null, gap: 10 }, { linkOk: true }),
+    );
     const payload = imageRawDataPayload({
       containerID: 2,
       containerName: 'hud',

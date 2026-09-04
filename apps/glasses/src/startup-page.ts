@@ -34,8 +34,22 @@ export const CONTAINER_NAMES = {
   [CONTAINER_STATUS]: 'status',
 } as const;
 
+/**
+ * Message on top, HUD bitmap under it, status strip in the bottom-right corner
+ * (Maxx, 2026-09-04). The bitmap is centred: 144 = (576 - 288) / 2.
+ */
 const HUD_X = 144;
-const HUD_Y = 8;
+const HUD_Y = 108;
+
+const MSG_X = 16;
+const MSG_Y = 8;
+const MSG_WIDTH = 544;
+const MSG_HEIGHT = 96;
+
+const STATUS_X = 480;
+const STATUS_Y = 258;
+const STATUS_WIDTH = 80;
+const STATUS_HEIGHT = 28;
 
 export const STATUS_TEXT_COLOR = 2;
 
@@ -111,10 +125,10 @@ function messageContainer(content: string): TextContainer {
   return text({
     containerID: CONTAINER_MSG,
     containerName: CONTAINER_NAMES[CONTAINER_MSG],
-    xPosition: 16,
-    yPosition: 160,
-    width: 544,
-    height: 96,
+    xPosition: MSG_X,
+    yPosition: MSG_Y,
+    width: MSG_WIDTH,
+    height: MSG_HEIGHT,
     paddingLength: 4,
     zOrderIndex: 4,
     textColor: 4,
@@ -126,10 +140,10 @@ function statusContainer(content: string): TextContainer {
   return text({
     containerID: CONTAINER_STATUS,
     containerName: CONTAINER_NAMES[CONTAINER_STATUS],
-    xPosition: 16,
-    yPosition: 258,
-    width: 544,
-    height: 28,
+    xPosition: STATUS_X,
+    yPosition: STATUS_Y,
+    width: STATUS_WIDTH,
+    height: STATUS_HEIGHT,
     paddingLength: 4,
     zOrderIndex: 5,
     textColor: STATUS_TEXT_COLOR,

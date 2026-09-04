@@ -15,7 +15,12 @@ import type {
   State,
 } from '@g2-race-spotter/protocol';
 
-import { statusLine, type TerminalClose } from './link.ts';
+import {
+  statusBlinks,
+  statusLine,
+  type StatusInput,
+  type TerminalClose,
+} from './link.ts';
 import type { HudState } from './render/draw-hud.ts';
 import type { RenderJob } from './render/queue.ts';
 
@@ -46,6 +51,8 @@ export class HudApp {
   private linkOkFlag = false;
   private everLinked = false;
   private hasRoomFlag: boolean;
+  /** Phase of the NO-LINK `L` blink; the driver's timer flips it. */
+  private blinkOn = true;
 
   private lastHud: (HudState & { linkOk: boolean }) | undefined;
   /** The startup page always carries an empty message container. */
@@ -114,6 +121,30 @@ export class HudApp {
     }
   }
 
+  /** True while the status strip is a phase of the NO-LINK blink. */
+  get statusBlinking(): boolean {
+    return statusBlinks(this.statusInput());
+  }
+
+  /**
+   * Flips the blink phase and repaints the strip. Costs one `status` job and
+   * never an image send — the bitmap does not change between phases.
+   */
+  tickBlink(): void {
+    this.blinkOn = !this.blinkOn;
+    this.render();
+  }
+
+  /** Back to the visible phase, so a strip that stops blinking shows `L`. */
+  resetBlink(): void {
+    if (this.blinkOn) {
+      return;
+    }
+
+    this.blinkOn = true;
+    this.render();
+  }
+
   /** Id of the message currently on screen and unacknowledged. */
   unackedMessageId(): string | undefined {
     const message = this.state?.msg;
@@ -130,6 +161,7 @@ export class HudApp {
   render(): void {
     const hud = {
       lane: this.state?.lane ?? null,
+      side: this.state?.side ?? null,
       gap: this.state?.gap ?? 0,
       linkOk: this.linkOkFlag,
     };
@@ -137,13 +169,14 @@ export class HudApp {
     if (
       this.lastHud === undefined ||
       this.lastHud.lane !== hud.lane ||
+      this.lastHud.side !== hud.side ||
       this.lastHud.gap !== hud.gap ||
       this.lastHud.linkOk !== hud.linkOk
     ) {
       this.lastHud = hud;
       this.queue.push({
         kind: 'hud',
-        state: { lane: hud.lane, gap: hud.gap },
+        state: { lane: hud.lane, side: hud.side, gap: hud.gap },
         linkOk: hud.linkOk,
       });
     }
@@ -156,19 +189,24 @@ export class HudApp {
 
     // The skill asks for status `textColor: 4` while NO LINK; `textContainerUpgrade`
     // carries content only, so the strip keeps its startup colour and NO LINK is
-    // signalled by the text plus the dimmed HUD. Deviation for the planner.
-    const status = statusLine({
+    // signalled by the blinking `L` plus the dimmed HUD. Deviation for the planner.
+    const status = statusLine(this.statusInput());
+    if (status !== this.lastStatus) {
+      this.lastStatus = status;
+      this.queue.push({ kind: 'status', text: status });
+    }
+  }
+
+  private statusInput(): StatusInput {
+    return {
       hasRoom: this.hasRoomFlag,
       connection: this.connection,
       linkOk: this.linkOkFlag,
       spotterOnline: this.state?.spotterOnline ?? false,
       everLinked: this.everLinked,
       terminal: this.terminal,
-    });
-    if (status !== this.lastStatus) {
-      this.lastStatus = status;
-      this.queue.push({ kind: 'status', text: status });
-    }
+      blinkOn: this.blinkOn,
+    };
   }
 
   private messageText(): string {

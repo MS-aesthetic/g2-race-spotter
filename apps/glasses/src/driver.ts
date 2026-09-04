@@ -15,7 +15,7 @@ import type {
 import { HudApp, type RenderSink } from './app.ts';
 import type { Bridge, BridgeLogger } from './bridge.ts';
 import { createInputHandler } from './input.ts';
-import { createLinkWatchdog } from './link.ts';
+import { createLinkWatchdog, STATUS_BLINK_MS } from './link.ts';
 
 /** How often the watchdog re-checks a quiet socket. */
 export const LINK_CHECK_MS = 1_000;
@@ -82,6 +82,25 @@ export function startDriver(options: DriverOptions): Driver {
   // second image send per recovery and flashing a stale gap at full intensity.
   let applyingState = false;
 
+  // The `L` blinks only while the link is down, and the timer exists only for
+  // as long as it blinks: a free-running interval would repaint the strip (one
+  // bridge call each) for the whole of a healthy session.
+  let blinkTimer: number | undefined;
+  const syncBlink = (): void => {
+    if (app.statusBlinking) {
+      blinkTimer ??= timers.setInterval(() => {
+        app.tickBlink();
+      }, STATUS_BLINK_MS);
+      return;
+    }
+
+    if (blinkTimer !== undefined) {
+      timers.clearInterval(blinkTimer);
+      blinkTimer = undefined;
+    }
+    app.resetBlink();
+  };
+
   const watchdog = createLinkWatchdog({
     now: options.now,
     lastFrameAt: () => client.lastFrameAt,
@@ -118,6 +137,7 @@ export function startDriver(options: DriverOptions): Driver {
       } finally {
         applyingState = false;
       }
+      syncBlink();
 
       // Fresh truth from the relay: an ack that never left is tappable again.
       input.resetAckGuard();
@@ -125,29 +145,40 @@ export function startDriver(options: DriverOptions): Driver {
     client.onConnection((connection, detail) => {
       app.setConnection(connection, detail);
       watchdog.check();
+      syncBlink();
       if (connection !== 'open') {
         input.resetAckGuard();
       }
     }),
     client.onError((error) => {
       app.setError(error);
+      syncBlink();
     }),
     bridge.onEvenHubEvent(input.handle),
   ];
 
   const interval = timers.setInterval(() => {
     watchdog.check();
+    // Catch-all: anything else that changed the strip (a room configured from
+    // the companion, say) starts or stops the blink within one tick.
+    syncBlink();
   }, LINK_CHECK_MS);
 
   app.render();
+  syncBlink();
 
   return {
     app,
     checkLink: () => {
       watchdog.check();
+      syncBlink();
     },
     stop: () => {
       timers.clearInterval(interval);
+      if (blinkTimer !== undefined) {
+        timers.clearInterval(blinkTimer);
+        blinkTimer = undefined;
+      }
       for (const off of unsubscribe) {
         off();
       }

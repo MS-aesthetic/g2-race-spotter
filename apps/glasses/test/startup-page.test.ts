@@ -36,6 +36,54 @@ describe('startup page', () => {
     });
   });
 
+  it('lays the page out message-top, HUD-middle, status bottom-right', () => {
+    // The layout table in the g2-hud-display skill (Maxx, 2026-09-04).
+    const page = buildPage({ mode: 'image', status: 'L S', message: 'BOX' });
+    const byId = new Map(
+      [...page.textObject, ...(page.imageObject ?? [])].map((container) => [
+        container.containerID,
+        container,
+      ]),
+    );
+
+    expect(byId.get(3)).toMatchObject({
+      containerName: 'msg',
+      xPosition: 16,
+      yPosition: 8,
+      width: 544,
+      height: 96,
+      content: 'BOX',
+    });
+    expect(byId.get(2)).toMatchObject({
+      containerName: 'hud',
+      xPosition: 144,
+      yPosition: 108,
+      width: 288,
+      height: 144,
+    });
+    expect(byId.get(4)).toMatchObject({
+      containerName: 'status',
+      xPosition: 480,
+      yPosition: 258,
+      width: 80,
+      height: 28,
+      content: 'L S',
+    });
+
+    // Nothing overlaps, and everything stays on the 576x288 canvas.
+    for (const id of [2, 3, 4]) {
+      const container = byId.get(id)!;
+      expect(container.xPosition + container.width).toBeLessThanOrEqual(576);
+      expect(container.yPosition + container.height).toBeLessThanOrEqual(288);
+    }
+    expect(byId.get(3)!.yPosition + byId.get(3)!.height).toBeLessThanOrEqual(
+      byId.get(2)!.yPosition,
+    );
+    expect(byId.get(2)!.yPosition + byId.get(2)!.height).toBeLessThanOrEqual(
+      byId.get(4)!.yPosition,
+    );
+  });
+
   it('does not retry a failed startup-page call', async () => {
     const bridge = { createStartUpPageContainer: vi.fn(async () => 1) };
     const startPage = createStartupPage(bridge, PAGE, () => undefined);

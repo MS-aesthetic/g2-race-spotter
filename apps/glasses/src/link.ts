@@ -19,15 +19,31 @@ import {
 
 import { glyph } from './render/glyphs.ts';
 
-export const STATUS_NO_LINK = 'NO LINK';
 export const STATUS_NO_ROOM = 'ROOM ?';
+
+/** Blink period of the `L` while the link is down (Maxx, 2026-09-04). */
+export const STATUS_BLINK_MS = 700;
 
 export function statusConnecting(): string {
   return `CONNECTING${glyph('ellipsis')}`;
 }
 
-export function statusLinkOk(spotterOnline: boolean): string {
-  return `LINK OK ${glyph('separator')} SPOTTER ${spotterOnline ? 'ON' : 'OFF'}`;
+/**
+ * The whole steady-state strip, two letters in fixed columns (Maxx,
+ * 2026-09-04): `L` for the link — solid when it is up, blinking when it is not
+ * — and `S`, present only while the spotter is connected. The letter's column
+ * never moves, so a blinking `L` reads as a blink and not as a re-layout.
+ *
+ * `blinkOn` is the phase of that blink and is ignored while the link is up.
+ */
+export function statusStrip(
+  linkOk: boolean,
+  spotterOnline: boolean,
+  blinkOn = true,
+): string {
+  const link = linkOk || blinkOn ? 'L' : ' ';
+  const strip = spotterOnline ? `${link} S` : link;
+  return strip.trimEnd();
 }
 
 /** `true` while the current socket session has produced a frame recently. */
@@ -72,6 +88,8 @@ export interface StatusInput {
   /** Any frame received since app start — before that, the app is connecting. */
   readonly everLinked: boolean;
   readonly terminal?: TerminalClose | undefined;
+  /** Phase of the NO-LINK blink; `true` (letter shown) unless a timer says so. */
+  readonly blinkOn?: boolean | undefined;
 }
 
 export function statusLine(input: StatusInput): string {
@@ -82,13 +100,24 @@ export function statusLine(input: StatusInput): string {
     return statusTerminal(input.terminal);
   }
   if (input.linkOk) {
-    return statusLinkOk(input.spotterOnline);
+    return statusStrip(true, input.spotterOnline);
   }
   if (!input.everLinked && input.connection !== 'closed') {
     return statusConnecting();
   }
 
-  return STATUS_NO_LINK;
+  return statusStrip(false, input.spotterOnline, input.blinkOn ?? true);
+}
+
+/** Whether {@link statusLine} for this input is a phase of the blink — the
+ * only state in which the driver app runs the blink timer. */
+export function statusBlinks(input: StatusInput): boolean {
+  return (
+    input.hasRoom &&
+    input.terminal === undefined &&
+    !input.linkOk &&
+    (input.everLinked || input.connection === 'closed')
+  );
 }
 
 export interface LinkWatchdogOptions {

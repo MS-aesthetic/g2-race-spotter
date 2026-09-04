@@ -2,22 +2,30 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isLinkOk,
+  statusBlinks,
   statusConnecting,
   statusLine,
-  statusLinkOk,
+  statusStrip,
   statusTerminal,
-  STATUS_NO_LINK,
   STATUS_NO_ROOM,
 } from '../src/link.ts';
 import { glyph, useAsciiFallback } from '../src/render/glyphs.ts';
 
 describe('status strip strings', () => {
-  it('matches the g2-hud-display skill exactly', () => {
-    expect(statusLinkOk(true)).toBe('LINK OK · SPOTTER ON');
-    expect(statusLinkOk(false)).toBe('LINK OK · SPOTTER OFF');
+  it('is two letters: L for the link, S while the spotter is on', () => {
+    expect(statusStrip(true, true)).toBe('L S');
+    expect(statusStrip(true, false)).toBe('L');
     expect(statusConnecting()).toBe('CONNECTING…');
-    expect(STATUS_NO_LINK).toBe('NO LINK');
     expect(STATUS_NO_ROOM).toBe('ROOM ?');
+  });
+
+  it('blanks only the L on the off phase, keeping S in its column', () => {
+    expect(statusStrip(false, true, true)).toBe('L S');
+    expect(statusStrip(false, true, false)).toBe('  S');
+    expect(statusStrip(false, false, true)).toBe('L');
+    expect(statusStrip(false, false, false)).toBe('');
+    // The link being up is not a phase: a solid L ignores the blink.
+    expect(statusStrip(true, true, false)).toBe('L S');
   });
 
   it('keeps every non-ASCII character behind glyphs.ts (030 R6)', () => {
@@ -25,13 +33,13 @@ describe('status strip strings', () => {
     try {
       expect(glyph('separator')).toBe('|');
       expect(glyph('ellipsis')).toBe('...');
-      expect(statusLinkOk(true)).toBe('LINK OK | SPOTTER ON');
       expect(statusConnecting()).toBe('CONNECTING...');
     } finally {
       useAsciiFallback(false);
     }
 
-    expect(statusLinkOk(true)).toBe('LINK OK · SPOTTER ON');
+    // The strip itself is ASCII in either mode.
+    expect(statusStrip(true, true)).toMatch(/^[\x20-\x7e]*$/);
   });
 
   it('names the terminal closes the driver can act on', () => {
@@ -55,10 +63,18 @@ describe('status strip strings', () => {
     expect(
       statusLine({ ...base, hasRoom: true, terminal: { code: 4_401 } }),
     ).toBe('PIN REJECTED');
-    expect(statusLine({ ...base, hasRoom: true })).toBe(statusLinkOk(true));
-    expect(statusLine({ ...base, hasRoom: true, linkOk: false })).toBe(
-      STATUS_NO_LINK,
+    expect(statusLine({ ...base, hasRoom: true })).toBe(
+      statusStrip(true, true),
     );
+    expect(statusLine({ ...base, hasRoom: true, linkOk: false })).toBe('L S');
+    expect(
+      statusLine({
+        ...base,
+        hasRoom: true,
+        linkOk: false,
+        blinkOn: false,
+      }),
+    ).toBe('  S');
     expect(
       statusLine({
         ...base,
@@ -68,6 +84,29 @@ describe('status strip strings', () => {
         connection: 'connecting',
       }),
     ).toBe(statusConnecting());
+  });
+
+  it('blinks only while the link is down and there is nothing else to say', () => {
+    const base = {
+      hasRoom: true,
+      connection: 'open' as const,
+      linkOk: false,
+      spotterOnline: true,
+      everLinked: true,
+    };
+
+    expect(statusBlinks(base)).toBe(true);
+    expect(statusBlinks({ ...base, linkOk: true })).toBe(false);
+    expect(statusBlinks({ ...base, hasRoom: false })).toBe(false);
+    expect(statusBlinks({ ...base, terminal: { code: 4_401 } })).toBe(false);
+    // Still connecting for the first time: CONNECTING…, not a blinking L.
+    expect(
+      statusBlinks({ ...base, everLinked: false, connection: 'connecting' }),
+    ).toBe(false);
+    // A socket that closed before it ever linked has no excuse left.
+    expect(
+      statusBlinks({ ...base, everLinked: false, connection: 'closed' }),
+    ).toBe(true);
   });
 
   it('treats silence longer than DRIVER_NO_LINK_MS as no link', () => {

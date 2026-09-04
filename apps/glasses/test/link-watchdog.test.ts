@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ImageRawData, TextUpgrade } from '../src/bridge.ts';
 import { startDriver, type Driver } from '../src/driver.ts';
-import { statusLinkOk, STATUS_NO_LINK, STATUS_NO_ROOM } from '../src/link.ts';
+import { statusStrip, STATUS_BLINK_MS, STATUS_NO_ROOM } from '../src/link.ts';
 import { drawHud } from '../src/render/draw-hud.ts';
 import { pack } from '../src/render/gray4.ts';
 import { RenderQueue } from '../src/render/queue.ts';
@@ -80,6 +80,10 @@ async function harness(): Promise<Harness> {
   return { bridge, clock, queue, client, driver, socket };
 }
 
+/** The two phases of the NO-LINK blink: the `L` is on, then blank. Which one is
+ * showing depends on where the clock stopped, so assertions that only care that
+ * the link is DOWN accept either. */
+const BLINK_PHASES = ['L S', '  S'];
 describe('NO LINK watchdog (030 AC-4)', () => {
   beforeEach(() => {
     FakeWebSocket.reset();
@@ -90,56 +94,69 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(statuses(bridge)[0]).toMatch(/^CONNECTING/);
 
-    socket.receive(stateFrame({ lane: 'top', gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
     await queue.whenIdle();
 
-    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(true));
+    expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
 
   it('goes NO LINK after 5 s of silence and dims the next HUD frame', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
     await queue.whenIdle();
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', gap: 30 }, { linkOk: true })),
+      pack(drawHud({ lane: 'top', side: null, gap: 30 }, { linkOk: true })),
     );
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
     driver.checkLink();
     await queue.whenIdle();
 
-    expect(statuses(bridge).at(-1)).toBe(STATUS_NO_LINK);
+    expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', gap: 30 }, { linkOk: false })),
+      pack(drawHud({ lane: 'top', side: null, gap: 30 }, { linkOk: false })),
     );
+
+    // NO LINK is a blinking `L`: one status job per phase, never an image send.
+    const beforeBlink = images(bridge).length;
+    await clock.advance(STATUS_BLINK_MS);
+    await queue.whenIdle();
+    expect(statuses(bridge).at(-1)).toBe('  S');
+    await clock.advance(STATUS_BLINK_MS);
+    await queue.whenIdle();
+    expect(statuses(bridge).at(-1)).toBe('L S');
+    expect(images(bridge).length).toBe(beforeBlink);
   });
 
   it('recovers on a pong, without a state frame (030 R3)', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'mid', gap: 10, spotterOnline: false }));
+    socket.receive(
+      stateFrame({ lane: 'mid', side: null, gap: 10, spotterOnline: false }),
+    );
     await queue.whenIdle();
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
     driver.checkLink();
     await queue.whenIdle();
-    expect(statuses(bridge).at(-1)).toBe(STATUS_NO_LINK);
+    // No spotter, so the strip is only the blinking `L`.
+    expect(['L', '']).toContain(statuses(bridge).at(-1));
 
     socket.receive({ t: 'pong', ts: clock.ms, serverTs: clock.ms });
     driver.checkLink();
     await queue.whenIdle();
 
-    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(false));
+    expect(statuses(bridge).at(-1)).toBe(statusStrip(true, false));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', gap: 10 }, { linkOk: true })),
+      pack(drawHud({ lane: 'mid', side: null, gap: 10 }, { linkOk: true })),
     );
   });
 
   it('spends exactly one image send on a recovery frame, with its values', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
     await queue.whenIdle();
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
@@ -154,29 +171,29 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     const sent = images(bridge);
     expect(sent.length - beforeRecovery).toBe(1);
     expect(sent.at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', gap: 70 }, { linkOk: true })),
+      pack(drawHud({ lane: 'top', side: null, gap: 70 }, { linkOk: true })),
     );
-    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(true));
+    expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
 
   it('re-checks on its own interval without an explicit call', async () => {
     const { bridge, clock, socket, queue } = await harness();
 
-    socket.receive(stateFrame({ lane: 'bot', gap: 80 }));
+    socket.receive(stateFrame({ lane: 'bot', side: null, gap: 80 }));
     await queue.whenIdle();
 
     await clock.advance(DRIVER_NO_LINK_MS + 1_000);
     await queue.whenIdle();
 
-    expect(statuses(bridge).at(-1)).toBe(STATUS_NO_LINK);
+    expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
   });
 
   it('dims while a reconnect blip has no frame of its own', async () => {
     const { bridge, clock, socket, queue, client, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', gap: 45 }));
+    socket.receive(stateFrame({ lane: 'top', side: null, gap: 45 }));
     await queue.whenIdle();
-    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(true));
+    expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
 
     // A non-terminal close reconnects; `RoomClient` clears `lastFrameAt` when
     // the replacement socket opens, so the blip dims until its state replay.
@@ -187,9 +204,9 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(client.lastFrameAt).toBeUndefined();
     expect(FakeWebSocket.sockets.length).toBeGreaterThan(1);
-    expect(statuses(bridge).at(-1)).toBe(STATUS_NO_LINK);
+    expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', gap: 45 }, { linkOk: false })),
+      pack(drawHud({ lane: 'top', side: null, gap: 45 }, { linkOk: false })),
     );
 
     const next = FakeWebSocket.last();
@@ -197,13 +214,13 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     next.receive(stateFrame({ seq: 2, lane: 'top', gap: 45 }));
     await queue.whenIdle();
 
-    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(true));
+    expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
 
   it('reports a terminal close instead of spinning', async () => {
     const { bridge, socket, queue } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', gap: 10 }));
+    socket.receive(stateFrame({ lane: 'top', side: null, gap: 10 }));
     await queue.whenIdle();
 
     socket.close(4_401);
@@ -211,6 +228,26 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(statuses(bridge).at(-1)).toBe('PIN REJECTED');
     expect(FakeWebSocket.sockets).toHaveLength(1);
+  });
+
+  it('draws the side call carried by the room state (050, T052)', async () => {
+    const { bridge, socket, queue } = await harness();
+
+    socket.receive(stateFrame({ lane: 'mid', side: 'inside', gap: 20 }));
+    await queue.whenIdle();
+    expect(images(bridge).at(-1)?.imageData).toEqual(
+      pack(drawHud({ lane: 'mid', side: 'inside', gap: 20 }, { linkOk: true })),
+    );
+
+    // Clearing the side is a change like any other: one more frame, no lane
+    // or gap churn.
+    const before = images(bridge).length;
+    socket.receive(stateFrame({ seq: 2, lane: 'mid', side: null, gap: 20 }));
+    await queue.whenIdle();
+    expect(images(bridge).length).toBe(before + 1);
+    expect(images(bridge).at(-1)?.imageData).toEqual(
+      pack(drawHud({ lane: 'mid', side: null, gap: 20 }, { linkOk: true })),
+    );
   });
 
   it('shows ROOM ? until a room is configured', async () => {
