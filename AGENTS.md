@@ -57,6 +57,7 @@ One task → one fresh context → one commit. The serial runner takes the first
 
 ## Skills and roles by runtime
 
+- **Model routing (either vendor, per tier)**: worker = Sonnet 5 @ high **or** GPT 5.6 Terra @ high; reviewer = Opus 5 @ high **or** GPT 5.6 Sol @ high; planner = Opus 5 @ xhigh **or** GPT 5.6 Sol @ xhigh; auditor = Fable 5.1 / Opus 5 @ xhigh **or** GPT 5.6 Sol @ xhigh. Concrete IDs in `ralph/models.env`; the constitution's Roles table is the contract.
 - **Claude Code**: roles are subagents in `.claude/agents/` (generated; model/effort from `ralph/models.env`); project skills are preloaded per role and also available via the `Skill` tool; plugin skills as `/name` or namespaced `/everything-evenhub:name`.
 - **Codex**: `AGENTS.md` is read natively; skills in `.agents/skills/` are invoked implicitly or as `$name`; roles are `.codex/agents/*.toml` (generated) — requires `[features] multi_agent = true` and a trusted project; `ralph/loop.sh` with `RUNNER=codex` prepends the role file to each prompt instead.
 - Any other agent: read `agents/roles/<role>.md` + the skills it lists, then follow `ralph/PROMPT_*.md`.

@@ -34,8 +34,11 @@ The invariants every spec, plan, task, and review is measured against. If a task
 
 ## Roles
 
-| Tier | Roles | Does |
-|---|---|---|
-| worker | `g2-glasses-dev`, `relay-backend-dev`, `spotter-pwa-dev` | Implements exactly one plan task |
-| reviewer | `protocol-keeper`, `hud-qa` | Reviews the iteration's diff against the spec it claims to advance (`hud-qa` also owns `[SIM]` harness tasks when the plan names it — as a worker-tier run) |
-| planner | `plan-updater` | Reconciles specs ↔ code ↔ review; rewrites the plan; decides DONE |
+| Tier | Roles | Does | Claude model @ effort | OpenAI model @ effort |
+|---|---|---|---|---|
+| worker | `g2-glasses-dev`, `relay-backend-dev`, `spotter-pwa-dev` | Implements exactly one plan task | Sonnet 5 @ high | GPT 5.6 Terra @ high |
+| reviewer | `protocol-keeper`, `hud-qa` | Reviews the iteration's diff against the spec it claims to advance (`hud-qa` also owns `[SIM]` harness tasks when the plan names it — as a worker-tier run) | Opus 5 @ high | GPT 5.6 Sol @ high |
+| planner | `plan-updater` | Reconciles specs ↔ code ↔ review; rewrites the plan; decides DONE | Opus 5 @ xhigh | GPT 5.6 Sol @ xhigh |
+| auditor (human-invoked) | Maxx's final QA pass over an integration or a batch of iterations | Re-runs gates, dispatches independent reviewers, verifies their findings against source, records `docs/reviews/<date>-*.md` | Fable 5.1 (or Opus 5 @ xhigh) | GPT 5.6 Sol @ xhigh |
+
+Either vendor column is a complete, interchangeable routing: a run may mix them (a Claude worker and an OpenAI reviewer, or the reverse) as long as the tier's effort is honoured. The concrete IDs live in `ralph/models.env` (rule 20); this table is the human-readable contract and must be kept in step with it.

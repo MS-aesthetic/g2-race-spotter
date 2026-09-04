@@ -3,6 +3,15 @@
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
+## Model routing (either vendor per tier — pick per run, mixing is fine)
+
+| Tier | Claude | OpenAI |
+|---|---|---|
+| worker (every `owner:` task below) | Sonnet 5 @ high | GPT 5.6 Terra @ high |
+| reviewer (`protocol-keeper` / `hud-qa`) | Opus 5 @ high | GPT 5.6 Sol @ high |
+| planner (`plan-updater`) | Opus 5 @ xhigh | GPT 5.6 Sol @ xhigh |
+| auditor (human-invoked final QA) | Fable 5.1 / Opus 5 @ xhigh | GPT 5.6 Sol @ xhigh |
+
 ## Active stream leases (interactive coordinator only)
 
 - No active leases. Quarantined worktrees `L009` (`ralph/L009-T006c`, `1872085` + `stash@{0}` `d84a200`) and `L014` (`ralph/L014-T011c`, `581bead`) are superseded by the integrated commits below and are kept only for traceability; do not lease from them.

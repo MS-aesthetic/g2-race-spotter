@@ -7,6 +7,7 @@
 | build | worker | `PROMPT_build.md` | owner named by the task (`g2-glasses-dev` / `relay-backend-dev` / `spotter-pwa-dev`) | Sonnet 5 @ high | GPT 5.6 Terra @ high |
 | review | reviewer | `PROMPT_review.md` | `protocol-keeper` (protocol/relay diffs) or `hud-qa` | Opus 5 @ high | GPT Sol 5.6 @ high |
 | replan | planner | `PROMPT_replan.md` | `plan-updater` | Opus 5 @ xhigh | GPT Sol 5.6 @ xhigh |
+| audit (human-invoked, outside the loop) | auditor | — | Fable 5.1 as final QA over a batch; writes `docs/reviews/<date>-*.md` | Fable 5.1 / Opus 5 @ xhigh | GPT 5.6 Sol @ xhigh |
 
 Routing lives in `ralph/models.env`; `npm run sync:agents` pushes it into `.claude/agents/*.md` and `.codex/agents/*.toml`. Role prompts never mention a model.
 
