@@ -163,10 +163,15 @@ const orphanDirs = [
   join(root, '.codex/agents'),
   join(root, '.claude/skills'),
 ];
+// Only files this script generated are orphans. Agent files installed by plugins
+// or by hand (no GENERATED marker) are left alone; the skills mirror is fully owned.
+const generatedByUs = (p) =>
+  p.includes('skills') ||
+  readFileSync(p, 'utf8').includes('by scripts/sync-agents.mjs');
 const orphans = orphanDirs
   .filter(existsSync)
   .flatMap((d) => walk(d).map((r) => join(d, r)))
-  .filter((p) => !wanted.has(p));
+  .filter((p) => !wanted.has(p) && generatedByUs(p));
 for (const p of orphans) {
   if (check) {
     console.error(`orphan: ${p}`);
