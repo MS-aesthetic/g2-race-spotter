@@ -5,6 +5,7 @@ import { nextAlarmAt } from './alarm.js';
 import {
   CLOSE_CODE_AUTH,
   CLOSE_CODE_BAD_HELLO,
+  CLOSE_CODE_DRIVER_EVICTED,
   CLOSE_CODE_VERSION,
   createInitialState,
   isClientMessage,
@@ -265,6 +266,33 @@ export class RaceRoom extends DurableObject<Env> {
           'PIN does not match room',
         );
         return;
+      }
+
+      if (attachment.role === 'driver') {
+        const staleDrivers = this.ctx
+          .getWebSockets('driver')
+          .filter((existing) => {
+            if (existing === socket) {
+              return false;
+            }
+            const existingAttachment = this.attachment(existing);
+            return (
+              existingAttachment?.ready === true &&
+              existingAttachment.rejected !== true
+            );
+          });
+        for (const stale of staleDrivers) {
+          const staleAttachment = this.attachment(stale);
+          if (staleAttachment !== undefined) {
+            this.rejectSocket(
+              stale,
+              staleAttachment,
+              { t: 'error', code: 'role_taken' },
+              CLOSE_CODE_DRIVER_EVICTED,
+              'driver role taken by a newer connection',
+            );
+          }
+        }
       }
 
       socket.serializeAttachment({ ...attachment, ready: true });
