@@ -7,6 +7,7 @@ import {
   createInitialState,
   isClientMessage,
   isHello,
+  isPing,
   reduce,
   ROOM_TTL_MS,
   type ErrorMessage,
@@ -198,6 +199,13 @@ export class RaceRoom extends DurableObject<Env> {
       return;
     }
 
+    if (isPing(value)) {
+      const serverTs = Date.now();
+      socket.serializeAttachment({ ...attachment, lastPing: serverTs });
+      socket.send(serialize({ t: 'pong', ts: value.ts, serverTs }));
+      return;
+    }
+
     const state = await this.loadState();
     const next = reduce(
       state,
@@ -207,31 +215,35 @@ export class RaceRoom extends DurableObject<Env> {
     if (next !== state) {
       await this.persistAndBroadcast(next);
     }
-    await this.scheduleAlarm(next);
   }
 
   async webSocketClose(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
+    let state = await this.loadState();
     if (attachment?.ready === true && attachment.role !== null) {
       const peers = await this.reconcilePeers(undefined, socket);
-      await this.scheduleAlarm(peers.state, socket);
+      state = peers.state;
     }
+    await this.scheduleAlarm(state, socket);
   }
 
   async webSocketError(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
+    let state = await this.loadState();
     if (attachment?.ready === true && attachment.role !== null) {
       const peers = await this.reconcilePeers(undefined, socket);
-      await this.scheduleAlarm(peers.state, socket);
+      state = peers.state;
     }
+    await this.scheduleAlarm(state, socket);
   }
 
   private async expireRoom(state: State): Promise<void> {
-    this.state = reduce(
+    const expired = reduce(
       state,
       { t: 'expire' },
       { now: Date.now(), newId: () => crypto.randomUUID() },
     );
+    await this.persistAndBroadcast(expired);
     await this.ctx.storage.deleteAll();
     this.state = undefined;
   }
@@ -243,8 +255,6 @@ export class RaceRoom extends DurableObject<Env> {
         await this.expireRoom(state);
         return;
       }
-      await this.scheduleAlarm(state);
-      return;
     }
 
     await this.scheduleAlarm(state);
