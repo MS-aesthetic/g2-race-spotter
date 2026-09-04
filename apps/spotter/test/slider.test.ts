@@ -1,7 +1,7 @@
 import { GAP_SEND_MIN_MS } from '@g2-race-spotter/protocol';
 import { describe, expect, it } from 'vitest';
 
-import { createGapThrottle } from '../src/intents.ts';
+import { createGapThrottle, nextSide } from '../src/intents.ts';
 
 function harness() {
   const sent: number[] = [];
@@ -129,5 +129,18 @@ describe('AC-2 gap throttle', () => {
     throttle.release(30);
 
     expect(sent).toEqual([30, 30]);
+  });
+});
+
+describe('side toggle (T052)', () => {
+  it('sets the tapped side and clears it on a second tap', () => {
+    expect(nextSide(null, 'inside')).toBe('inside');
+    expect(nextSide(null, 'outside')).toBe('outside');
+    // Tapping the lit button is how the spotter says the car has gone.
+    expect(nextSide('inside', 'inside')).toBeNull();
+    expect(nextSide('outside', 'outside')).toBeNull();
+    // Tapping the other one switches sides without a clear in between.
+    expect(nextSide('inside', 'outside')).toBe('outside');
+    expect(nextSide('outside', 'inside')).toBe('inside');
   });
 });

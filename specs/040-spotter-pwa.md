@@ -41,6 +41,8 @@ R7. Bundle MUST be ≤ 40 KB gzipped for JS; service worker MUST never intercept
 
 - 2026-09-04 Round-trip latency is derived in the spotter's `RoomClient` wrapper by teeing inbound `pong` frames through the injected `WebSocket` constructor — why: `RoomClient` treats `pong` as liveness only; promoting an `onLatency` hook into `packages/protocol` is a separate task if a third client ever needs it.
 
+- 2026-09-04 (Maxx) **Design round 1 — CAR INSIDE / CAR OUTSIDE.** The console gains two amber toggle buttons under the car-behind slider, ≥ 56 px tall, that send the new `side` message. Selected state comes from `state.side` with the same ≤ 300 ms optimistic highlight as the lanes; tapping the lit button sends `side: null`, so there is no separate clear control to find with a car alongside. Header, lane stack, slider and message box are unchanged.
+
 ## Open questions
 
 - Haptic feedback on lane tap: Android only via `navigator.vibrate`; acceptable?

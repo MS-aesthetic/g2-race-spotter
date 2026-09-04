@@ -51,6 +51,8 @@ R6. `fake-spotter` MUST support scenarios `lanes`, `gap-sweep`, `message-ack`, `
 
 - 2026-09-04 (Maxx) Per-socket rate limiting removed from R4 (human decision, not an agent weakening). AC-9 (byte cap, unknown `t`) stays and is built with AC-7 in one relay task. `fake-spotter` scenarios (R6) are deferred: real phones are the scenario runner; AC-10's deployed proof uses the spotter PWA and the glasses app instead.
 
+- 2026-09-04 (Maxx) **Design round 1 — the `side` call.** A spotter-only message `{t:'side', side:'inside'|'outside'|null}` and an additive `State.side` (initial `null`) carry "a car is trying to pass on that side". The reducer treats it exactly like `lane` (no-op on the same value: no `seq` bump, no broadcast), the relay needs no new code (it validates with `isClientMessage` and reduces generically, and the reducer enforces the spotter-only rule), and `RoomClient` queues the latest `side` while offline alongside the latest `lane`/`gap`. `PROTOCOL_VERSION` stays 1: the field is additive, `isState` accepts a frame without it and `RoomClient` reports `null` for it, so the existing "ship the relay first" rule covers the rollout.
+
 ## Open questions
 
 - Should multiple spotters be allowed in v1 UI? Protocol allows it; UI assumes one.

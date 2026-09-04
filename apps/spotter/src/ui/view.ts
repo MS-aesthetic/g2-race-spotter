@@ -1,6 +1,12 @@
-import { MSG_MAX_CHARS, type Lane } from '@g2-race-spotter/protocol';
+import { MSG_MAX_CHARS, type Lane, type Side } from '@g2-race-spotter/protocol';
 
-import { isLatencyStale, isLive, selectedLane, type Model } from '../model.ts';
+import {
+  isLatencyStale,
+  isLive,
+  selectedLane,
+  selectedSide,
+  type Model,
+} from '../model.ts';
 import { isValidRoom } from '../storage.ts';
 import { h, type VNode } from './vdom.ts';
 
@@ -16,6 +22,18 @@ const LANES: readonly LaneButton[] = [
   { lane: 'top', glyph: '▲', label: 'TOP' },
   { lane: 'mid', glyph: '●', label: 'MIDDLE' },
   { lane: 'bot', glyph: '▼', label: 'BOTTOM' },
+];
+
+interface SideButton {
+  side: Side;
+  glyph: string;
+  label: string;
+}
+
+/** Same order as the glasses' bottom band: ◀ on the left, ▶ on the right. */
+const SIDES: readonly SideButton[] = [
+  { side: 'inside', glyph: '◀', label: 'CAR INSIDE' },
+  { side: 'outside', glyph: '▶', label: 'CAR OUTSIDE' },
 ];
 
 const GAP_CHIPS: readonly number[] = [0, 25, 50, 75, 100];
@@ -188,6 +206,39 @@ function gapSection(model: Model): VNode {
   ]);
 }
 
+/**
+ * Two toggles under the slider: a car alongside on the inside or the outside.
+ * Tapping the lit one clears the call (`side: null`), which is why these are
+ * `aria-pressed` toggles and not a radio group.
+ */
+function sideSection(model: Model): VNode {
+  const selected = selectedSide(model);
+
+  return h(
+    'section',
+    { class: 'sides' },
+    SIDES.map((button) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          class: button.side === selected ? 'side is-selected' : 'side',
+          'data-act': 'side',
+          'data-arg': button.side,
+          'data-side': button.side,
+          'aria-pressed': button.side === selected ? 'true' : 'false',
+        },
+        [
+          h('span', { class: 'side__glyph', 'aria-hidden': 'true' }, [
+            button.glyph,
+          ]),
+          h('span', { class: 'side__label' }, [button.label]),
+        ],
+      ),
+    ),
+  );
+}
+
 function messageSection(model: Model): VNode {
   return h('section', { class: 'msg' }, [
     h('input', {
@@ -247,6 +298,7 @@ function consoleView(model: Model): VNode {
       laneStack(model),
       h('div', { class: 'console__right' }, [
         gapSection(model),
+        sideSection(model),
         messageSection(model),
       ]),
     ]),

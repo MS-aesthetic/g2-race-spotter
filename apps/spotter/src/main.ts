@@ -3,6 +3,7 @@ import type {
   ConnectionState,
   Lane,
   RoomClient,
+  Side,
   State,
 } from '@g2-race-spotter/protocol';
 import {
@@ -11,11 +12,12 @@ import {
   PING_INTERVAL_MS,
 } from '@g2-race-spotter/protocol';
 
-import { createGapThrottle, normaliseMessage } from './intents.ts';
+import { createGapThrottle, nextSide, normaliseMessage } from './intents.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
   selectedLane,
+  selectedSide,
   type Model,
 } from './model.ts';
 import {
@@ -167,6 +169,16 @@ function setLane(lane: Lane | null): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
+/** Tapping the lit side clears the call; tapping the other switches to it. */
+function setSide(side: Side): void {
+  const next = nextSide(selectedSide(model), side);
+
+  vibrate();
+  client.send({ t: 'side', side: next });
+  update({ optimisticSide: { side: next, at: Date.now() } });
+  window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
+}
+
 function actionOf(
   event: Event,
 ): { act: string; arg: string; el: Element } | null {
@@ -206,6 +218,9 @@ root.addEventListener('click', (event) => {
       break;
     case 'lane-clear':
       setLane(null);
+      break;
+    case 'side':
+      setSide(action.arg as Side);
       break;
     case 'gap-chip': {
       const value = Number(action.arg);

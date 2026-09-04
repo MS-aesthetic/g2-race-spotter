@@ -11,6 +11,7 @@ function stateWith(overrides: Partial<State> = {}): State {
     t: 'state',
     seq: 1,
     lane: null,
+    side: null,
     gap: 0,
     msg: null,
     spotterOnline: true,
@@ -107,6 +108,74 @@ describe('AC-1 lane selection and driver status', () => {
     expect(
       root.querySelector('[data-testid="header-latency"]')!.className,
     ).toContain('is-stale');
+  });
+});
+
+describe('car inside / car outside (T052)', () => {
+  it('offers both side toggles under the slider, unlit by default', () => {
+    render(consoleModel());
+
+    const buttons = [...root.querySelectorAll('[data-act="side"]')];
+    expect(buttons.map((el) => el.getAttribute('data-side'))).toEqual([
+      'inside',
+      'outside',
+    ]);
+    expect(
+      [...root.querySelectorAll('.side__label')].map((el) => el.textContent),
+    ).toEqual(['CAR INSIDE', 'CAR OUTSIDE']);
+    expect(
+      [...root.querySelectorAll('.side__glyph')].map((el) => el.textContent),
+    ).toEqual(['◀', '▶']);
+    expect(root.querySelectorAll('.side.is-selected')).toHaveLength(0);
+    // Under the slider, above the message box — the console order the spotter
+    // reads top to bottom.
+    const order = [...root.querySelectorAll('.gap, .sides, .msg')].map(
+      (el) => el.className.split(' ')[0],
+    );
+    expect(order).toEqual(['gap', 'sides', 'msg']);
+  });
+
+  it('lights the side the room state carries, and only that one', () => {
+    render(consoleModel({ state: stateWith({ side: 'outside' }) }));
+
+    const selected = root.querySelectorAll('.side.is-selected');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.getAttribute('data-side')).toBe('outside');
+    expect(selected[0]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows the optimistic tap first, then reconciles to the room', () => {
+    // Tap: lit immediately even though the relay has not answered yet.
+    render(
+      consoleModel({
+        state: stateWith({ side: null }),
+        optimisticSide: { side: 'inside', at: 5_000 },
+        now: 5_100,
+      }),
+    );
+    expect(
+      root.querySelector('.side.is-selected')!.getAttribute('data-side'),
+    ).toBe('inside');
+
+    // The window closes and the room still says nothing: the highlight drops.
+    render(
+      consoleModel({
+        state: stateWith({ side: null }),
+        optimisticSide: { side: 'inside', at: 5_000 },
+        now: 5_400,
+      }),
+    );
+    expect(root.querySelectorAll('.side.is-selected')).toHaveLength(0);
+  });
+
+  it('keeps the side buttons stable across a reconnect', () => {
+    render(consoleModel());
+    const sides = [...root.querySelectorAll('.side')];
+
+    render(consoleModel({ conn: 'closed', state: null }));
+
+    expect([...root.querySelectorAll('.side')]).toEqual(sides);
+    expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
   });
 });
 

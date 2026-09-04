@@ -14,6 +14,7 @@ The spotter is standing outside, glancing between the track and the phone, often
    - **Status header** (sticky): `ROOM CAR42 · DRIVER ONLINE · 180 ms` and, when a message is outstanding, `✓ acked` / `… waiting`. Driver offline turns the header amber; socket down turns the whole header red with `RECONNECTING`.
    - **Lane stack**: three full-width buttons ≥ 88 px tall, in glasses order ▲ / ● / ▼ with the words TOP / MIDDLE / BOTTOM beside the glyph. Selected = solid bright fill with dark glyph; unselected = dark fill with bright glyph and a 2 px border. A small "clear lane" text button under the stack sends `lane: null`.
    - **Car behind**: a horizontal slider spanning the width, thick track (≥ 44 px hit height), labelled `CLEAR` at 0 and `ON BUMPER` at 100, current value shown large. Chips `0 · 25 · 50 · 75 · 100`. The track fill colour shifts toward red above 75 to mirror the glasses' inverted bar at ≥ 90.
+   - **Car alongside**: two toggle buttons under the slider, side by side, ≥ 56 px tall — `◀ CAR INSIDE` and `▶ CAR OUTSIDE` (Maxx, 2026-09-04). Amber, so they read as a warning and never as another lane call. Tapping one sends `side`; tapping the lit one sends `side: null` (the car has gone) — there is no separate clear control. Selected state comes from `state.side`, with the same ≤ 300 ms optimistic highlight as the lanes.
    - **Message**: single-line input (maxlength 80), `Send` (primary) and `Clear` (secondary). Below it, up to 5 recent messages as chips; tapping a chip sends it immediately.
    - Bottom safe area padded (`env(safe-area-inset-bottom)`).
 
@@ -22,11 +23,12 @@ Landscape: lane stack on the left third, slider + message on the right. Never le
 ## Behaviour
 
 - Lane tap → `lane` immediately; button reflects *server* state from the next `state` frame (optimistic highlight allowed for ≤ 300 ms, then reconcile). Tapping the already-selected lane does nothing.
+- Side tap → `side` immediately, same optimistic rule. Unlike a lane, tapping the *selected* side is meaningful: it sends `side: null`. `nextSide(current, tapped)` in `intents.ts` is that one decision, kept pure so it is unit-tested without a DOM.
 - Slider: emit `gap` at most every `GAP_SEND_MIN_MS` (100 ms) while dragging and once on `change`; ignore sub-1-point jitter. Chips send once.
 - Send: trim, cap 80, send `msg`, clear input, push to recent chips (dedupe, keep 5). Clear sends `clear`.
 - Reconnect: handled by the shared `RoomClient` — on `open` it sends `hello`, takes the replayed `state` as truth, then flushes only intents queued *while the socket was down* (latest `lane`, latest `gap`, any `msg`/`clear` in order). Never re-send an already-delivered `msg` (each `msg` gets a new id and would duplicate). Show the banner until the first `state` arrives, then reconcile the UI to it.
 - Latency: round trip from the `ping`/`pong` pair (`pong.ts` field is the client's send timestamp), EWMA over 5 samples, shown in the header; grey out if older than 10 s.
-- Haptics: `navigator.vibrate?.(10)` on lane tap and send (Android only; harmless elsewhere).
+- Haptics: `navigator.vibrate?.(10)` on lane tap, side tap and send (Android only; harmless elsewhere).
 
 ## Visual system
 
@@ -54,4 +56,4 @@ sw.ts            service worker
 styles.css
 ```
 
-Keep `view()` pure enough to unit-test with jsdom: given a `State` and a connection status, assert which lane is highlighted, the header text, and the banner presence.
+Keep `view()` pure enough to unit-test with jsdom: given a `State` and a connection status, assert which lane and which side are highlighted, the header text, and the banner presence.

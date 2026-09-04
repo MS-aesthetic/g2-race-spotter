@@ -22,11 +22,13 @@ description: The wire protocol and room-state semantics shared by the spotter PW
 ```ts
 export const PROTOCOL_VERSION = 1;               // major only; bump = breaking
 export type Lane = 'top' | 'mid' | 'bot';
+export type Side = 'inside' | 'outside';         // a car trying to pass
 export type Role = 'spotter' | 'driver';
 
 // client → room
 type Hello = { t:'hello'; v:number; role:Role; name?:string };
 type SetLane = { t:'lane'; lane:Lane|null };
+type SetSide = { t:'side'; side:Side|null };     // null = the car has gone
 type SetGap  = { t:'gap';  value:number };       // 0..100 integer; server clamps+rounds
 type SetMsg  = { t:'msg';  text:string };        // 1..80 chars, trimmed; server assigns id
 type Clear   = { t:'clear' };                    // clears msg only
@@ -36,7 +38,7 @@ type Ping    = { t:'ping'; ts:number };
 // room → client
 type State = {
   t:'state'; seq:number;
-  lane:Lane|null; gap:number;
+  lane:Lane|null; side:Side|null; gap:number;
   msg:{ id:string; text:string; ts:number; ackedAt:number|null } | null;
   spotterOnline:boolean; driverOnline:boolean;
   updatedAt:number;                              // server ms epoch
@@ -47,7 +49,8 @@ type Error = { t:'error'; code:'version'|'auth'|'role_taken'|'bad_frame'|'rate';
 
 Rules:
 
-- Only a `spotter` may send `lane`/`gap`/`msg`/`clear`; only a `driver` may send `ack`. Wrong-role frames are ignored and counted.
+- Only a `spotter` may send `lane`/`side`/`gap`/`msg`/`clear`; only a `driver` may send `ack`. Wrong-role frames are ignored and counted.
+- `side` is the "car alongside" call, independent of `lane` and `gap`: `inside` → the glasses draw ◀ at the left of the bitmap's bottom band, `outside` → ▶ at the right, `null` → neither. It was added within `PROTOCOL_VERSION 1` as an additive field (2026-09-04), so `isState` accepts a `state` frame that has no `side` key and `RoomClient` hands consumers `null` for it — ship the relay before the clients, as the versioning rule below already requires.
 - One driver per room, **last writer wins**: when a new driver joins **and passes the PIN check**, the relay sends `error{code:"role_taken"}` + close 4409 to the *previous* driver socket (which is usually a dead socket left behind by an Android suspend or a network switch) and accepts the new one. The driver must never be locked out by its own stale connection. Multiple spotters are allowed by the protocol (v1 UI assumes one).
 - Unknown `t`: ignore. Malformed frame: `error{code:"bad_frame"}`, keep the socket — except a `hello` that contradicts the URL's role/name, which closes 4400 after the error frame.
 - Every `state` broadcast goes to **all** sockets (spotters too — that is how the spotter sees `driverOnline` and `ackedAt`).
@@ -60,8 +63,8 @@ Rules:
 
 Pure, total. `ctx = { now: number, newId: () => string }` is injected by the caller (the relay passes `Date.now` and a ULID generator; tests pass fixed values). Events are inbound client messages tagged with role, plus internal `{t:'peer', role, online}` and `{t:'expire'}`.
 
-- `lane` → set `lane`. `gap` → `gap = clamp(round(value),0,100)`. `msg` → `msg = {id: ctx.newId(), text, ts: ctx.now, ackedAt: null}`. `clear` → `msg = null`. `ack` with matching id → `ackedAt = ctx.now`; non-matching or already-acked id ignored. `peer` → set the online flag (no-op if unchanged). `expire` → return the initial state (used by the TTL alarm before `deleteAll`). Any change bumps `seq` and sets `updatedAt`; a no-op (same lane, same gap, same online flag) does **not** bump `seq` or broadcast.
-- Initial state: `{seq:0, lane:null, gap:0, msg:null, spotterOnline:false, driverOnline:false, updatedAt:0}`.
+- `lane` → set `lane`. `side` → set `side`. `gap` → `gap = clamp(round(value),0,100)`. `msg` → `msg = {id: ctx.newId(), text, ts: ctx.now, ackedAt: null}`. `clear` → `msg = null`. `ack` with matching id → `ackedAt = ctx.now`; non-matching or already-acked id ignored. `peer` → set the online flag (no-op if unchanged). `expire` → return the initial state (used by the TTL alarm before `deleteAll`). Any change bumps `seq` and sets `updatedAt`; a no-op (same lane, same side, same gap, same online flag) does **not** bump `seq` or broadcast.
+- Initial state: `{seq:0, lane:null, side:null, gap:0, msg:null, spotterOnline:false, driverOnline:false, updatedAt:0}`.
 - Because `peer` flips also bump `seq`, tests must assert `seq > 0` / `seq ≥ previous` and compare values, never an exact `seq` number.
 
 ## Timings (exported constants, never re-typed)
@@ -84,7 +87,7 @@ Pure, total. `ctx = { now: number, newId: () => string }` is injected by the cal
 
 One `RoomClient` used by both the spotter PWA and the glasses app, **built in Phase 1 alongside the relay** so neither app writes its own: `connect(url)`, `send(msg)`, `onState(cb)`, `onConnection(cb)` (`connecting|open|closed`), automatic `hello`, ping loop, backoff reconnect, `lastSeq` filtering (reset to 0 on each open), `lastFrameAt` for NO LINK (`undefined` until the first frame of the current session — consumers treat `undefined` as *no link*), `onError(cb)` for `error` frames, and the close code on the `closed` connection callback so UIs can tell a terminal rejection (`auth`, `role_taken`, `version`) from a reconnecting drop. It takes a `WebSocket` constructor as a parameter so Node tests can inject `ws`. No DOM or bridge references inside. `reconnectAttempt` resets only after the first valid `state` replay of a socket (an `open` that closes before replay is not success), and every reconnect delay is clamped to `[RECONNECT_MIN_MS, RECONNECT_MAX_MS]` after jitter.
 
-Reconnect rule: on re-open the client sends `hello` and waits for the replayed `state`; it does **not** blindly re-send its last intents. The room already holds them. Only intents the user issued *while the socket was down* are queued (latest `lane`, latest `gap`, and any `msg`/`clear` in order) and flushed after the replay. Never re-send an already-delivered `msg` — every `msg` creates a new id and would duplicate.
+Reconnect rule: on re-open the client sends `hello` and waits for the replayed `state`; it does **not** blindly re-send its last intents. The room already holds them. Only intents the user issued *while the socket was down* are queued (latest `lane`, latest `side`, latest `gap`, and any `msg`/`clear` in order) and flushed after the replay. Never re-send an already-delivered `msg` — every `msg` creates a new id and would duplicate.
 
 ## Storage keys
 

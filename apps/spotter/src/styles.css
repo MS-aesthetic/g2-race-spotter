@@ -292,6 +292,44 @@ button {
   color: #9fb2bf;
 }
 
+/* ---------- Car alongside ---------- */
+
+.sides {
+  display: flex;
+  gap: 10px;
+}
+
+.side {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 2px solid var(--amber);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--amber);
+  transition: background 120ms linear;
+}
+
+.side.is-selected {
+  background: var(--amber);
+  color: #1a1200;
+}
+
+.side__glyph {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.side__label {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 .gap__chips,
 .msg__chips {
   display: flex;

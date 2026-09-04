@@ -1,4 +1,8 @@
-import { GAP_SEND_MIN_MS, MSG_MAX_CHARS } from '@g2-race-spotter/protocol';
+import {
+  GAP_SEND_MIN_MS,
+  MSG_MAX_CHARS,
+  type Side,
+} from '@g2-race-spotter/protocol';
 
 export interface GapThrottleOptions {
   send(value: number): void;
@@ -74,6 +78,15 @@ export function createGapThrottle(options: GapThrottleOptions): GapThrottle {
       lastSentAt = Number.NEGATIVE_INFINITY;
     },
   };
+}
+
+/**
+ * What a tap on a side button sends. The buttons are toggles: tapping the one
+ * that is already lit means "that car is gone" and clears the call, so the
+ * spotter never has to find a separate clear control with a car alongside.
+ */
+export function nextSide(current: Side | null, tapped: Side): Side | null {
+  return current === tapped ? null : tapped;
 }
 
 /**

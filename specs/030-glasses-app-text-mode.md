@@ -49,6 +49,8 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 - 2026-09-04 (Maxx) **Image mode is built first and is the primary HUD; text mode is an ASCII-only fallback.** The HUD is drawn as a bitmap by `drawHud(state)` composed from drawing primitives in one editable design module, so the visual design (e.g. triangles made of bar segments) can change without touching the pipeline. AC-1–AC-6 of this spec are satisfied by the consolidated glasses task together with 050; the text renderer keeps AC-1/AC-2's layout but with ASCII characters (`^`/`o`/`v`, `#`/`-`). AC-7 `[SIM]` runs in image mode by default (050 AC-5b); a text-mode pass is optional.
 - 2026-09-04 (Maxx) Update-rate criteria are not a priority for v1; the 250 ms coalescing stays because it protects the BLE channel, but timing tuning is deferred to hardware testing.
 
+- 2026-09-04 (Maxx) **Design round 1 — page layout and the status strip.** The message text container moves to the TOP of the canvas (16, 8, 544×96), the HUD image sits under it (144, 108, 288×144) and the status strip moves to the BOTTOM RIGHT (480, 258, 80×28). The strip is no longer a sentence: it is `L` for the link — solid when up, **blinking every 700 ms when down** — plus `S` only while `spotterOnline` (`L S` / `L` / `  S` / empty). The blink is a `status` job driven by a timer that exists only while the strip blinks; it must never cost an image send. `ROOM ?`, `CONNECTING…` and the terminal-close strings are unchanged. The text-mode HUD gains a third line, `<` or `>`, for the side call.
+
 ## Open questions
 
 - Message auto-clear after N seconds vs tap-to-ack only (currently tap-to-ack).
