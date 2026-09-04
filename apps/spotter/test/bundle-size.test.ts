@@ -1,16 +1,20 @@
 import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
-import { readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { shellAssets } from '../src/sw.ts';
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = join(APP_ROOT, 'dist');
+// Build into a temporary directory, never into `apps/spotter/dist`: the relay's
+// live tests run in parallel and assert that the real spotter assets are left
+// untouched, so writing there mid-run is a cross-test race.
+const DIST = mkdtempSync(join(tmpdir(), 'g2rs-spotter-dist-'));
 const BUDGET_BYTES = 40 * 1024;
 
 /** AC-5 measures what ships, so this runs the real `vite build` rather than
@@ -21,8 +25,7 @@ function build(): void {
   const require = createRequire(import.meta.url);
   const packageJson = require.resolve('vite/package.json');
   const viteBin = join(dirname(packageJson), 'bin', 'vite.js');
-  rmSync(DIST, { recursive: true, force: true });
-  execFileSync(process.execPath, [viteBin, 'build'], {
+  execFileSync(process.execPath, [viteBin, 'build', '--outDir', DIST], {
     cwd: APP_ROOT,
     stdio: 'pipe',
   });
@@ -30,6 +33,7 @@ function build(): void {
 
 describe('AC-5 bundle budget', () => {
   beforeAll(() => build(), 180_000);
+  afterAll(() => rmSync(DIST, { recursive: true, force: true }));
 
   it('keeps the shipped JS at or under 40 KB gzipped', () => {
     const scripts = [

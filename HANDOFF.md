@@ -29,6 +29,8 @@ Use one isolated lease, one fresh worker, one task, and one commit. A fresh `pro
 ```powershell
 $env:Path='C:\Users\maxx\.cache\g2-race-spotter-node22\node-v22.23.2-win-x64;'+$env:Path
 $env:npm_config_cache='C:\Users\maxx\.cache\g2rs-npm-main'
+$env:NODE_ENV=''            # this machine sets NODE_ENV=production system-wide; without this, npm ci skips every devDependency
+npm ci --include=dev
 npm run typecheck
 npm test
 npm run lint
