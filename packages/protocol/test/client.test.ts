@@ -247,6 +247,22 @@ describe('RoomClient', () => {
     expect(client.lastFrameAt).toBeUndefined();
   });
 
+  it('clears lastFrameAt on a terminal close because no reconnect will follow', () => {
+    FakeWebSocket.reset();
+    const timers = new FakeTimers();
+    const client = createClient(timers, { now: () => 5_000 });
+
+    client.connect('ws://relay.test/room/CAR42?role=driver');
+    const socket = FakeWebSocket.sockets[0];
+    socket.open();
+    socket.receive(state(1));
+    expect(client.lastFrameAt).toBe(5_000);
+
+    socket.fail(CLOSE_CODE_DRIVER_EVICTED);
+    expect(client.lastFrameAt).toBeUndefined();
+    expect(timers.timeouts.size).toBe(0);
+  });
+
   it('drops, reopens, waits for replay, and flushes only disconnected intents', () => {
     FakeWebSocket.reset();
     const timers = new FakeTimers();

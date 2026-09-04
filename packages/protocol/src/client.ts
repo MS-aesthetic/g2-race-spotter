@@ -319,6 +319,11 @@ export class RoomClient {
     this.socket = undefined;
     this.replayed = false;
     this.clearPingTimer();
+    if (isTerminalClose(event)) {
+      // No reconnect follows a terminal close: the last frame of the dead
+      // session must not keep the NO LINK watchdog quiet.
+      this.lastFrameAt = undefined;
+    }
     this.setConnectionState('closed');
     if (!isTerminalClose(event)) {
       this.scheduleReconnect();

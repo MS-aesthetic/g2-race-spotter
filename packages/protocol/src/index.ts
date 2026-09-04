@@ -16,8 +16,14 @@ export {
 
 export {
   RoomClient,
+  type ConnectionState,
+  type RoomClientIntent,
+  type RoomClientOptions,
   type RoomClientTimers,
   type RoomWebSocket,
+  type RoomWebSocketConstructor,
+  type WebSocketCloseEvent,
+  type WebSocketMessageEvent,
 } from './client.ts';
 
 export const PROTOCOL_VERSION = 1;
