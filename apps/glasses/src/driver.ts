@@ -12,7 +12,7 @@ import type {
   State,
 } from '@g2-race-spotter/protocol';
 
-import { HudApp, type RenderSink } from './app.ts';
+import { HudApp, MSG_AUTO_ACK_MS, type RenderSink } from './app.ts';
 import type { Bridge, BridgeLogger } from './bridge.ts';
 import { createInputHandler } from './input.ts';
 import { createLinkWatchdog, STATUS_BLINK_MS } from './link.ts';
@@ -35,12 +35,17 @@ export interface DriverClient {
 export interface IntervalTimers {
   setInterval(callback: () => void, delayMs: number): number;
   clearInterval(handle: number): void;
+  setTimeout(callback: () => void, delayMs: number): number;
+  clearTimeout(handle: number): void;
 }
 
 const browserIntervals: IntervalTimers = {
   setInterval: (callback, delayMs) =>
     globalThis.setInterval(callback, delayMs) as unknown as number,
   clearInterval: (handle) => globalThis.clearInterval(handle),
+  setTimeout: (callback, delayMs) =>
+    globalThis.setTimeout(callback, delayMs) as unknown as number,
+  clearTimeout: (handle) => globalThis.clearTimeout(handle),
 };
 
 export interface DriverOptions {
@@ -101,6 +106,65 @@ export function startDriver(options: DriverOptions): Driver {
     app.resetBlink();
   };
 
+  // A message clears itself `MSG_AUTO_ACK_MS` after it first reached the
+  // screen, and acks itself on the way out so the relay's state and the
+  // spotter's tick agree with what the driver can actually see. The timer is
+  // per message id: a re-render of the same message must not extend its life,
+  // and a new message starts a fresh five seconds.
+  let msgTimer: number | undefined;
+  let msgTimerFor: string | undefined;
+  let shownMsgId: string | undefined;
+  let shownAt = 0;
+  /** Message this session has already acked — from a tap or from the timer. */
+  let settledMsgId: string | undefined;
+
+  const clearMsgTimer = (): void => {
+    if (msgTimer !== undefined) {
+      timers.clearTimeout(msgTimer);
+      msgTimer = undefined;
+    }
+    msgTimerFor = undefined;
+  };
+
+  const syncMessageTimer = (): void => {
+    const msgId = app.unackedMessageId();
+    if (msgId === undefined) {
+      clearMsgTimer();
+      shownMsgId = undefined;
+      return;
+    }
+
+    if (msgId !== shownMsgId) {
+      shownMsgId = msgId;
+      shownAt = options.now();
+    }
+
+    if (msgId === settledMsgId) {
+      clearMsgTimer();
+      return;
+    }
+
+    if (msgTimerFor === msgId) {
+      return;
+    }
+
+    clearMsgTimer();
+    msgTimerFor = msgId;
+    // Measured from first render, not from this frame: an unrelated `state`
+    // (a gap change, say) must not buy the message another five seconds.
+    const remaining = Math.max(0, MSG_AUTO_ACK_MS - (options.now() - shownAt));
+    msgTimer = timers.setTimeout(() => {
+      msgTimer = undefined;
+      msgTimerFor = undefined;
+      const stillUnacked = app.unackedMessageId() === msgId;
+      settledMsgId = msgId;
+      app.hideMessage(msgId);
+      if (stillUnacked) {
+        app.ack(msgId);
+      }
+    }, remaining);
+  };
+
   const watchdog = createLinkWatchdog({
     now: options.now,
     lastFrameAt: () => client.lastFrameAt,
@@ -113,6 +177,10 @@ export function startDriver(options: DriverOptions): Driver {
     now: options.now,
     shutDownPageContainer: (exitMode) => bridge.shutDownPageContainer(exitMode),
     ack: (msgId) => {
+      // The tap is the ack; the auto-clear timer has nothing left to do. The
+      // text still stays up until the relay's next `state` says `ackedAt`.
+      settledMsgId = msgId;
+      clearMsgTimer();
       app.ack(msgId);
     },
     unackedMessageId: () => app.unackedMessageId(),
@@ -138,6 +206,7 @@ export function startDriver(options: DriverOptions): Driver {
         applyingState = false;
       }
       syncBlink();
+      syncMessageTimer();
 
       // Fresh truth from the relay: an ack that never left is tappable again.
       input.resetAckGuard();
@@ -147,7 +216,12 @@ export function startDriver(options: DriverOptions): Driver {
       watchdog.check();
       syncBlink();
       if (connection !== 'open') {
+        // `RoomClient.send` drops an ack while the socket is down, so the one
+        // this session "settled" may never have left. Forget it: the replayed
+        // state re-arms the timer and the message clears on the next window.
         input.resetAckGuard();
+        settledMsgId = undefined;
+        syncMessageTimer();
       }
     }),
     client.onError((error) => {
@@ -179,6 +253,7 @@ export function startDriver(options: DriverOptions): Driver {
         timers.clearInterval(blinkTimer);
         blinkTimer = undefined;
       }
+      clearMsgTimer();
       for (const off of unsubscribe) {
         off();
       }

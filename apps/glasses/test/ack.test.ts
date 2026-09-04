@@ -4,6 +4,7 @@ import {
 } from '@g2-race-spotter/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { MSG_AUTO_ACK_MS } from '../src/app.ts';
 import type { TextUpgrade } from '../src/bridge.ts';
 import { startDriver, type Driver } from '../src/driver.ts';
 import { EXIT_MODE_DIALOGUE } from '../src/input.ts';
@@ -183,6 +184,90 @@ describe('message ack (030 AC-5)', () => {
     expect(bridge.callsNamed('shutDownPageContainer')).toEqual([
       { call: 'shutDownPageContainer', payload: EXIT_MODE_DIALOGUE },
     ]);
+  });
+
+  it('clears the message and acks it after MSG_AUTO_ACK_MS, exactly once', async () => {
+    const { bridge, clock, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+    expect(messages(bridge)).toEqual(['BOX THIS LAP']);
+
+    // One tick short of the window the text is still up and nothing was sent.
+    await clock.advance(MSG_AUTO_ACK_MS - 1);
+    await queue.whenIdle();
+    expect(acks(socket)).toHaveLength(0);
+    expect(messages(bridge)).toEqual(['BOX THIS LAP']);
+
+    await clock.advance(1);
+    await queue.whenIdle();
+    expect(acks(socket)).toEqual([{ t: 'ack', msgId: 'm1' }]);
+    expect(messages(bridge)).toEqual(['BOX THIS LAP', '']);
+
+    // The timer is one-shot, and the message it cleared is no longer tappable.
+    await clock.advance(MSG_AUTO_ACK_MS * 2);
+    bridge.emit({ textEvent: { eventType: 'CLICK_EVENT' } });
+    await queue.whenIdle();
+    expect(acks(socket)).toHaveLength(1);
+  });
+
+  it('does not auto-ack a message the driver already tapped', async () => {
+    const { bridge, clock, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+
+    await clock.advance(2_000);
+    bridge.emit({ textEvent: { eventType: 'CLICK_EVENT' } });
+    await queue.whenIdle();
+    expect(acks(socket)).toHaveLength(1);
+
+    await clock.advance(MSG_AUTO_ACK_MS);
+    await queue.whenIdle();
+
+    expect(acks(socket)).toEqual([{ t: 'ack', msgId: 'm1' }]);
+  });
+
+  it('restarts the window for a new message id', async () => {
+    const { bridge, clock, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+    await clock.advance(4_000);
+
+    socket.receive(
+      stateFrame({
+        seq: 2,
+        msg: { id: 'm2', text: 'PIT NOW', ts: 4_000, ackedAt: null },
+      }),
+    );
+    await queue.whenIdle();
+
+    // The first message's remaining second must not clear the second message.
+    await clock.advance(2_000);
+    await queue.whenIdle();
+    expect(acks(socket)).toHaveLength(0);
+    expect(messages(bridge)).toEqual(['BOX THIS LAP', 'PIT NOW']);
+
+    await clock.advance(3_000);
+    await queue.whenIdle();
+    expect(acks(socket)).toEqual([{ t: 'ack', msgId: 'm2' }]);
+    expect(messages(bridge)).toEqual(['BOX THIS LAP', 'PIT NOW', '']);
+  });
+
+  it('sends nothing after the driver is stopped', async () => {
+    const { bridge, clock, driver, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+    const before = bridge.calls.length;
+
+    driver.stop();
+    await clock.advance(MSG_AUTO_ACK_MS * 2);
+    await queue.whenIdle();
+
+    expect(acks(socket)).toHaveLength(0);
+    expect(bridge.calls).toHaveLength(before);
   });
 
   it('ignores scroll events', async () => {

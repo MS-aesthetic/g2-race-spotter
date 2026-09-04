@@ -28,6 +28,13 @@ export interface RenderSink {
   push(job: RenderJob): void;
 }
 
+/**
+ * How long a message stays on the glasses before it clears itself (Maxx,
+ * 2026-09-04 design round 2). Lives here, not in `packages/protocol`: it is a
+ * driver-side display rule, not a wire timing, and the relay never sees it.
+ */
+export const MSG_AUTO_ACK_MS = 5_000;
+
 export interface HudAppOptions {
   readonly queue: RenderSink;
   /** Sends an `ack` frame through `RoomClient`. */
@@ -58,6 +65,8 @@ export class HudApp {
   /** The startup page always carries an empty message container. */
   private lastMessage: string | undefined = '';
   private lastStatus: string | undefined;
+  /** Message the auto-clear timer has already taken off the screen. */
+  private hiddenMessageId: string | undefined;
 
   constructor(options: HudAppOptions) {
     this.queue = options.queue;
@@ -148,9 +157,28 @@ export class HudApp {
   /** Id of the message currently on screen and unacknowledged. */
   unackedMessageId(): string | undefined {
     const message = this.state?.msg;
-    return message !== null && message !== undefined && message.ackedAt === null
+    return message !== null &&
+      message !== undefined &&
+      message.ackedAt === null &&
+      message.id !== this.hiddenMessageId
       ? message.id
       : undefined;
+  }
+
+  /**
+   * Takes a message off the glasses without waiting for the relay's `ackedAt`
+   * — the one thing the driver's side decides on its own, because "the text
+   * goes away after 5 s" is a display rule and the timer that enforces it must
+   * not depend on a round trip that may never come back (constitution §2 still
+   * holds for lane/gap/side: nothing is *drawn* from an unconfirmed intent).
+   */
+  hideMessage(msgId: string): void {
+    if (this.hiddenMessageId === msgId) {
+      return;
+    }
+
+    this.hiddenMessageId = msgId;
+    this.render();
   }
 
   ack(msgId: string): void {
@@ -211,7 +239,12 @@ export class HudApp {
 
   private messageText(): string {
     const message = this.state?.msg;
-    if (message === null || message === undefined || message.ackedAt !== null) {
+    if (
+      message === null ||
+      message === undefined ||
+      message.ackedAt !== null ||
+      message.id === this.hiddenMessageId
+    ) {
       return '';
     }
 
