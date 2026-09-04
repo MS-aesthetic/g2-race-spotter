@@ -3,7 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- (T006 escalation resolved 2026-09-03: Maxx authorized the scoped repair T006c after the audit; it is a normal worker task now)
+- T006c-scope — decide whether to authorize one fifth, adapter-only edit in `packages/protocol/src/client.ts:73-78`; the four authorized T006c edits are recoverable at L009 `stash@{0}` (`d84a200`) and no application commit was made. This is a process/scope decision, not `[HW]`.
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -32,6 +32,9 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 
 ## Decision (2026-09-03)
 - Maxx: "yes on the fix" — T006c (four-change repair of the quarantined RoomClient candidate) authorized and placed first in `## Next`; T016 second; both may run as parallel leases.
+
+## Scope boundary (2026-09-04)
+- L009/T006c stopped without a commit because the inherited candidate fails root typecheck at the default browser timer adapter before and after the four authorized edits. The passing four-change repair is preserved in L009 `stash@{0}` (`d84a200`); changing that adapter would be a fifth edit and requires Maxx's explicit scope decision. L010/T016 remains active and unchanged.
 
 ## Iterations
 
@@ -72,3 +75,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 32 | 2026-09-03 | T007c | relay-backend-dev | done | approve | 191d9a1 | Exact candidate range `a380d6f..8dcb04a` was approved with no findings; T007a/T007c integrated serially and 56 tests plus every Node 22 root, live-relay, Wrangler-types, and dry-run gate passed. |
 | 33 | 2026-09-03 | T008 | relay-backend-dev | review-blocked | block | 686c174 | Quarantine the replay/expiry candidate: close and rehydration paths can persist stale peer-online flags, and the live alarm test must prove an actually empty room plus normative expiry/delete behavior. |
 | 34 | 2026-09-03 | T008a | relay-backend-dev | done | approve | 637c2c2 | Exact range `191d9a1..5689288` was approved with no findings; T008/T008a integrated as `56e0729` + `637c2c2`, and 59 tests plus every Node 22 root, relay, Wrangler-types, and isolated-assets dry-run gate passed. |
+| 35 | 2026-09-04 | T006c | relay-backend-dev | failed | n/a | - | The four authorized edits pass targeted client 10/10, root 69/69, and lint, but inherited browser timer adapters fail root typecheck; preserve L009 `stash@{0}` and require human approval before a fifth adapter-only edit. |
