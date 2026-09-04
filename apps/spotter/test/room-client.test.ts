@@ -11,7 +11,7 @@ import {
   relayOrigin,
   roomUrl,
 } from '../src/net/room-client.ts';
-import { shouldHandle } from '../src/sw.ts';
+import { shellAssets, shouldHandle } from '../src/sw.ts';
 
 type Listener = (event: unknown) => void;
 
@@ -114,6 +114,30 @@ describe('spotter RoomClient wrapper', () => {
     client.disconnect();
   });
 
+  it('keeps delivering frames when the latency callback throws', () => {
+    const seen: number[] = [];
+    const client = createSpotterClient({
+      WebSocket: FakeSocket,
+      now: () => 500,
+      onLatency: () => {
+        throw new Error('render blew up');
+      },
+    });
+    client.onState((state) => seen.push(state.seq));
+
+    client.connect('ws://relay.test/room/CAR42?role=spotter');
+    const socket = FakeSocket.last!;
+    socket.emit('open', {});
+    expect(() =>
+      socket.deliver({ t: 'pong', ts: 100, serverTs: 200 }),
+    ).not.toThrow();
+    socket.deliver(stateFrame(1));
+
+    expect(seen).toEqual([1]);
+
+    client.disconnect();
+  });
+
   it('reports a terminal auth close so the UI can bounce back to Join', () => {
     const closes: Array<{ code: number | undefined; terminal: boolean }> = [];
     const client = createSpotterClient({
@@ -186,6 +210,28 @@ describe('room URL', () => {
         'ws://192.168.1.5:8787/',
       ),
     ).toBe('ws://192.168.1.5:8787');
+  });
+});
+
+describe('service worker shell discovery', () => {
+  it('picks the hashed JS and CSS out of the built index.html', () => {
+    const html = [
+      '<link rel="manifest" href="/manifest.webmanifest">',
+      '<link rel="apple-touch-icon" href="/icon-192.png">',
+      '<link rel="stylesheet" crossorigin href="/assets/main-DL0oZ.css">',
+      '<script type="module" crossorigin src="/assets/main-B2LL9.js"></script>',
+      '<script src="https://cdn.example/analytics.js"></script>',
+      '<script src="//cdn.example/other.js"></script>',
+    ].join('\n');
+
+    expect(shellAssets(html).sort()).toEqual([
+      '/assets/main-B2LL9.js',
+      '/assets/main-DL0oZ.css',
+    ]);
+  });
+
+  it('returns nothing for HTML with no local code', () => {
+    expect(shellAssets('<html><body>hi</body></html>')).toEqual([]);
   });
 });
 

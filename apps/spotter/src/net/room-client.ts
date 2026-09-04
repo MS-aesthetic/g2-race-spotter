@@ -59,7 +59,15 @@ function observingWebSocket(
       const wrapped =
         type === 'message'
           ? (event: unknown): void => {
-              onFrame(event);
+              // The observer is a passenger on the frame path. A throw in the
+              // UI's latency callback must never cost RoomClient a `state`
+              // frame, so it is contained here rather than unwinding the tee.
+              try {
+                onFrame(event);
+              } catch {
+                // Latency is cosmetic; the frame is not.
+              }
+
               listener(event);
             }
           : listener;

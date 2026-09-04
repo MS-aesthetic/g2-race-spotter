@@ -84,11 +84,15 @@ function statusHeader(model: Model): VNode {
   );
 }
 
-function reconnectBanner(model: Model): VNode | null {
-  if (isLive(model)) {
-    return null;
-  }
-
+/**
+ * Always rendered, `hidden` when the room is live. A conditional child would
+ * change `.console`'s child count, and the positional diff would then replace
+ * `<main>` wholesale — killing an in-flight slider drag (its `change` would
+ * fire on a detached node, so `release()` would never send) and dropping the
+ * message field's focus and keyboard exactly when the socket wobbles.
+ */
+function reconnectBanner(model: Model): VNode {
+  const live = isLive(model);
   // Open-but-not-replayed is a different story from a dead socket: the spotter
   // should not be told to worry about the network while the room is replaying.
   const text = model.conn === 'open' ? 'SYNCING…' : 'RECONNECTING';
@@ -100,8 +104,9 @@ function reconnectBanner(model: Model): VNode | null {
       role: 'alert',
       'data-testid': 'reconnect-banner',
       'data-conn': model.conn,
+      hidden: live,
     },
-    [text],
+    [live ? '' : text],
   );
 }
 
@@ -233,13 +238,11 @@ function messageSection(model: Model): VNode {
 }
 
 function consoleView(model: Model): VNode {
-  const children: VNode[] = [statusHeader(model)];
-  const banner = reconnectBanner(model);
-  if (banner !== null) {
-    children.push(banner);
-  }
-
-  children.push(
+  // Fixed child count, fixed order: every slot is always present and toggled
+  // with `hidden`, so the positional diff only ever patches in place.
+  return h('div', { class: 'console' }, [
+    statusHeader(model),
+    reconnectBanner(model),
     h('main', { class: 'console__body' }, [
       laneStack(model),
       h('div', { class: 'console__right' }, [
@@ -247,24 +250,18 @@ function consoleView(model: Model): VNode {
         messageSection(model),
       ]),
     ]),
-  );
-
-  if (model.updateReady) {
-    children.push(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'toast',
-          'data-act': 'reload',
-          'data-testid': 'update-toast',
-        },
-        ['update available — reload'],
-      ),
-    );
-  }
-
-  return h('div', { class: 'console' }, children);
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'toast',
+        'data-act': 'reload',
+        'data-testid': 'update-toast',
+        hidden: !model.updateReady,
+      },
+      ['update available — reload'],
+    ),
+  ]);
 }
 
 function field(
@@ -311,19 +308,18 @@ function joinView(model: Model): VNode {
       'data-act': 'name',
       'data-testid': 'join-name',
     }),
-  ];
-
-  if (model.notice !== null) {
-    children.push(
-      h(
-        'p',
-        { class: 'join__notice', role: 'alert', 'data-testid': 'join-notice' },
-        [model.notice],
-      ),
-    );
-  }
-
-  children.push(
+    // Constant slots here too: a notice appearing between the fields and the
+    // button would otherwise re-create the button on every failed join.
+    h(
+      'p',
+      {
+        class: 'join__notice',
+        role: 'alert',
+        'data-testid': 'join-notice',
+        hidden: model.notice === null,
+      },
+      [model.notice ?? ''],
+    ),
     h(
       'button',
       {
@@ -338,15 +334,10 @@ function joinView(model: Model): VNode {
     h('p', { class: 'join__host', 'data-testid': 'join-host' }, [
       `relay ${model.relayHost}`,
     ]),
-  );
-
-  if (model.showInstallHint) {
-    children.push(
-      h('p', { class: 'join__hint' }, [
-        'Add to Home Screen for full-screen use — iOS: Share → Add to Home Screen.',
-      ]),
-    );
-  }
+    h('p', { class: 'join__hint', hidden: !model.showInstallHint }, [
+      'Add to Home Screen for full-screen use — iOS: Share → Add to Home Screen.',
+    ]),
+  ];
 
   return h('div', { class: 'join' }, children);
 }

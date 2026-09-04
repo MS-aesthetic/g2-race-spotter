@@ -12,7 +12,12 @@ import {
 } from '@g2-race-spotter/protocol';
 
 import { createGapThrottle, normaliseMessage } from './intents.ts';
-import { createModel, selectedLane, type Model } from './model.ts';
+import {
+  OPTIMISTIC_LANE_MS,
+  createModel,
+  selectedLane,
+  type Model,
+} from './model.ts';
 import {
   createSpotterClient,
   nextLatency,
@@ -88,13 +93,19 @@ client.onState((state: State) => {
 });
 
 client.onConnection((conn: ConnectionState, detail: ConnectionCloseDetail) => {
-  if (detail.terminal && detail.code === CLOSE_CODE_AUTH) {
+  // A terminal close (4400/4401/4409/4426) means RoomClient will never
+  // reconnect. Staying on the console would leave RECONNECTING up forever, so
+  // every terminal code goes back to Join with a reason instead of a spinner.
+  if (detail.terminal) {
     client.disconnect();
     update({
       screen: 'join',
       conn: 'closed',
       state: null,
-      notice: 'Wrong PIN — check the code with the driver.',
+      notice:
+        detail.code === CLOSE_CODE_AUTH
+          ? 'Wrong PIN — check the code with the driver.'
+          : `The relay rejected this app (close ${detail.code ?? 'unknown'}). Reload the page to pick up the current version.`,
     });
     return;
   }
@@ -151,6 +162,9 @@ function setLane(lane: Lane | null): void {
   vibrate();
   client.send({ t: 'lane', lane });
   update({ optimisticLane: { lane, at: Date.now() } });
+  // Nothing else wakes the UI when the socket is down and no `state` follows,
+  // so the optimistic highlight would otherwise linger until the next ping tick.
+  window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
 function actionOf(

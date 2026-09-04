@@ -12,13 +12,42 @@
 
 const CACHE = 'g2rs-shell-v1';
 
-/** Nothing here is content-hashed, so it can be listed ahead of the build. */
+/** The unhashed part of the shell, listable ahead of the build. */
 const PRECACHE = [
   '/',
   '/manifest.webmanifest',
   '/icon-192.png',
   '/icon-512.png',
 ];
+
+/**
+ * The hashed JS/CSS the shell pulls in, read out of `index.html` at install
+ * time rather than baked in at build time: the names change every deploy, and
+ * a SW that only precached the unhashed files would come back from an offline
+ * launch with a shell and no app.
+ */
+export function shellAssets(html: string): string[] {
+  const urls = new Set<string>();
+
+  for (const tag of html.matchAll(/<(?:script|link)\b[^>]*>/gi)) {
+    const url = /\s(?:src|href)\s*=\s*["']([^"']+)["']/i.exec(tag[0])?.[1];
+    if (url === undefined) {
+      continue;
+    }
+
+    // Same-origin, root-relative, and actually code: `//host/x` is another
+    // origin and the manifest/icons are already in PRECACHE.
+    if (!url.startsWith('/') || url.startsWith('//')) {
+      continue;
+    }
+
+    if (/\.(?:js|css)(?:\?|$)/i.test(url)) {
+      urls.add(url);
+    }
+  }
+
+  return [...urls];
+}
 
 /** Paths the worker must stay out of. */
 const PASSTHROUGH = /^\/(?:room\/|health$)/;
@@ -108,12 +137,35 @@ async function cacheFirst(request: Request): Promise<Response> {
   return response;
 }
 
+async function precacheShell(): Promise<void> {
+  const cache = await caches.open(CACHE);
+  const urls = new Set(PRECACHE);
+
+  try {
+    // `reload` so a returning install never precaches the previous deploy's
+    // index.html out of the HTTP cache.
+    const index = await fetch('/', { cache: 'reload' });
+    if (index.ok) {
+      await cache.put('/', index.clone());
+      urls.delete('/');
+      for (const url of shellAssets(await index.text())) {
+        urls.add(url);
+      }
+    }
+  } catch {
+    // Installed while offline: fall back to the static list below.
+  }
+
+  // Individually, so one 404 does not fail the whole install the way
+  // `addAll` would.
+  await Promise.all(
+    [...urls].map((url) => cache.add(url).catch(() => undefined)),
+  );
+}
+
 scope?.addEventListener('install', (event) => {
   (event as SwExtendableEvent).waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .catch(() => undefined),
+    precacheShell().catch(() => undefined),
   );
 });
 

@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { shellAssets } from '../src/sw.ts';
+
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = join(APP_ROOT, 'dist');
 const BUDGET_BYTES = 40 * 1024;
@@ -29,16 +31,19 @@ function build(): void {
 describe('AC-5 bundle budget', () => {
   beforeAll(() => build(), 180_000);
 
-  it('keeps the main JS chunk at or under 40 KB gzipped', () => {
-    const assets = join(DIST, 'assets');
-    const scripts = readdirSync(assets).filter((name) => name.endsWith('.js'));
-    expect(scripts.length).toBeGreaterThan(0);
+  it('keeps the shipped JS at or under 40 KB gzipped', () => {
+    const scripts = [
+      ...readdirSync(join(DIST, 'assets'))
+        .filter((name) => name.endsWith('.js'))
+        .map((name) => join(DIST, 'assets', name)),
+      join(DIST, 'sw.js'),
+    ];
+    expect(scripts.length).toBeGreaterThan(1);
 
-    // Every JS file the shell can pull in, so a future code-split cannot hide
-    // weight in a lazy chunk and still claim the budget.
+    // Every JS file the app ships, service worker included, so neither a
+    // future code-split nor SW growth can hide weight outside the budget.
     const total = scripts.reduce(
-      (bytes, name) =>
-        bytes + gzipSync(readFileSync(join(assets, name))).length,
+      (bytes, file) => bytes + gzipSync(readFileSync(file)).length,
       0,
     );
 
@@ -49,5 +54,20 @@ describe('AC-5 bundle budget', () => {
     expect(readdirSync(DIST)).toContain('sw.js');
     expect(readdirSync(DIST)).toContain('index.html');
     expect(readdirSync(DIST)).toContain('manifest.webmanifest');
+  });
+
+  it('precaches every hashed asset the built shell references', () => {
+    const html = readFileSync(join(DIST, 'index.html'), 'utf8');
+    const referenced = shellAssets(html).sort();
+
+    // What the SW would precache on install must be the whole app, not just
+    // the unhashed shell: an offline launch otherwise gets a page and no code.
+    const emitted = readdirSync(join(DIST, 'assets'))
+      .filter((name) => /\.(?:js|css)$/.test(name))
+      .map((name) => `/assets/${name}`)
+      .sort();
+
+    expect(emitted.length).toBeGreaterThan(0);
+    expect(referenced).toEqual(emitted);
   });
 });

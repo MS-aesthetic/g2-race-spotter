@@ -38,6 +38,12 @@ input {
   color: inherit;
 }
 
+/* Slots are always rendered and toggled with `hidden` (see ui/view.ts), so
+   `hidden` has to beat every component rule below. */
+[hidden] {
+  display: none !important;
+}
+
 button {
   -webkit-user-select: none;
   user-select: none;

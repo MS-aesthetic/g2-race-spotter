@@ -47,6 +47,13 @@ function text(selector: string): string {
   return root.querySelector(selector)?.textContent ?? '';
 }
 
+/** The banner slot is always in the DOM (so the positional diff never shifts
+ * siblings); "present" means present *and* not hidden. */
+function banner(): Element | null {
+  const el = root.querySelector('[data-testid="reconnect-banner"]');
+  return el === null || el.hasAttribute('hidden') ? null : el;
+}
+
 describe('AC-1 lane selection and driver status', () => {
   it('highlights only the middle lane for lane:"mid"', () => {
     render(consoleModel({ state: stateWith({ lane: 'mid' }) }));
@@ -107,9 +114,9 @@ describe('AC-3 reconnect banner', () => {
   it('shows the banner with controls still enabled when the socket is closed', () => {
     render(consoleModel({ conn: 'closed', state: null }));
 
-    const banner = root.querySelector('[data-testid="reconnect-banner"]');
-    expect(banner).not.toBeNull();
-    expect(banner!.textContent).toBe('RECONNECTING');
+    const shown = banner();
+    expect(shown).not.toBeNull();
+    expect(shown!.textContent).toBe('RECONNECTING');
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
     expect(root.querySelectorAll('input[disabled]')).toHaveLength(0);
     expect(root.querySelectorAll('.lane')).toHaveLength(3);
@@ -119,9 +126,8 @@ describe('AC-3 reconnect banner', () => {
   it('keeps the banner while open but not yet replayed', () => {
     render(consoleModel({ conn: 'open', state: null }));
 
-    expect(
-      root.querySelector('[data-testid="reconnect-banner"]'),
-    ).not.toBeNull();
+    expect(banner()).not.toBeNull();
+    expect(banner()!.textContent).toBe('SYNCING…');
   });
 
   it('drops the banner and reconciles to the replayed state on reopen', () => {
@@ -136,7 +142,7 @@ describe('AC-3 reconnect banner', () => {
       }),
     );
 
-    expect(root.querySelector('[data-testid="reconnect-banner"]')).toBeNull();
+    expect(banner()).toBeNull();
     const selected = root.querySelectorAll('.lane.is-selected');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
@@ -147,6 +153,49 @@ describe('AC-3 reconnect banner', () => {
     ).toBe('80');
     expect(root.querySelector('.gap')!.className).toContain('is-hot');
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
+  });
+});
+
+describe('banner toggling never re-creates the controls', () => {
+  it('keeps the same slider and message input across hide and show', () => {
+    render(consoleModel({ conn: 'closed', state: null }));
+    const rangeWhileDown = root.querySelector('[data-testid="gap-range"]');
+    const inputWhileDown = root.querySelector('[data-testid="msg-input"]');
+    expect(rangeWhileDown).not.toBeNull();
+
+    // Socket recovers and the room replays: the banner hides, but a drag or a
+    // half-typed message in flight must survive it.
+    render(consoleModel({ conn: 'open', state: stateWith({ seq: 4 }) }));
+    expect(banner()).toBeNull();
+    expect(root.querySelector('[data-testid="gap-range"]')).toBe(
+      rangeWhileDown,
+    );
+    expect(root.querySelector('[data-testid="msg-input"]')).toBe(
+      inputWhileDown,
+    );
+
+    // And back again when it drops.
+    render(consoleModel({ conn: 'closed', state: null }));
+    expect(banner()).not.toBeNull();
+    expect(root.querySelector('[data-testid="gap-range"]')).toBe(
+      rangeWhileDown,
+    );
+    expect(root.querySelector('[data-testid="msg-input"]')).toBe(
+      inputWhileDown,
+    );
+  });
+
+  it('keeps the lane buttons and the update toast slot stable', () => {
+    render(consoleModel());
+    const lanes = [...root.querySelectorAll('.lane')];
+    const toast = root.querySelector('[data-testid="update-toast"]');
+    expect(toast!.hasAttribute('hidden')).toBe(true);
+
+    render(consoleModel({ updateReady: true, conn: 'closed', state: null }));
+
+    expect([...root.querySelectorAll('.lane')]).toEqual(lanes);
+    expect(root.querySelector('[data-testid="update-toast"]')).toBe(toast);
+    expect(toast!.hasAttribute('hidden')).toBe(false);
   });
 });
 
@@ -231,7 +280,8 @@ describe('join screen', () => {
       (root.querySelector('[data-testid="join-room"]') as HTMLInputElement)
         .value,
     ).toBe('CAR42');
-    expect(root.querySelector('[data-testid="join-notice"]')).toBeNull();
+    const notice = root.querySelector('[data-testid="join-notice"]');
+    expect(notice!.hasAttribute('hidden')).toBe(true);
   });
 
   it('shows the wrong-PIN notice after a terminal auth close', () => {
@@ -242,6 +292,18 @@ describe('join screen', () => {
       }),
     );
 
-    expect(text('[data-testid="join-notice"]')).toContain('Wrong PIN');
+    const notice = root.querySelector('[data-testid="join-notice"]')!;
+    expect(notice.hasAttribute('hidden')).toBe(false);
+    expect(notice.textContent).toContain('Wrong PIN');
+  });
+
+  it('keeps the room field stable when a notice appears', () => {
+    const form = { room: 'CAR42', pin: '', name: '' };
+    render(createModel({ screen: 'join', form }));
+    const roomField = root.querySelector('[data-testid="join-room"]');
+
+    render(createModel({ screen: 'join', form, notice: 'Wrong PIN.' }));
+
+    expect(root.querySelector('[data-testid="join-room"]')).toBe(roomField);
   });
 });
