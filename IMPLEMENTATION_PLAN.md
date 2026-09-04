@@ -14,7 +14,9 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 
-- No active leases. Quarantined worktrees `L009` (`ralph/L009-T006c`, `1872085` + `stash@{0}` `d84a200`) and `L014` (`ralph/L014-T011c`, `581bead`) are superseded by the integrated commits below and are kept only for traceability; do not lease from them.
+- L015 — T009 — base `d633a5d` — depends: T011d integrated — write scope: `services/relay/src/race-room.ts`, `services/relay/test/eviction.test.ts` (+ `services/relay/test/live-worker.ts` helpers only if needed) — lock: `relay-room` — worker: relay-backend-dev (Sonnet 5 @ high) — reviewer: protocol-keeper (Opus 5 @ high) — auditor: Fable 5.1.
+- L016 — T017 — base `d633a5d` — depends: T006e integrated — write scope: `packages/protocol/src/client.ts`, `packages/protocol/src/index.ts`, `packages/protocol/test/client-errors.test.ts` — lock: `room-client` — worker: relay-backend-dev (Sonnet 5 @ high) — reviewer: protocol-keeper (Opus 5 @ high) — auditor: Fable 5.1.
+- Quarantined worktrees `L009` (`ralph/L009-T006c`, `1872085` + `stash@{0}` `d84a200`) and `L014` (`ralph/L014-T011c`, `581bead`) are superseded by the integrated commits below and are kept only for traceability; do not lease from them.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
