@@ -12,11 +12,11 @@ import {
   PING_INTERVAL_MS,
 } from '@g2-race-spotter/protocol';
 
-import { nextSide, normaliseMessage } from './intents.ts';
+import { nextGap, nextSide, normaliseMessage } from './intents.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
-  selectedGap,
+  currentGap,
   selectedLane,
   selectedSide,
   type Model,
@@ -163,13 +163,14 @@ function setLane(lane: Lane | null): void {
 
 /** One `gap` per tap; the button already lit is a no-op (040 AC-2). */
 function setGap(value: number): void {
-  if (value === selectedGap(model)) {
+  const next = nextGap(currentGap(model), value);
+  if (next === null) {
     return;
   }
 
   vibrate();
-  client.send({ t: 'gap', value });
-  update({ optimisticGap: { value, at: Date.now() } });
+  client.send({ t: 'gap', value: next });
+  update({ optimisticGap: { value: next, at: Date.now() } });
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 

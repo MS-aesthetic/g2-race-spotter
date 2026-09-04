@@ -33,6 +33,19 @@ export function nearestGapValue(gap: number): number {
 }
 
 /**
+ * What a tap on a gap button sends: the value, or `null` for "send nothing"
+ * when the room already holds exactly that gap. Kept pure and separate from
+ * the DOM so the one decision AC-2 names is unit-tested on its own.
+ *
+ * `current` is the room's actual gap (0-100), not the button the console
+ * highlights: with the room at 40 the console lights `25`, but a tap on `50`
+ * is still news and must be sent.
+ */
+export function nextGap(current: number, tapped: number): number | null {
+  return current === tapped ? null : tapped;
+}
+
+/**
  * What a tap on a side button sends. The buttons are toggles: tapping the one
  * that is already lit means "that car is gone" and clears the call, so the
  * spotter never has to find a separate clear control with a car alongside.

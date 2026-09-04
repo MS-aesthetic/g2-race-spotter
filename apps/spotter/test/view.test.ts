@@ -112,7 +112,7 @@ describe('AC-1 lane selection and driver status', () => {
 });
 
 describe('car inside / car outside (T052)', () => {
-  it('offers both side toggles under the slider, unlit by default', () => {
+  it('offers both side toggles under the gap row, unlit by default', () => {
     render(consoleModel());
 
     const buttons = [...root.querySelectorAll('[data-act="side"]')];

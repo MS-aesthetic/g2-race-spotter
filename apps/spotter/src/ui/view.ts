@@ -108,9 +108,8 @@ function statusHeader(model: Model): VNode {
 /**
  * Always rendered, `hidden` when the room is live. A conditional child would
  * change `.console`'s child count, and the positional diff would then replace
- * `<main>` wholesale — killing an in-flight slider drag (its `change` would
- * fire on a detached node, so `release()` would never send) and dropping the
- * message field's focus and keyboard exactly when the socket wobbles.
+ * `<main>` wholesale — dropping the message field's focus and keyboard exactly
+ * when the socket wobbles.
  */
 function reconnectBanner(model: Model): VNode {
   const live = isLive(model);
@@ -209,7 +208,7 @@ function gapSection(model: Model): VNode {
 }
 
 /**
- * Two toggles under the slider: a car alongside on the inside or the outside.
+ * Two toggles under the gap row: a car alongside on the inside or the outside.
  * Tapping the lit one clears the call (`side: null`), which is why these are
  * `aria-pressed` toggles and not a radio group.
  */

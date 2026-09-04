@@ -43,12 +43,27 @@ const MIME: Record<string, string> = {
 };
 
 /**
- * The Chromium the container already has. Playwright's own download is never
- * triggered: `executablePath` is resolved from `PLAYWRIGHT_BROWSERS_PATH`, and
- * when nothing is there (a Windows dev box) the suite skips with a message
- * naming the variable rather than failing.
+ * The Chromium this machine already has, in the order most likely to be right:
+ * an explicit `CHROME_PATH`, Playwright's own registry (`executablePath()`,
+ * which honours `PLAYWRIGHT_BROWSERS_PATH`), then a scan of the browsers
+ * directory for a build whose revision this `playwright-core` did not install.
+ * A download is never triggered.
  */
 function findChromium(): string | undefined {
+  const explicit = process.env.CHROME_PATH;
+  if (explicit !== undefined && explicit !== '' && existsSync(explicit)) {
+    return explicit;
+  }
+
+  try {
+    const registered = chromium.executablePath();
+    if (registered !== '' && existsSync(registered)) {
+      return registered;
+    }
+  } catch {
+    // No browser registered for this playwright-core build; scan instead.
+  }
+
   const root = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
   if (!existsSync(root)) {
     return undefined;
@@ -106,16 +121,23 @@ interface Measured {
 }
 
 const executablePath = findChromium();
-const describeOrSkip = executablePath === undefined ? describe.skip : describe;
+const MISSING_BROWSER =
+  'layout.test: no Chromium found — set CHROME_PATH, or PLAYWRIGHT_BROWSERS_PATH to a Playwright browsers directory (this container ships /opt/pw-browsers)';
 
+// A dev box without a browser may skip; CI may not — a criterion that quietly
+// stops running is worse than one that fails.
 if (executablePath === undefined) {
-  console.warn(
-    'layout.test: no Chromium found — set PLAYWRIGHT_BROWSERS_PATH to a Playwright browsers directory (the container ships /opt/pw-browsers)',
-  );
+  if (process.env.CI !== undefined && process.env.CI !== '') {
+    throw new Error(MISSING_BROWSER);
+  }
+
+  console.warn(MISSING_BROWSER);
 }
 
+const describeOrSkip = executablePath === undefined ? describe.skip : describe;
+
 describeOrSkip('AC-8 the console never needs scrolling', () => {
-  let server: Server;
+  let server: Server | undefined;
   let browser: Browser;
   let origin = '';
 
@@ -128,7 +150,17 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
 
   afterAll(async () => {
     await browser?.close();
-    await new Promise((resolve) => server?.close(resolve));
+    // The build can throw before `server` exists; an unguarded `close`
+    // callback would then never fire and hang the hook instead of reporting
+    // the real failure.
+    await new Promise<void>((resolve) => {
+      if (server === undefined) {
+        resolve();
+        return;
+      }
+
+      server.close(() => resolve());
+    });
     rmSync(DIST, { recursive: true, force: true });
   });
 

@@ -117,6 +117,55 @@ export function startDriver(options: DriverOptions): Driver {
   let shownAt = 0;
   /** Message this session has already acked — from a tap or from the timer. */
   let settledMsgId: string | undefined;
+  /**
+   * Message the timer cleared and acked, until the relay confirms it. The auto
+   * ack is the one ack nothing can retry by hand: the text is off the screen,
+   * so there is no tap left to make, and `RoomClient.send` silently drops a
+   * frame while the socket is down. Every `state` that still shows it unacked
+   * therefore re-sends the ack — `reduce` returns the room unchanged for an
+   * already-acked id, so a duplicate costs nothing and does not bump `seq`.
+   */
+  let pendingAckMsgId: string | undefined;
+  let retryTimer: number | undefined;
+
+  const clearRetryTimer = (): void => {
+    if (retryTimer !== undefined) {
+      timers.clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
+  };
+
+  const retryPendingAck = (state: State): void => {
+    if (pendingAckMsgId === undefined) {
+      return;
+    }
+
+    const message = state.msg;
+    if (
+      message === null ||
+      message.id !== pendingAckMsgId ||
+      message.ackedAt !== null
+    ) {
+      pendingAckMsgId = undefined;
+      clearRetryTimer();
+      return;
+    }
+
+    if (retryTimer !== undefined) {
+      return;
+    }
+
+    // Not from inside this listener: `RoomClient` marks a session replayed
+    // only *after* its state listeners have run, and it drops an `ack` sent
+    // before that — the retry would be swallowed by the very frame that asked
+    // for it. One turn later the session is replayed and the send goes out.
+    retryTimer = timers.setTimeout(() => {
+      retryTimer = undefined;
+      if (pendingAckMsgId !== undefined) {
+        app.ack(pendingAckMsgId);
+      }
+    }, 0);
+  };
 
   const clearMsgTimer = (): void => {
     if (msgTimer !== undefined) {
@@ -160,6 +209,8 @@ export function startDriver(options: DriverOptions): Driver {
       settledMsgId = msgId;
       app.hideMessage(msgId);
       if (stillUnacked) {
+        // Held until a `state` says `ackedAt`: this send may have gone nowhere.
+        pendingAckMsgId = msgId;
         app.ack(msgId);
       }
     }, remaining);
@@ -207,6 +258,7 @@ export function startDriver(options: DriverOptions): Driver {
       }
       syncBlink();
       syncMessageTimer();
+      retryPendingAck(state);
 
       // Fresh truth from the relay: an ack that never left is tappable again.
       input.resetAckGuard();
@@ -254,6 +306,7 @@ export function startDriver(options: DriverOptions): Driver {
         blinkTimer = undefined;
       }
       clearMsgTimer();
+      clearRetryTimer();
       for (const off of unsubscribe) {
         off();
       }

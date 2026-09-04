@@ -252,7 +252,7 @@ button {
 
 .gaps {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   flex: 0 0 auto;
 }

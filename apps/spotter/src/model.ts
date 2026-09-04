@@ -108,16 +108,25 @@ export function selectedSide(model: Model): Side | null {
 }
 
 /**
+ * The room's gap as best this client knows it: the value the spotter just sent
+ * while its optimistic window is open, otherwise what the relay last said.
+ * Exact, never snapped — it is what a tap is compared against.
+ */
+export function currentGap(model: Model): number {
+  const optimistic = model.optimisticGap;
+  if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
+    return optimistic.value;
+  }
+
+  return model.state?.gap ?? 0;
+}
+
+/**
  * Which gap button is lit: the optimistic tap for its first
  * `OPTIMISTIC_LANE_MS`, then the nearest button to whatever the relay said.
  */
 export function selectedGap(model: Model): number {
-  const optimistic = model.optimisticGap;
-  if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
-    return nearestGapValue(optimistic.value);
-  }
-
-  return nearestGapValue(model.state?.gap ?? 0);
+  return nearestGapValue(currentGap(model));
 }
 
 /** The console is trustworthy only when the socket is open *and* the room has

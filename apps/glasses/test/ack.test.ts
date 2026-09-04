@@ -211,6 +211,46 @@ describe('message ack (030 AC-5)', () => {
     expect(acks(socket)).toHaveLength(1);
   });
 
+  it('re-sends an auto-ack the dead socket swallowed, once the room replays', async () => {
+    const { bridge, clock, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+
+    // The socket dies before the window closes. The timer still clears the
+    // text (five seconds is five seconds), but `RoomClient.send` has nowhere
+    // to put the ack — and the driver cannot tap a message he can no longer
+    // see, so nothing but this retry can ever get the ack out.
+    await clock.advance(3_000);
+    socket.close(1_006);
+    await clock.advance(2_000);
+    await queue.whenIdle();
+    expect(messages(bridge)).toEqual(['BOX THIS LAP', '']);
+    expect(acks(socket)).toHaveLength(0);
+
+    await clock.advance(1_000);
+    const replacement = FakeWebSocket.last();
+    expect(replacement).not.toBe(socket);
+    replacement.open();
+    replacement.receive(stateFrame({ seq: 2, msg: MESSAGE }));
+    // `RoomClient` counts the session replayed only after its listeners run,
+    // so the retry is scheduled for the next turn rather than sent inline.
+    await clock.advance(0);
+    await queue.whenIdle();
+
+    expect(acks(replacement)).toEqual([{ t: 'ack', msgId: 'm1' }]);
+
+    // And once the relay confirms it, the retry stops.
+    replacement.receive(
+      stateFrame({ seq: 3, msg: { ...MESSAGE, ackedAt: 99 } }),
+    );
+    replacement.receive(stateFrame({ seq: 4, gap: 40 }));
+    await clock.advance(1_000);
+    await queue.whenIdle();
+
+    expect(acks(replacement)).toHaveLength(1);
+  });
+
   it('does not auto-ack a message the driver already tapped', async () => {
     const { bridge, clock, queue, socket } = await harness();
 

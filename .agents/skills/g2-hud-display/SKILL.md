@@ -120,10 +120,20 @@ relay's state, the spotter's ack tick and what the driver can see agree.
   five seconds. A new id starts a fresh window.
 - A tap settles the message early and cancels the timer; the text still stays
   up until the relay's `state` says `ackedAt` (R4 is unchanged).
-- A transport change (`connection !== 'open'`) forgets that settle, because
-  `RoomClient.send` drops an ack while the socket is down — the replayed state
-  re-arms the timer.
-- `stop()` clears it. The constant lives in `apps/glasses/src/app.ts`, not in
+- `RoomClient.send` silently drops an `ack` while the socket is down or before
+  the session has replayed, so neither kind of ack may be assumed delivered:
+  - a **tapped** ack is recoverable by hand — a transport change
+    (`connection !== 'open'`) forgets the settle, the replayed state re-arms
+    the timer, and the message is still on screen to tap again;
+  - an **auto** ack is not: the text is already gone. The id is therefore held
+    as `pendingAckMsgId` and re-sent on every `state` that still shows it
+    unacked, until `ackedAt` arrives or the message changes. The retry is
+    scheduled one turn later (an injected `setTimeout(…, 0)`), because
+    `RoomClient` marks a session replayed only *after* its state listeners run
+    and would drop an ack sent from inside the frame that triggered it.
+    Duplicates are safe: `reduce` returns the room unchanged for an
+    already-acked id and does not bump `seq`.
+- `stop()` clears both timers. The constant lives in `apps/glasses/src/app.ts`, not in
   `packages/protocol`: it is a display rule, not a wire timing.
 - Hiding is the one thing the driver side decides locally. Lane, gap and side
   are still drawn only from `state` (constitution §2).
