@@ -6,6 +6,7 @@ import { nextAlarmAt } from '../src/alarm.js';
 
 import {
   nextMessage,
+  nextClose,
   openSocket,
   startWorker,
   type RunningWorker,
@@ -25,6 +26,19 @@ async function readAlarm(worker: RunningWorker): Promise<AlarmDebug> {
   return response.json() as Promise<AlarmDebug>;
 }
 
+async function waitForEmptyRoom(worker: RunningWorker): Promise<AlarmDebug> {
+  const deadline = Date.now() + 5_000;
+  let latest: AlarmDebug | undefined;
+  while (Date.now() < deadline) {
+    latest = await readAlarm(worker);
+    if (latest.state.spotterOnline === false && latest.alarm !== null) {
+      return latest;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`room did not become empty: ${JSON.stringify(latest)}`);
+}
+
 describe('RaceRoom room-expiry alarm', () => {
   let worker: RunningWorker | undefined;
 
@@ -32,17 +46,13 @@ describe('RaceRoom room-expiry alarm', () => {
     await worker?.stop();
   });
 
-  it('arms the live room tick and repoints an empty room to its state TTL', async () => {
+  it('repoints a closed live room to its persisted-state TTL without losing intents', async () => {
     worker = await startWorker();
     const socket = await openSocket(
       `${worker.origin.replace('http', 'ws')}/room/QA09?role=spotter`,
     );
 
     try {
-      const initial = await readAlarm(worker);
-      expect(initial.alarm).not.toBeNull();
-      expect(initial.alarm as number).toBeLessThan(Date.now() + ROOM_TTL_MS);
-
       const replay = nextMessage(socket);
       socket.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
       await within(replay, 500);
@@ -53,7 +63,31 @@ describe('RaceRoom room-expiry alarm', () => {
         tick.state.updatedAt + ROOM_TTL_MS,
       );
 
-      const emptyState: State = { ...tick.state, updatedAt: 123_456 };
+      for (const frame of [
+        { t: 'lane', lane: 'top' },
+        { t: 'gap', value: 63 },
+        { t: 'msg', text: 'hold line' },
+      ]) {
+        const state = nextMessage(socket);
+        socket.send(JSON.stringify(frame));
+        await within(state, 500);
+      }
+
+      const closed = nextClose(socket);
+      socket.terminate();
+      await within(closed, 500);
+
+      const empty = await waitForEmptyRoom(worker);
+      expect(empty.state).toMatchObject({
+        lane: 'top',
+        gap: 63,
+        msg: expect.objectContaining({ text: 'hold line' }),
+        spotterOnline: false,
+        driverOnline: false,
+      });
+      expect(empty.alarm).toBeCloseTo(empty.state.updatedAt + ROOM_TTL_MS, -3);
+
+      const emptyState: State = { ...empty.state, updatedAt: 123_456 };
       expect(nextAlarmAt(0, emptyState, Date.now())).toBe(
         emptyState.updatedAt + ROOM_TTL_MS,
       );

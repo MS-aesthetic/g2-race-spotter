@@ -100,6 +100,8 @@ describe('RaceRoom replay', () => {
           lane: 'bot',
           gap: 21,
           msg: expect.objectContaining({ text: 'traffic ahead' }),
+          spotterOnline: false,
+          driverOnline: true,
         });
         expect(replay.seq).toBeGreaterThanOrEqual(lastSeen.seq as number);
       } finally {
