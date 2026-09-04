@@ -1,6 +1,6 @@
 ---
 name: g2-hud-display
-description: Project-specific G2 glasses rendering rules for the Race Spotter HUD — container layout and IDs, the 288x144 symbol+bar bitmap, gray4 packing, text-mode fallback, the coalescing update queue, stale/NO LINK rendering, and glasses input mapping. Use when writing or changing anything in apps/glasses/src/render or the page setup.
+description: Project-specific G2 glasses rendering rules for the Race Spotter HUD — container layout and IDs, the 288x144 symbol+bar bitmap, gray4 packing, text-mode fallback, the coalescing update queue, stale/NO LINK rendering, the 5 s message auto-clear, and glasses input mapping. Use when writing or changing anything in apps/glasses/src/render or the page setup.
 ---
 
 # G2 Race Spotter HUD rendering
@@ -98,7 +98,7 @@ Single async worker. Jobs: `{kind:'hud', state}`, `{kind:'msg', text}`, `{kind:'
 
 | Event | Root page action |
 |---|---|
-| `CLICK_EVENT` | Ack: send `ack{msgId}` for the current unacked message. Do **not** clear locally — the next `state` frame carries `ackedAt` and the renderer hides `msg.text` whenever `ackedAt !== null`. (Rendering is a pure function of the last `state`; the message must not pop back.) |
+| `CLICK_EVENT` | Ack: send `ack{msgId}` for the current unacked message, and settle the auto-clear timer for it. Do **not** clear locally — the next `state` frame carries `ackedAt` and the renderer hides `msg.text` whenever `ackedAt !== null`. (Rendering is a pure function of the last `state`; the message must not pop back.) |
 | `DOUBLE_CLICK_EVENT` | `shutDownPageContainer(1)` (exit dialogue — required) |
 | `SCROLL_TOP_EVENT` / `SCROLL_BOTTOM_EVENT` | reserved; no-op in v1 |
 | `FOREGROUND_ENTER_EVENT` | re-arm socket, re-render last state |
@@ -106,6 +106,27 @@ Single async worker. Jobs: `{kind:'hud', state}`, `{kind:'msg', text}`, `{kind:'
 | `SYSTEM_EXIT_EVENT` / `ABNORMAL_EXIT_EVENT` | close socket, persist nothing new |
 
 Events arrive on `event.textEvent.eventType` for text-capture pages; normalise with a tiny `toOsEvent(event)` helper because community notes report inconsistent event-type shapes across SDK versions.
+
+## Message auto-clear (`MSG_AUTO_ACK_MS`, 5 s)
+
+Maxx, 2026-09-04 design round 2 — messages disappear on their own. `driver.ts`
+arms an injected `setTimeout` (the same timer surface as the blink timer)
+`MSG_AUTO_ACK_MS` after a message first reaches the screen; when it fires the
+app hides that message *and*, if it is still unacked, sends `ack{msgId}` so the
+relay's state, the spotter's ack tick and what the driver can see agree.
+
+- Keyed on `msg.id` and measured from **first render**, not from the last
+  frame: an unrelated `state` (a gap change) must not buy a message another
+  five seconds. A new id starts a fresh window.
+- A tap settles the message early and cancels the timer; the text still stays
+  up until the relay's `state` says `ackedAt` (R4 is unchanged).
+- A transport change (`connection !== 'open'`) forgets that settle, because
+  `RoomClient.send` drops an ack while the socket is down — the replayed state
+  re-arms the timer.
+- `stop()` clears it. The constant lives in `apps/glasses/src/app.ts`, not in
+  `packages/protocol`: it is a display rule, not a wire timing.
+- Hiding is the one thing the driver side decides locally. Lane, gap and side
+  are still drawn only from `state` (constitution §2).
 
 ## Status strip strings
 
