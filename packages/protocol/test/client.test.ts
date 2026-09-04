@@ -218,6 +218,35 @@ function createClient(
 }
 
 describe('RoomClient', () => {
+  it('forgets lastFrameAt from a previous socket session on reconnect and on disconnect', () => {
+    FakeWebSocket.reset();
+    const timers = new FakeTimers();
+    let now = 1_000;
+    const client = createClient(timers, { now: () => now });
+
+    client.connect('ws://relay.test/room/CAR42?role=spotter');
+    const first = FakeWebSocket.sockets[0];
+    expect(client.lastFrameAt).toBeUndefined();
+    first.open();
+    first.receive(state(1));
+    expect(client.lastFrameAt).toBe(1_000);
+
+    now = 1_500;
+    first.fail();
+    // the drop itself is not a frame: the stale timestamp must not survive into the next session
+    timers.runNextTimeout();
+    const second = FakeWebSocket.sockets[1];
+    expect(client.lastFrameAt).toBeUndefined();
+    second.open();
+    expect(client.lastFrameAt).toBeUndefined();
+    now = 2_000;
+    second.receive({ t: 'pong', ts: 1, serverTs: 2 });
+    expect(client.lastFrameAt).toBe(2_000);
+
+    client.disconnect();
+    expect(client.lastFrameAt).toBeUndefined();
+  });
+
   it('drops, reopens, waits for replay, and flushes only disconnected intents', () => {
     FakeWebSocket.reset();
     const timers = new FakeTimers();

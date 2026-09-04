@@ -156,7 +156,11 @@ export class RoomClient {
   /** Most recent accepted state sequence for the current socket only. */
   lastSeen = 0;
 
-  /** Local receive time of the last valid relay frame, for the NO LINK UI. */
+  /**
+   * Local receive time of the last frame from the *current* socket session,
+   * for the NO LINK UI. `undefined` until that session delivers its first
+   * frame: a previous session's frames never vouch for a new socket.
+   */
   lastFrameAt: number | undefined;
 
   constructor(options: RoomClientOptions) {
@@ -191,6 +195,7 @@ export class RoomClient {
 
     this.retireSocket();
     this.replayed = false;
+    this.lastFrameAt = undefined;
     this.clearPending();
     this.setConnectionState('closed');
   }
@@ -224,6 +229,7 @@ export class RoomClient {
     this.clearPingTimer();
     this.replayed = false;
     this.lastSeen = 0;
+    this.lastFrameAt = undefined;
     this.setConnectionState('connecting');
 
     const socket = new this.WebSocket(this.url);
