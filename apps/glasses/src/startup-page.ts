@@ -38,7 +38,6 @@ const HUD_X = 144;
 const HUD_Y = 8;
 
 export const STATUS_TEXT_COLOR = 2;
-export const STATUS_ALERT_TEXT_COLOR = 4;
 
 function text(
   container: Partial<TextContainer> & {

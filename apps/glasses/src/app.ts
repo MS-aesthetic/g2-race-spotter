@@ -99,12 +99,19 @@ export class HudApp {
     }
   }
 
-  setLinkOk(linkOk: boolean): void {
+  /**
+   * `render: false` records the verdict without drawing, for the caller that is
+   * about to apply the very `state` frame which changed it — one frame must
+   * cost one HUD job, not one with the previous values and one with the new.
+   */
+  setLinkOk(linkOk: boolean, options: { render?: boolean } = {}): void {
     if (linkOk) {
       this.everLinked = true;
     }
     this.linkOkFlag = linkOk;
-    this.render();
+    if (options.render !== false) {
+      this.render();
+    }
   }
 
   /** Id of the message currently on screen and unacknowledged. */
@@ -147,6 +154,9 @@ export class HudApp {
       this.queue.push({ kind: 'msg', text: message });
     }
 
+    // The skill asks for status `textColor: 4` while NO LINK; `textContainerUpgrade`
+    // carries content only, so the strip keeps its startup colour and NO LINK is
+    // signalled by the text plus the dimmed HUD. Deviation for the planner.
     const status = statusLine({
       hasRoom: this.hasRoomFlag,
       connection: this.connection,

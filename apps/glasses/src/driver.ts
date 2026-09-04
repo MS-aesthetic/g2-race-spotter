@@ -77,47 +77,62 @@ export function startDriver(options: DriverOptions): Driver {
     initialStatus: options.initialStatus,
   });
 
+  // True only while a `state` frame is being applied: the link check that runs
+  // first would otherwise render the PREVIOUS lane/gap un-dimmed, costing a
+  // second image send per recovery and flashing a stale gap at full intensity.
+  let applyingState = false;
+
   const watchdog = createLinkWatchdog({
     now: options.now,
     lastFrameAt: () => client.lastFrameAt,
     onChange: (linkOk) => {
-      app.setLinkOk(linkOk);
+      app.setLinkOk(linkOk, { render: !applyingState });
     },
+  });
+
+  const input = createInputHandler({
+    now: options.now,
+    shutDownPageContainer: (exitMode) => bridge.shutDownPageContainer(exitMode),
+    ack: (msgId) => {
+      app.ack(msgId);
+    },
+    unackedMessageId: () => app.unackedMessageId(),
+    reconnect: () => {
+      options.connect();
+      app.render();
+    },
+    disconnect: () => {
+      client.disconnect();
+    },
+    ...(options.log === undefined ? {} : { log: options.log }),
   });
 
   const unsubscribe = [
     client.onState((state) => {
-      // Check first: the frame that just arrived is what clears NO LINK, and
-      // the state render must already carry the un-dimmed HUD.
-      watchdog.check();
-      app.applyState(state);
+      // Check the link first — this frame is what clears NO LINK — but let the
+      // state render carry the verdict, so one frame means one HUD job.
+      applyingState = true;
+      try {
+        watchdog.check();
+        app.applyState(state);
+      } finally {
+        applyingState = false;
+      }
+
+      // Fresh truth from the relay: an ack that never left is tappable again.
+      input.resetAckGuard();
     }),
     client.onConnection((connection, detail) => {
       app.setConnection(connection, detail);
       watchdog.check();
+      if (connection !== 'open') {
+        input.resetAckGuard();
+      }
     }),
     client.onError((error) => {
       app.setError(error);
     }),
-    bridge.onEvenHubEvent(
-      createInputHandler({
-        now: options.now,
-        shutDownPageContainer: (exitMode) =>
-          bridge.shutDownPageContainer(exitMode),
-        ack: (msgId) => {
-          app.ack(msgId);
-        },
-        unackedMessageId: () => app.unackedMessageId(),
-        reconnect: () => {
-          options.connect();
-          app.render();
-        },
-        disconnect: () => {
-          client.disconnect();
-        },
-        ...(options.log === undefined ? {} : { log: options.log }),
-      }),
-    ),
+    bridge.onEvenHubEvent(input.handle),
   ];
 
   const interval = timers.setInterval(() => {

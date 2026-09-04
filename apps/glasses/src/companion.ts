@@ -7,6 +7,7 @@
  */
 
 import type { BridgeCallLog } from './bridge.ts';
+import { glyph } from './render/glyphs.ts';
 import {
   isValidPin,
   isValidRoom,
@@ -30,7 +31,7 @@ const TEMPLATE = `
   </select></label>
   <button type="submit">Save &amp; connect</button>
 </form>
-<p id="g2rs-status">starting…</p>
+<p id="g2rs-status"></p>
 <p id="g2rs-warning" hidden></p>
 <pre id="g2rs-log"></pre>
 `;
@@ -71,6 +72,8 @@ export function mountCompanion(options: CompanionOptions): Companion {
   const log = element<HTMLPreElement>(root, 'g2rs-log');
   const lines: string[] = [];
 
+  // Non-ASCII belongs to glyphs.ts alone (030 R6), companion page included.
+  status.textContent = `starting${glyph('ellipsis')}`;
   room.value = options.settings.room;
   pin.value = options.settings.pin;
   name.value = options.settings.name;

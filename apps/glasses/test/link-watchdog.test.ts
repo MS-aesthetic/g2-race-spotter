@@ -136,6 +136,29 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     );
   });
 
+  it('spends exactly one image send on a recovery frame, with its values', async () => {
+    const { bridge, clock, socket, queue, driver } = await harness();
+
+    socket.receive(stateFrame({ lane: 'top', gap: 30 }));
+    await queue.whenIdle();
+
+    await clock.advance(DRIVER_NO_LINK_MS + 1);
+    driver.checkLink();
+    await queue.whenIdle();
+    const beforeRecovery = images(bridge).length;
+
+    // The frame that clears NO LINK must not first redraw the OLD gap bright.
+    socket.receive(stateFrame({ seq: 2, lane: 'top', gap: 70 }));
+    await queue.whenIdle();
+
+    const sent = images(bridge);
+    expect(sent.length - beforeRecovery).toBe(1);
+    expect(sent.at(-1)?.imageData).toEqual(
+      pack(drawHud({ lane: 'top', gap: 70 }, { linkOk: true })),
+    );
+    expect(statuses(bridge).at(-1)).toBe(statusLinkOk(true));
+  });
+
   it('re-checks on its own interval without an explicit call', async () => {
     const { bridge, clock, socket, queue } = await harness();
 

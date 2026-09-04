@@ -114,9 +114,20 @@ export interface InputHandlerOptions {
   readonly log?: BridgeLogger;
 }
 
-export function createInputHandler(
-  options: InputHandlerOptions,
-): (raw: unknown) => void {
+export interface InputHandler {
+  handle(raw: unknown): void;
+  /**
+   * Forgets which message this session has already acked. The relay is the only
+   * authority on whether an ack landed: `RoomClient.send` silently drops an
+   * `ack` while the socket is down or has not replayed, so the guard must be
+   * released whenever fresh truth arrives (a `state` frame) or the transport
+   * changed underneath it — otherwise one unlucky tap during a blip would
+   * swallow every later tap for that message.
+   */
+  resetAckGuard(): void;
+}
+
+export function createInputHandler(options: InputHandlerOptions): InputHandler {
   let lastForegroundAt = Number.NEGATIVE_INFINITY;
   let ackedMessageId: string | undefined;
   const log: BridgeLogger =
@@ -125,7 +136,7 @@ export function createInputHandler(
       console.info('g2rs.bridge', entry);
     });
 
-  return (raw: unknown): void => {
+  const handle = (raw: unknown): void => {
     const event = toOsEvent(raw);
 
     if (event === 'CLICK_EVENT') {
@@ -175,5 +186,12 @@ export function createInputHandler(
 
     // FOREGROUND_EXIT_EVENT keeps the socket (iOS holds it); scroll and IMU
     // events are reserved for a later version.
+  };
+
+  return {
+    handle,
+    resetAckGuard: () => {
+      ackedMessageId = undefined;
+    },
   };
 }

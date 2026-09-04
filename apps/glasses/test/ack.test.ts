@@ -57,6 +57,7 @@ async function harness(): Promise<Harness> {
     role: 'driver',
     timers: clock.roomTimers,
     now: clock.now,
+    random: () => 0.5,
   });
   const driver = startDriver({
     bridge,
@@ -133,6 +134,32 @@ describe('message ack (030 AC-5)', () => {
       { t: 'ack', msgId: 'm1' },
       { t: 'ack', msgId: 'm2' },
     ]);
+  });
+
+  it('lets the driver ack again after a blip swallowed the first ack', async () => {
+    const { bridge, clock, queue, socket } = await harness();
+
+    socket.receive(stateFrame({ msg: MESSAGE }));
+    await queue.whenIdle();
+
+    // The socket drops before the tap: `RoomClient.send` discards an ack that
+    // has nowhere to go, so the message is still unacked when the room replays.
+    socket.close(1_006);
+    bridge.emit({ textEvent: { eventType: 'CLICK_EVENT' } });
+    await queue.whenIdle();
+    expect(acks(socket)).toHaveLength(0);
+
+    await clock.advance(1_000);
+    const replacement = FakeWebSocket.last();
+    expect(replacement).not.toBe(socket);
+    replacement.open();
+    replacement.receive(stateFrame({ seq: 1, msg: MESSAGE }));
+    await queue.whenIdle();
+
+    bridge.emit({ textEvent: { eventType: 'CLICK_EVENT' } });
+    await queue.whenIdle();
+
+    expect(acks(replacement)).toEqual([{ t: 'ack', msgId: 'm1' }]);
   });
 
   it('does not ack when there is no unacked message', async () => {

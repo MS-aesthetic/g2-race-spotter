@@ -51,13 +51,14 @@ describe('toOsEvent', () => {
 describe('input handler', () => {
   function handler(clock: FakeClock): {
     handle: (raw: unknown) => void;
+    resetAckGuard: () => void;
     reconnects: number[];
     disconnects: number;
   } {
     const reconnects: number[] = [];
     let disconnects = 0;
 
-    const handle = createInputHandler({
+    const { handle, resetAckGuard } = createInputHandler({
       now: clock.now,
       shutDownPageContainer: async () => true,
       ack: () => undefined,
@@ -71,6 +72,7 @@ describe('input handler', () => {
 
     return {
       handle,
+      resetAckGuard,
       reconnects,
       get disconnects() {
         return disconnects;
