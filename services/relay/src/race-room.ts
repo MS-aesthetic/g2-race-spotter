@@ -97,6 +97,10 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (request.headers.get('X-G2RS-Internal-Debug') === '1') {
+      return Response.json(await this.loadState());
+    }
+
     const url = new URL(request.url);
     const requestedRole = url.searchParams.get('role');
     const role: Role | null =

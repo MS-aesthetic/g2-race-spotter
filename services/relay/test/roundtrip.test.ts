@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -25,6 +25,15 @@ const wranglerEntrypoint = join(
   'bin',
   'wrangler.js',
 );
+const assetDirectory = join(
+  projectDirectory,
+  '..',
+  '..',
+  'apps',
+  'spotter',
+  'dist',
+);
+const assetFixture = join(assetDirectory, 'index.html');
 
 async function reservePort(): Promise<number> {
   const server = createServer();
@@ -59,6 +68,9 @@ async function removePersistence(directory: string): Promise<void> {
 }
 
 async function startWorker(): Promise<RunningWorker> {
+  await mkdir(assetDirectory, { recursive: true });
+  await writeFile(assetFixture, '<!doctype html><title>Spotter</title>');
+
   const port = await reservePort();
   const persistenceDirectory = await mkdtemp(join(tmpdir(), 'g2rs-relay-'));
   const worker = spawn(
@@ -85,13 +97,14 @@ async function startWorker(): Promise<RunningWorker> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`${origin}/not-a-room`);
-      if (response.status === 404) {
+      const response = await fetch(`${origin}/health`);
+      if (response.ok) {
         return {
           origin,
           async stop(): Promise<void> {
             await stopProcess(worker);
             await removePersistence(persistenceDirectory);
+            await rm(assetFixture, { force: true });
           },
         };
       }
@@ -103,6 +116,7 @@ async function startWorker(): Promise<RunningWorker> {
 
   await stopProcess(worker);
   await removePersistence(persistenceDirectory);
+  await rm(assetFixture, { force: true });
   throw new Error(`wrangler did not start:\n${output.join('')}`);
 }
 
