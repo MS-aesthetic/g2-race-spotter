@@ -3,15 +3,16 @@ import { DurableObject } from 'cloudflare:workers';
 import { nextAlarmAt } from './alarm.js';
 
 import {
+  CLOSE_CODE_AUTH,
   CLOSE_CODE_BAD_HELLO,
   CLOSE_CODE_VERSION,
   createInitialState,
   isClientMessage,
   isHello,
   isPing,
+  PROTOCOL_VERSION,
   reduce,
   ROOM_TTL_MS,
-  PROTOCOL_VERSION,
   type ErrorMessage,
   type Role,
   type State,
@@ -20,8 +21,15 @@ import {
 interface SocketAttachment {
   readonly role: Role | null;
   readonly name: string | undefined;
+  readonly token: string | null;
+  readonly tokenPresent: boolean;
   readonly lastPing: number;
   readonly ready: boolean;
+  readonly rejected?: boolean;
+}
+
+interface StoredPin {
+  readonly value: string | null;
 }
 
 function serialize(message: object): string {
@@ -39,8 +47,12 @@ function isSocketAttachment(value: unknown): value is SocketAttachment {
       attachment.role === 'driver' ||
       attachment.role === null) &&
     (attachment.name === undefined || typeof attachment.name === 'string') &&
+    (attachment.token === null || typeof attachment.token === 'string') &&
+    typeof attachment.tokenPresent === 'boolean' &&
     typeof attachment.lastPing === 'number' &&
-    typeof attachment.ready === 'boolean'
+    typeof attachment.ready === 'boolean' &&
+    (attachment.rejected === undefined ||
+      typeof attachment.rejected === 'boolean')
   );
 }
 
@@ -116,16 +128,25 @@ export class RaceRoom extends DurableObject<Env> {
     return { state: next, changed: next !== state };
   }
 
-  private sendBadHello(socket: WebSocket): void {
+  private sendBadHello(socket: WebSocket, attachment?: SocketAttachment): void {
+    if (attachment !== undefined) {
+      socket.serializeAttachment({ ...attachment, rejected: true });
+    }
     const error: ErrorMessage = { t: 'error', code: 'bad_frame' };
     socket.send(serialize(error));
     socket.close(CLOSE_CODE_BAD_HELLO, 'hello must match URL');
   }
 
-  private sendBadVersion(socket: WebSocket): void {
-    const error: ErrorMessage = { t: 'error', code: 'version' };
+  private rejectSocket(
+    socket: WebSocket,
+    attachment: SocketAttachment,
+    error: ErrorMessage,
+    code: number,
+    reason: string,
+  ): void {
+    socket.serializeAttachment({ ...attachment, rejected: true });
     socket.send(serialize(error));
-    socket.close(CLOSE_CODE_VERSION, 'protocol version mismatch');
+    socket.close(code, reason);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -136,6 +157,7 @@ export class RaceRoom extends DurableObject<Env> {
         return Response.json({
           state,
           alarm: await this.ctx.storage.getAlarm(),
+          createdAt: (await this.ctx.storage.get<number>('createdAt')) ?? null,
         });
       }
       return Response.json(state);
@@ -149,17 +171,19 @@ export class RaceRoom extends DurableObject<Env> {
         : null;
 
     const name = url.searchParams.get('name') ?? undefined;
+    const tokenPresent = url.searchParams.has('token');
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     const attachment: SocketAttachment = {
       role,
       name,
+      token: tokenPresent ? url.searchParams.get('token') : null,
+      tokenPresent,
       lastPing: Date.now(),
       ready: false,
     };
     this.ctx.acceptWebSocket(server, role === null ? [] : [role]);
     server.serializeAttachment(attachment);
-    await this.scheduleAlarm();
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -169,8 +193,11 @@ export class RaceRoom extends DurableObject<Env> {
     raw: string | ArrayBuffer,
   ): Promise<void> {
     const attachment = this.attachment(socket);
+    if (attachment?.rejected === true) {
+      return;
+    }
     if (attachment === undefined || typeof raw !== 'string') {
-      this.sendBadHello(socket);
+      this.sendBadHello(socket, attachment);
       return;
     }
 
@@ -178,25 +205,65 @@ export class RaceRoom extends DurableObject<Env> {
     try {
       value = JSON.parse(raw);
     } catch {
-      this.sendBadHello(socket);
+      this.sendBadHello(socket, attachment);
       return;
     }
 
     if (!attachment.ready) {
       if (!isHello(value)) {
-        this.sendBadHello(socket);
+        this.sendBadHello(socket, attachment);
         return;
       }
+
       if (value.v !== PROTOCOL_VERSION) {
-        this.sendBadVersion(socket);
+        this.rejectSocket(
+          socket,
+          attachment,
+          { t: 'error', code: 'version' },
+          CLOSE_CODE_VERSION,
+          'protocol version does not match room',
+        );
         return;
       }
+
       if (
         attachment.role === null ||
         value.role !== attachment.role ||
         value.name !== attachment.name
       ) {
-        this.sendBadHello(socket);
+        this.sendBadHello(socket, attachment);
+        return;
+      }
+
+      if (
+        attachment.tokenPresent &&
+        (attachment.token === null || !/^\d{4}$/.test(attachment.token))
+      ) {
+        this.rejectSocket(
+          socket,
+          attachment,
+          { t: 'error', code: 'auth' },
+          CLOSE_CODE_AUTH,
+          'PIN must be four digits',
+        );
+        return;
+      }
+
+      const pin = await this.ctx.storage.get<StoredPin>('pin');
+      if (pin === undefined) {
+        const createdAt = Date.now();
+        await this.ctx.storage.put({
+          pin: { value: attachment.token },
+          createdAt,
+        });
+      } else if (pin.value !== null && pin.value !== attachment.token) {
+        this.rejectSocket(
+          socket,
+          attachment,
+          { t: 'error', code: 'auth' },
+          CLOSE_CODE_AUTH,
+          'PIN does not match room',
+        );
         return;
       }
 
@@ -212,7 +279,7 @@ export class RaceRoom extends DurableObject<Env> {
     }
 
     if (attachment.role === null) {
-      this.sendBadHello(socket);
+      this.sendBadHello(socket, attachment);
       return;
     }
 
@@ -236,6 +303,9 @@ export class RaceRoom extends DurableObject<Env> {
 
   async webSocketClose(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
+    if (attachment?.rejected === true) {
+      return;
+    }
     let state = await this.loadState();
     if (attachment?.ready === true && attachment.role !== null) {
       const peers = await this.reconcilePeers(undefined, socket);
@@ -246,6 +316,9 @@ export class RaceRoom extends DurableObject<Env> {
 
   async webSocketError(socket: WebSocket): Promise<void> {
     const attachment = this.attachment(socket);
+    if (attachment?.rejected === true) {
+      return;
+    }
     let state = await this.loadState();
     if (attachment?.ready === true && attachment.role !== null) {
       const peers = await this.reconcilePeers(undefined, socket);
