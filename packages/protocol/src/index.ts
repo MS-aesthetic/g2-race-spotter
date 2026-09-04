@@ -16,6 +16,7 @@ export {
 
 export {
   RoomClient,
+  type ConnectionCloseDetail,
   type ConnectionState,
   type RoomClientIntent,
   type RoomClientOptions,

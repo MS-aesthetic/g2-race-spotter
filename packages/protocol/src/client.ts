@@ -7,11 +7,13 @@ import {
   PROTOCOL_VERSION,
   RECONNECT_MAX_MS,
   RECONNECT_MIN_MS,
+  isErrorMessage,
   isServerMessage,
   isState,
   type Clear,
   type Ack,
   type ClientMessage,
+  type ErrorMessage,
   type Hello,
   type Role,
   type SetGap,
@@ -28,6 +30,27 @@ export type ConnectionState = 'connecting' | 'open' | 'closed';
  * after the room replay establishes the current state.
  */
 export type RoomClientIntent = SetLane | SetGap | SetMsg | Clear | Ack;
+
+/**
+ * Second argument to every `onConnection` callback. Only meaningful when
+ * `state === 'closed'`: `code` is the WebSocket close code (`undefined` when
+ * the transport never supplied one, e.g. a bare `error` event with no
+ * matching `close`), and `terminal` is `isTerminalClose(code)` — true for
+ * 4400/4401/4409/4426, the codes after which the client does not reconnect.
+ * Added as a second parameter (not a replacement payload) so existing
+ * single-argument `onConnection` subscribers keep compiling and running
+ * unchanged; UIs that need to distinguish a terminal rejection (show the PIN
+ * prompt / reload prompt) from a reconnecting drop read this argument.
+ */
+export interface ConnectionCloseDetail {
+  code: number | undefined;
+  terminal: boolean;
+}
+
+const NON_CLOSE_DETAIL: ConnectionCloseDetail = {
+  code: undefined,
+  terminal: false,
+};
 
 export interface WebSocketMessageEvent {
   data: unknown;
@@ -139,8 +162,9 @@ export class RoomClient {
   private readonly now: () => number;
   private readonly random: () => number;
   private readonly stateListeners = new Set<(state: State) => void>();
+  private readonly errorListeners = new Set<(error: ErrorMessage) => void>();
   private readonly connectionListeners = new Set<
-    (state: ConnectionState) => void
+    (state: ConnectionState, detail: ConnectionCloseDetail) => void
   >();
   private socket: RoomWebSocket | undefined;
   private url: string | undefined;
@@ -173,7 +197,17 @@ export class RoomClient {
   }
 
   connect(url: string): void {
-    if (this.url === url && this.socket !== undefined) {
+    // Only a session that has already replayed its `state` counts as
+    // "healthy" for the same-URL no-op: a socket still CONNECTING (or open
+    // but not yet replayed) may never open at all (e.g. a zombie left behind
+    // by a suspended tab), and a foreground reconnect must not be blocked by
+    // it. `retireSocket`/`openSocket` below replace it immediately rather
+    // than waiting for its `close` — the socket-identity guard in
+    // handleOpen/handleMessage/handleClose already ignores events from a
+    // socket that is no longer `this.socket`, so the old socket's handlers
+    // cannot leak state into the new session even though they are not
+    // explicitly removed.
+    if (this.url === url && this.socket !== undefined && this.replayed) {
       return;
     }
 
@@ -205,9 +239,19 @@ export class RoomClient {
     return () => this.stateListeners.delete(listener);
   }
 
-  onConnection(listener: (state: ConnectionState) => void): () => void {
+  onConnection(
+    listener: (state: ConnectionState, detail: ConnectionCloseDetail) => void,
+  ): () => void {
     this.connectionListeners.add(listener);
     return () => this.connectionListeners.delete(listener);
+  }
+
+  /** Subscribes to `error` frames (`{t:'error', code, detail?}`). Multiple
+   * subscribers allowed; returns an unsubscribe function, matching
+   * `onState`/`onConnection`. */
+  onError(listener: (error: ErrorMessage) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
   }
 
   send(intent: RoomClientIntent): void {
@@ -295,6 +339,13 @@ export class RoomClient {
       return;
     }
 
+    if (isErrorMessage(message)) {
+      for (const listener of this.errorListeners) {
+        listener(message);
+      }
+      return;
+    }
+
     if (!isState(message) || message.seq <= this.lastSeen) {
       return;
     }
@@ -319,13 +370,18 @@ export class RoomClient {
     this.socket = undefined;
     this.replayed = false;
     this.clearPingTimer();
-    if (isTerminalClose(event)) {
-      // No reconnect follows a terminal close: the last frame of the dead
-      // session must not keep the NO LINK watchdog quiet.
+    const terminal = isTerminalClose(event);
+    const code = closeCode(event);
+    if (terminal) {
+      // No reconnect follows a terminal close (4400/4401/4409/4426): the
+      // last frame of the dead session must not keep the NO LINK watchdog
+      // quiet, and anything queued while this rejected session was down
+      // must not leak into a later session — there is no later session.
       this.lastFrameAt = undefined;
+      this.clearPending();
     }
-    this.setConnectionState('closed');
-    if (!isTerminalClose(event)) {
+    this.setConnectionState('closed', { code, terminal });
+    if (!terminal) {
       this.scheduleReconnect();
     }
   }
@@ -434,14 +490,17 @@ export class RoomClient {
     this.pendingMessages.length = 0;
   }
 
-  private setConnectionState(next: ConnectionState): void {
+  private setConnectionState(
+    next: ConnectionState,
+    detail: ConnectionCloseDetail = NON_CLOSE_DETAIL,
+  ): void {
     if (this.status === next) {
       return;
     }
 
     this.status = next;
     for (const listener of this.connectionListeners) {
-      listener(next);
+      listener(next, detail);
     }
   }
 }
