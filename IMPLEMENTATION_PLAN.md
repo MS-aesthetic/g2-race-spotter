@@ -1,4 +1,4 @@
-# Implementation plan — 2026-09-04T00:56:27-04:00
+# Implementation plan — 2026-09-04T00:58:08-04:00
 
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
@@ -7,8 +7,7 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 | lease | task | stream | write scope | locks | dependency / integration gate |
 |---|---|---|---|---|---|
-
-_No active leases. L012/T011a closed after a failed, no-commit repair attempt; preserve `C:\Users\maxx\.cache\g2rs-worktrees\L012` at inherited candidate `afd6b62` for evidence. T011b remains unleased for coordinator dispatch._
+| L013 | T011b | relay-room | `services/relay/src/race-room.ts`; `services/relay/test/auth.test.ts` | `relay-room` | Integration base `749e483`; intended worktree `C:\Users\maxx\.cache\g2rs-worktrees\L013`; branch `ralph/L013-T011b`; T016 integrated. Cherry-pick blocked T011 candidate `5a614b0` (or patch-equivalent `afd6b62`) after the lease, review the combined candidate+repair exact range from post-lease base `749e483`, and integrate application commits serially only after approval and full root gates. |
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
