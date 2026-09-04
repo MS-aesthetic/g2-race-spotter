@@ -5,6 +5,7 @@ import WebSocket from 'ws';
 
 import {
   nextMessage,
+  nextMessageMatching,
   openSocket,
   startWorker,
   type RunningWorker,
@@ -106,7 +107,12 @@ describe('RaceRoom driver eviction', () => {
         );
         try {
           await hello(spotter, 'spotter');
-          const laneForNewDriver = nextMessage(second);
+          // A `spotterOnline` peer broadcast from the spotter's hello can race
+          // the lane frame; wait for the frame that carries the lane.
+          const laneForNewDriver = nextMessageMatching(
+            second,
+            (frame) => frame['t'] === 'state' && frame['lane'] === 'top',
+          );
           const noMoreForOldDriver = expectNoMessage(first, 300);
           spotter.send(JSON.stringify({ t: 'lane', lane: 'top' }));
 

@@ -132,6 +132,33 @@ export function openSocket(url: string): Promise<WebSocket> {
   });
 }
 
+/**
+ * Resolves with the first frame that satisfies `matches`, skipping others
+ * (e.g. a `peer` presence broadcast that races the frame under test).
+ */
+export function nextMessageMatching(
+  socket: WebSocket,
+  matches: (frame: Record<string, unknown>) => boolean,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const onMessage = (data: WebSocket.RawData): void => {
+      try {
+        const frame = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (matches(frame)) {
+          socket.off('message', onMessage);
+          socket.off('error', reject);
+          resolve(frame);
+        }
+      } catch (error) {
+        socket.off('message', onMessage);
+        reject(error);
+      }
+    };
+    socket.on('message', onMessage);
+    socket.once('error', reject);
+  });
+}
+
 export function nextMessage(
   socket: WebSocket,
 ): Promise<Record<string, unknown>> {
