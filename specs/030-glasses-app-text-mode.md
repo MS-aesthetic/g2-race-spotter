@@ -44,6 +44,7 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 ## Decisions
 
 - 2026-09-03 Text mode ships first — why: fastest end-to-end validation and it is the permanent fallback anyway.
+- 2026-09-04 (audit) `lastFrameAt` is per socket session: `RoomClient` resets it to `undefined` on every socket open, on `disconnect()`, and on a terminal close (4401/4409/4426). During a reconnect blip the HUD therefore shows `NO LINK` and dims until the new socket's replayed `state` arrives — why: R3 and the constitution's "never show stale driver data as live" invariant prefer a brief dim over a stale `LINK OK`; the glasses app must not cache the previous session's timestamp to paper over the blip.
 
 ## Open questions
 

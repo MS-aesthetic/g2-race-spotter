@@ -3,8 +3,6 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- T011-review-cap — decide whether to authorize a fourth T011 repair after three review blocks. L014 is closed at `581bead`; the quarantined candidate still checks a missing URL role before a structurally valid mismatched-version hello, yielding `bad_frame`/4400 instead of `version`/4426. This is a process/retry-cap decision, not `[HW]`.
-- T006c-scope — decide whether to authorize one fifth, adapter-only edit in `packages/protocol/src/client.ts:73-78`; the four authorized T006c edits are recoverable at L009 `stash@{0}` (`d84a200`) and no application commit was made. This is a process/scope decision, not `[HW]`.
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -36,6 +34,12 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 
 ## Scope boundary (2026-09-04)
 - L009/T006c stopped without a commit because the inherited candidate fails root typecheck at the default browser timer adapter before and after the four authorized edits. The passing four-change repair is preserved in L009 `stash@{0}` (`d84a200`); changing that adapter would be a fifth edit and requires Maxx's explicit scope decision. L010/T016 remains active and unchanged.
+
+## Repair/review iteration (2026-09-04, Fable 5.1 as final auditor/QA)
+- Maxx: "Do the repair/review/planner iteration as outlined." T011-review-cap and T006c-scope are both closed by integration: T011d (`4181e34`) moved the null-URL-role decision after version rejection and added the pinned precedence test; T006c (`68d9776`, applied with the timer-type fix) plus T006d (`fa63af2`, per-session `lastFrameAt`) and T006e (`c1218e7`, exports + terminal-close clear) integrate the RoomClient. 020 AC-6 and AC-8 are met.
+- Formal `protocol-keeper` reviews (Opus 5) were obtained for `7bab61a`, `68d9776`, `4181e34`, `fa63af2` after the fact; recorded in `docs/reviews/2026-09-04-repair-iteration.md` (also `ralph/last-review.md`). Lesson: two commits reached master without a review record — every integration writes the review before the planner runs.
+- `scripts/sync-agents.mjs` now treats only files it generated as orphans (`a88832c`); the three untracked `.claude/agents/cavecrew-*.md` files are preserved and no longer fail `sync:agents:check`.
+- Spec 030 gained the reconnect-blip decision (`lastFrameAt` is per socket session; the HUD dims during a blip).
 
 ## Iterations
 
@@ -82,3 +86,9 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 38 | 2026-09-04 | T011a | relay-backend-dev | failed | n/a | - | Accepted-socket close deferral from `fetch` is not live-boundary reliable and an alarm violates isolation; perform auth rejection during the mandatory first `hello` event instead. |
 | 39 | 2026-09-04 | T011b | relay-backend-dev | review-blocked | block | 2d1edb6 | Validate `PROTOCOL_VERSION` before role/name/PIN work and atomically persist fresh-room `pin` plus `createdAt`; the failed/n/a T011a attempt does not count as a review block, so this is the chain's second block. |
 | 40 | 2026-09-04 | T011c | relay-backend-dev | review-blocked | block | 581bead | Missing/invalid URL role is still rejected before a structurally valid mismatched version; the third chain block closes L014 and escalates any fourth repair to Maxx. |
+| 41 | 2026-09-04 | T011c-precedence | relay-backend-dev | done | approve (post-hoc) | 7bab61a | Version mismatch is rejected before a bad URL role on the first hello; landed without a review record — reviewed after the fact. |
+| 42 | 2026-09-04 | T006c | relay-backend-dev | done | approve with nits (post-hoc) | 68d9776 | The four authorized edits plus the timer-adapter fix integrate the RoomClient (020 AC-8); five type exports were dropped and the same-URL connect() guard ignores a CONNECTING zombie (T006e / T017). |
+| 43 | 2026-09-04 | T011d | relay-backend-dev | done | approve with nits | 4181e34 | Null URL role is decided after structural hello parsing and version rejection; pinned live precedence test for '' and '?role=crew'; 020 AC-6 met. No accept-time alarm — T012 must reap unready sockets. |
+| 44 | 2026-09-04 | T006d | relay-backend-dev | done | approve with nits | fa63af2 | lastFrameAt is reset per socket session (open and disconnect) so a stale LINK OK cannot survive a reconnect; blip semantics recorded in spec 030. |
+| 45 | 2026-09-04 | tooling | relay-backend-dev | done | approve | a88832c | sync-agents orphan rule keys on the generator banner; untracked hand-written agents no longer break the check. |
+| 46 | 2026-09-04 | T006e | relay-backend-dev | done | approve | c1218e7 | Client type exports restored; lastFrameAt cleared on a terminal close so an evicted driver reads NO LINK immediately. |
