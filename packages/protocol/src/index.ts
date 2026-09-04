@@ -14,6 +14,12 @@ export {
   type ReducerEvent,
 } from './reduce.ts';
 
+export {
+  RoomClient,
+  type RoomClientTimers,
+  type RoomWebSocket,
+} from './client.ts';
+
 export const PROTOCOL_VERSION = 1;
 
 export const PING_INTERVAL_MS = 2_000;
