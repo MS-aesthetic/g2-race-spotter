@@ -1,33 +1,28 @@
-# Implementation plan — 2026-09-03T23:01:24-04:00
+# Implementation plan — 2026-09-03T23:21:18-04:00
 
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 
-| lease  | task             | stream / exact base                                                        | write scope and locks                                                                                                                                                                                | dependency / review / integration gate                                                                                                                                                                |
-| ------ | ---------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L008R2 | T008/T008a       | relay-room; repair base `686c174`; quarantined ancestry `191d9a1..686c174` | `services/relay/src/alarm.ts`, `services/relay/src/race-room.ts`, `services/relay/test/alarm.test.ts`, `services/relay/test/live-worker.ts`, `services/relay/test/replay.test.ts`; lock `relay-room` | T008a repairs the blocked T008 candidate; fresh `protocol-keeper` reviews exact combined range `191d9a1..HEAD`; integrate the chain only after approval, both live tests, and every Node 22 root gate |
-| L005R2 | T006/T006a/T006b | protocol-client; quarantined `ae5f448..e588729`                            | frozen: `packages/protocol/src/client.ts`, `packages/protocol/src/index.ts`, `packages/protocol/test/client.test.ts`; lock `protocol-client`                                                         | third review block; no integration and no automatic fourth repair lease without explicit human direction                                                                                              |
+- None. T008/T008a is integrated; T006/T006a/T006b is stopped and quarantined; the next implementation task is intentionally unleased for handoff to another agent instance.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
-- [ ] T008a (owner: relay-backend-dev) (spec: 020 AC-4; requirement R4) [lease: L008R2; stream: relay-room; lock: relay-room; repair-base: `686c174`] Repair the quarantined T008 chain without changing wire shapes or timings. Address the review findings verbatim: "webSocketClose closes before deserializing attachment; live ready spotter close leaves spotterOnline true. Capture attachment before reciprocal close or omit redundant close, refresh/persist; live regression close => offline and empty alarm repointed." "hello refreshes only joining role; restart with no spotter replays spotterOnline true. Reconcile both role flags from hibernatable sockets and persist before first replay; assert complete state offline/online and monotonic seq." "alarm test never empties room/expiry; add live close/poll actual alarm ≈ updatedAt+TTL and factored expiry/delete regression; use normative expire reducer before deleteAll or document observable equivalence." Keep changes inside the L008R2 scope, run `services/relay/test/replay.test.ts`, `services/relay/test/alarm.test.ts`, and every root gate, then commit once. Review the combined `191d9a1..HEAD` range.
-- [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4; requirement R4) [quarantined candidate: `686c174`; depends: T008a approved] Preserve authoritative state and monotonic sequence across reconnect and Durable Object rehydration, reconcile both online flags before replay, and repoint the empty-room alarm to `updatedAt + ROOM_TTL_MS`; integrate only as the approved T008/T008a chain.
-- [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay-room; lock: relay-room; depends: T008/T008a integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth error followed by close 4401; verify `services/relay/test/auth.test.ts`.
+- [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6; requirement R4) [stream: relay-room; lock: relay-room; depends: T008/T008a integrated] Implement first-join PIN persistence under storage key `pin`, including open-room `{value:null}` semantics; after WebSocket acceptance, reject later token mismatches with `error{code:"auth"}` then close 4401, without changing state or evicting a driver. Verify fresh/open/protected/restart cases in `services/relay/test/auth.test.ts`; run every root gate and commit once.
 - [ ] T009 (owner: relay-backend-dev) (spec: 020 AC-5) [stream: relay-room; lock: relay-room; depends: T011 integrated] Enforce PIN-checked, last-writer-wins driver eviction by sending `role_taken`, closing the previous driver with 4409, and accepting the new driver; verify `services/relay/test/eviction.test.ts`.
 - [ ] T012 (owner: relay-backend-dev) (spec: 020 AC-7) [stream: relay-room; lock: relay-room; depends: T009 integrated] Implement shared-timing alarm ticks, silent-socket close 4408, peer-offline reduction, and broadcast; verify `services/relay/test/heartbeat.test.ts`.
 - [ ] T013 (owner: relay-backend-dev) (spec: 020 AC-9) [stream: relay-room; lock: relay-room; depends: T012 integrated] Enforce frame-size, malformed, unknown-type, wrong-role, version, and URL-versus-hello semantics with every required ignore/keep-open/close behavior; verify `services/relay/test/validation.test.ts`.
-- [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10; requirement R6) [stream: tooling; lock: fake-spotter; depends: T008 and T009 integrated] Implement every fake-spotter scenario and `--role driver` in `scripts/fake-spotter.ts`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
+- [ ] T014 (owner: relay-backend-dev) (spec: 020 AC-10; requirement R6) [stream: tooling; lock: fake-spotter; depends: T009 integrated] Implement every fake-spotter scenario and `--role driver` in `scripts/fake-spotter.ts`, reusing protocol fixtures; verify `scripts/test/fake-spotter.test.ts` against local `wrangler dev`; deployed proof remains T102.
 
 ## Needs simulator [SIM]
 
 - [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` on an interactive machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
 - [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject non-hardware `TBD`, add the root environment check to CI, and validate `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and full AC-1 gates.
 
-## Needs human — review escalation (not [HW] evidence)
+## Needs human — stopped review escalation (not [HW] evidence)
 
-- [ ] T006/T006a/T006b (owner: maxx) (spec: 020 AC-8) [NON-HARDWARE REVIEW ESCALATION] Decide whether to authorize a fourth, narrowly scoped repair of quarantined candidate `ae5f448..e588729`. Three exact-range reviews blocked the chain. Remaining findings: reset `reconnectAttempt` only after the first valid replay so repeated open-then-close-before-state cycles increase toward the cap; clamp jitter within 500–8000 ms and test `random: () => 0`. This is a code-review escalation only and is not `[HW]` evidence.
+- [ ] T006/T006a/T006b (owner: maxx) (spec: 020 AC-8) [STOPPED; NON-HARDWARE REVIEW ESCALATION] A fourth repair was declined after three exact-range review blocks; candidate `ae5f448..e588729` remains quarantined and must not be leased or integrated. Resume only if Maxx explicitly reverses this decision. Remaining findings are retained for traceability: reset `reconnectAttempt` only after the first valid replay; clamp jitter within 500–8000 ms and test `random: () => 0`.
 
 ## Needs human [HW]
 
@@ -50,23 +45,21 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 ## Done this cycle
 
-- [x] T007a/T007c (owner: relay-backend-dev) (spec: 020 AC-10; requirement R5) Approved exact candidate range `a380d6f..8dcb04a` integrated as `9eb2876` + `191d9a1`; `/health`, protected debug, CORS, asset fallthrough, generated bindings, and asset-preservation regressions pass.
-- [x] T007/T007b (owner: relay-backend-dev) (spec: 020 AC-3) Integrated the approved hibernating relay roundtrip and readiness repair as `794fd17` + `a380d6f`.
-- [x] T004a/T004b/T004c (owner: relay-backend-dev) (spec: 020 AC-1) Repaired the protocol package export and consumer compile chain (integrated commits `087d31b`, `3ba292f`, `ae5f448`).
-- [x] T005/T005a (owner: relay-backend-dev) (spec: 020 AC-2) Implemented and approved the pure room-state reducer stack (commits `35e74dc`, `42d7d5b`).
-- [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened simulator evidence classification without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
-- [x] T004 (owner: relay-backend-dev) (spec: 020 AC-1) Centralized protocol v1 types/constants/guards and fixtures (commit `019d2e4`; review `approve`).
+- [x] T008/T008a (owner: relay-backend-dev) (spec: 020 AC-4; requirement R4) Exact range `191d9a1..5689288` was approved with no findings and integrated as `56e0729` + `637c2c2`; reconnect and Durable Object restart replay preserve lane/gap/msg and monotonic seq, reconcile both presence flags before first replay, repoint an empty room to `updatedAt + ROOM_TTL_MS`, and route expiry through the normative reducer before deletion.
+- [x] T007a/T007c (owner: relay-backend-dev) (spec: 020 requirement R5) Approved route stack integrated as `9eb2876` + `191d9a1`; `/health`, protected debug, CORS, asset fallthrough, generated bindings, and asset-preservation regressions pass.
+- [x] T007/T007b (owner: relay-backend-dev) (spec: 020 AC-3) Approved hibernating relay roundtrip stack integrated as `794fd17` + `a380d6f`.
+- [x] T004/T004a/T004b/T004c (owner: relay-backend-dev) (spec: 020 AC-1) Centralized and repaired the protocol package, guards, fixtures, exports, and consumer compilation.
+- [x] T005/T005a (owner: relay-backend-dev) (spec: 020 AC-2) Implemented and approved the pure room-state reducer stack (`35e74dc` + `42d7d5b`).
 
 ## Notes / why
 
-- T008 candidate `686c174` is quarantined: its close and restart paths can replay stale peer-online state, so integration would violate constitution invariant 1.
-- T008a has priority over all later room work because authoritative online flags and expiry scheduling underpin PIN, eviction, and heartbeat behavior.
-- The repair must use the protocol's `expire` reducer before deletion unless it explicitly documents and tests equivalent observable behavior; no wire type or timing may be redefined.
-- T006 stays frozen pending human authorization; T008a and subsequent independent relay work need no approval.
-- T014 stays unleased until T008 and T009 integrate because replay and driver-eviction scenarios depend on them.
-- Main remains at the approved T007c integration plus planning commits; no blocked application candidate is integrated.
-- Integration evidence at `191d9a1`: 56 tests, typecheck, lint/format, pin checks, agent-sync checks, live relay tests, Wrangler type generation check, and a dry-run with temporary ignored assets all passed on Node 22.
+- T008/T008a is integrated, approved, and root-gated: 59/59 tests, typecheck, lint (only two existing generated-d.ts warnings), pins, sync, environment check, Wrangler types check, and isolated-assets deploy dry-run pass on Node 22.
+- 020 AC-4 is met by `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`; no stale peer-online flag is replayed after close or rehydration.
+- T011 is next because PIN establishment/authentication must precede driver eviction; both share `relay-room` and cannot run concurrently.
+- No new implementation lease was opened because the user requested handoff after this planning update.
+- T006 is frozen by the user's explicit decision; it is neither `[SIM]` nor `[HW]`, and 020 AC-8 remains unmet.
+- T014 stays unleased until T009 integrates because its driver-eviction scenario depends on that behavior.
 - AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 need simulator; AC-4 needs hardware.
-- AC audit 020: AC-1/AC-2/AC-3 met; AC-4–AC-9 remain unmet except quarantined candidates; AC-10 remains `[HW]` after local T014.
-- AC audits 030–070 are unchanged: automated criteria remain future work, simulator evidence is absent, and hardware criteria remain under Needs human.
+- AC audit 020: AC-1/AC-2/AC-3/AC-4 met; AC-5–AC-9 remain unmet except the stopped, quarantined AC-8 client chain; AC-10 remains `[HW]` after local T014.
+- AC audits 030–070: automated criteria remain future work, simulator evidence is absent, and hardware criteria remain under Needs human.
 - No criterion is `DISPUTED`; no simulator or hardware evidence is claimed.

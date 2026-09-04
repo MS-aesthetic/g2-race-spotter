@@ -41,6 +41,7 @@ R6. `fake-spotter` MUST support scenarios `lanes`, `gap-sweep`, `message-ack`, `
 
 - 2026-09-03 Full-state broadcasts, no deltas — why: reconnects and reordering become trivial; payloads are tiny.
 - 2026-09-03 Last-writer-wins for the driver role — why: the driver's own stale socket must never lock it out.
+- 2026-09-03 Reconcile both ready-role flags before the first replay after close or rehydration, target an empty room's alarm at `updatedAt + ROOM_TTL_MS`, and reduce `expire` before deleting storage — why: replay must preserve intents and sequence without advertising dead peers, while expiry alone starts a fresh room lifetime.
 
 ## Open questions
 

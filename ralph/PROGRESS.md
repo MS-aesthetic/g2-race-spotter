@@ -3,7 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- T006/T006a/T006b — non-hardware third-review-block escalation (spec 020 AC-8); candidate `ae5f448..e588729` remains quarantined, and no fourth repair lease may start without explicit human direction
+- T006/T006a/T006b — STOPPED non-hardware third-review-block escalation (spec 020 AC-8); Maxx declined a fourth repair, candidate `ae5f448..e588729` remains quarantined, and work may resume only after a future explicit reversal
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -62,3 +62,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 31 | 2026-09-03 | T007a | relay-backend-dev | review-blocked | block | 01e596b | Public callers can forge the internal debug header, generated Worker types are stale, and relay tests must not overwrite or delete real spotter assets. |
 | 32 | 2026-09-03 | T007c | relay-backend-dev | done | approve | 191d9a1 | Exact candidate range `a380d6f..8dcb04a` was approved with no findings; T007a/T007c integrated serially and 56 tests plus every Node 22 root, live-relay, Wrangler-types, and dry-run gate passed. |
 | 33 | 2026-09-03 | T008 | relay-backend-dev | review-blocked | block | 686c174 | Quarantine the replay/expiry candidate: close and rehydration paths can persist stale peer-online flags, and the live alarm test must prove an actually empty room plus normative expiry/delete behavior. |
+| 34 | 2026-09-03 | T008a | relay-backend-dev | done | approve | 637c2c2 | Exact range `191d9a1..5689288` was approved with no findings; T008/T008a integrated as `56e0729` + `637c2c2`, and 59 tests plus every Node 22 root, relay, Wrangler-types, and isolated-assets dry-run gate passed. |
