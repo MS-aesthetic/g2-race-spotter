@@ -1,85 +1,67 @@
-# G2 Race Spotter — agent handoff
+# G2 Race Spotter — current agent handoff
 
-Snapshot date: 2026-09-03 (America/New_York)  
-Code/planning snapshot: `67311ac` (this handoff commit is layered on top)
+Snapshot: 2026-09-04 (America/New_York)
+Authoritative main snapshot: `6e82c4f4a6af432a600d940e857878ed4891e373`
 
-## Start here
+## Read first
 
-Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside OneDrive. Do not run the loop or install `node_modules` in the OneDrive copy. Read, in order:
+Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside OneDrive. Read `AGENTS.md`, `specs/000-constitution.md`, `ralph/README.md`, `IMPLEMENTATION_PLAN.md`, `ralph/PROGRESS.md`, `specs/020-protocol-and-relay.md`, and `.agents/skills/race-relay-protocol/SKILL.md`. Specs are authoritative; later committed plan/progress changes supersede this snapshot.
 
-1. `AGENTS.md`
-2. `specs/000-constitution.md`
-3. `ralph/README.md`
-4. `IMPLEMENTATION_PLAN.md`
-5. `ralph/PROGRESS.md`
-6. the active spec and applicable skills
+## Current status
 
-This file is a current snapshot only. Specs remain authoritative; the implementation plan and progress log supersede this file if later commits disagree.
+- Branch `master`; plan status `BLOCKED`; no active lease or Git remote.
+- No spec is `DISPUTED`; no Cloudflare deployment occurred; no secrets were added.
+- Latest approved application commit: `0909521` (T016 pong/heartbeat/self-arming alarm).
+- Main passed Node 22 typecheck, 60/60 tests, lint, pins, environment, Wrangler types, and isolated-assets deploy dry-run.
+- Three untracked `.claude/agents/cavecrew-*.md` files are preserved. They make `npm run sync:agents:check` report orphans; do not delete or commit them without Maxx's direction.
 
-## Current state
+## Human decisions required
 
-- Branch: `master`; no Git remote is configured.
-- Plan status: `BUILDING`; no active stream lease, `ralph/STOP`, or `ralph/DONE`.
-- Current spec focus: `specs/020-protocol-and-relay.md`.
-- No acceptance criterion is marked `DISPUTED`.
-- No Cloudflare deployment was made and no secrets were added.
-- Physical-glasses, phone, Cloudflare-account, and interactive-simulator evidence remains outstanding exactly as listed under **Needs simulator** and **Needs human** in `IMPLEMENTATION_PLAN.md`.
+No independent non-hardware task is runnable until Maxx explicitly resolves at least one item.
 
-Latest integrated result:
+### T011 review-cap override
 
-- T008/T008a was approved with no findings and integrated as `56e0729` + `637c2c2`.
-- Replay preserves lane, gap, message, and monotonic sequence through reconnect/local Wrangler restart while reconciling dead peers offline.
-- Empty rooms schedule expiry for `updatedAt + ROOM_TTL_MS`, and expiry passes through the normative reducer before storage deletion.
-- Main passed Node 22 typecheck, 59/59 tests, lint (two existing generated Wrangler declaration warnings only), pin check, generated-agent sync check, environment check, Wrangler types check, and an isolated-assets deploy dry-run.
+Authorize or reject a fourth T011 repair. Quarantine:
 
-Recent integrated relay history:
+- Worktree `C:\Users\maxx\.cache\g2rs-worktrees\L014`
+- Branch `ralph/L014-T011c`; head `581bead4f9debde18f32cbd1831b2dbf1ca3675b`
+- Exact unintegrated range `c4d8d6d..581bead`
 
-| Commit | Result |
+The stack otherwise passes 70/70 tests and all relay gates. One defect remains: a missing/invalid URL role is rejected before parsing and version-checking a structurally valid first hello, so `v:999` receives `error{bad_frame}` + 4400 instead of `error{version}` + 4426.
+
+If approved, only move the null-role decision after structural hello parsing/version rejection and add the pinned live precedence test. Then obtain a fresh `protocol-keeper` review of the complete candidate-plus-repair range. Do not begin without explicit approval.
+
+### T006c scope extension
+
+Authorize or reject one additional timer-adapter typing edit. Preserved repair:
+
+- Worktree `C:\Users\maxx\.cache\g2rs-worktrees\L009`
+- Branch/head `ralph/L009-T006c` at `1872085`
+- `stash@{0}` / object `d84a200`, message `T006c scoped repair blocked by inherited timer typecheck`
+
+The four authorized changes pass client tests 10/10, root tests 69/69, and lint. Typecheck fails before and after the stash at `packages/protocol/src/client.ts:74,76`: Node globals return `Timeout`, while the public/injected browser timer contract uses numeric handles.
+
+If approved, restrict the fifth edit to `packages/protocol/src/client.ts:73-78`, preserve the public numeric `RoomClientTimers` contract, apply the stash, run all gates, and review the complete range. Do not broaden or rewrite the client.
+
+## Integrated functionality
+
+| Commits | Result |
 |---|---|
-| `794fd17` + `a380d6f` | T007/T007b hibernating relay roundtrip; approved |
-| `9eb2876` + `191d9a1` | T007a/T007c HTTP routes and hardening; approved |
-| `56e0729` + `637c2c2` | T008/T008a replay persistence and expiry alarm; approved |
-| `67311ac` | Iteration 34 plan/spec/progress reconciliation |
+| `35e74dc` + `42d7d5b` | Pure room-state reducer |
+| `794fd17` + `a380d6f` | Hibernating relay roundtrip |
+| `9eb2876` + `191d9a1` | HTTP/debug/assets routes and hardening |
+| `56e0729` + `637c2c2` | Replay persistence and room expiry |
+| `0909521` | Pong, attachment heartbeat refresh, self-arming alarms |
 
-## Next safe action
+T009/T012/T013/T014 depend on T011. T017 and later client consumers depend on T006c. T002c still needs an interactive simulator window. Hardware/deployment work remains under `## Needs human [HW]` in the plan.
 
-T006c and T016 are the first unchecked tasks under `## Next` (T011 follows T016): implement first-join/open-room/protected-room PIN semantics and authentication tests. It owns the `relay-room` lock and must be completed and reviewed before T009. No implementation lease has been opened, so a new coordinator may create a fresh isolated worktree from current `master`, record the lease, then dispatch `relay-backend-dev` with the build prompt and applicable relay/protocol skills.
+## Workflow and gates
 
-T006: Maxx reversed the stop on 2026-09-03 after the audit. The only permitted work is **T006c** as scoped in `IMPLEMENTATION_PLAN.md` (four exact changes on the L005 candidate, `protocol-keeper` reviews the exact range). Do not reimplement the client from scratch and do not widen the repair. T006c and T016 are independent and may be leased in parallel; T011 and later wait for T016.
-
-## Quarantined and historical worktrees
-
-| Worktree | Branch | Disposition |
-|---|---|---|
-| `C:\Users\maxx\.cache\g2rs-worktrees\L005` | `ralph/L005-T006` at `e588729` | True quarantine. Do not integrate range `ae5f448..e588729`; remaining findings are in the plan. |
-| `L001`, `L002` | historical task branches | Work is already integrated; each may contain an untracked review-copy file. |
-| `L003`, `L004` | historical repair ancestry | Patch-equivalent work is already integrated under different hashes. |
-| `L006`, `L007`, `L008` | historical relay candidates | Approved patch-equivalent work is already integrated on `master`; do not cherry-pick again. |
-
-Preserve these worktrees for traceability unless Maxx explicitly asks for cleanup.
-
-## Audit note (2026-09-03)
-
-An independent audit (`docs/AUDIT-2026-09-03.md`) re-verified the gates above and inserted **T016** ahead of T011 (relay `pong` reply + self-arming alarm — without it T012's silent-peer detection cannot fire and the glasses would show NO LINK on a quiet room). T011/T009/T012/T013 now carry reviewer traps inline. The T006 quarantine stands; the auditor's 4th-review verdict and a scoped repair proposal (T006c) sit in the plan for Maxx's decision.
-
-Agents on a non-Windows host: the PowerShell lines below have no analogue here — use Node 22 from your own toolchain; the Claude-side model mapping (Sonnet 5 workers, Opus 5 reviewers/planner) is in `ralph/README.md`; re-check its "Verify before first run" list before driving the loop; treat the repository path below as illustrative.
-
-## Local toolchain
-
-The verified Node runtime is `v22.23.2` at:
+Use one isolated lease, one fresh worker, one task, and one commit. A fresh `protocol-keeper` reviews the exact range; integrate only an approved stack and rerun all gates. Never assign `[HW]` work to an agent, redefine wire types outside `packages/protocol`, show stale driver data as live, commit secrets, or hand-edit generated `.claude/`/`.codex/` files.
 
 ```powershell
 $env:Path='C:\Users\maxx\.cache\g2-race-spotter-node22\node-v22.23.2-win-x64;'+$env:Path
 $env:npm_config_cache='C:\Users\maxx\.cache\g2rs-npm-main'
-```
-
-Git is `2.52.0.windows.1`. Model routing is already verified and recorded in `ralph/models.env`: worker `gpt-5.6-terra` high, reviewer `gpt-5.6-sol` high, planner `gpt-5.6-sol` xhigh. The official `everything-evenhub` plugin is installed for the current Codex profile; a different host/profile must verify it independently before glasses SDK work.
-
-## Required gates
-
-Before any implementation commit, use Node 22 and run:
-
-```powershell
 npm run typecheck
 npm test
 npm run lint
@@ -88,5 +70,8 @@ npm run sync:agents:check
 node scripts/check-environment.mjs
 ```
 
-Relay changes also require the task-specific live Wrangler tests, `npx wrangler types src/worker-configuration.d.ts --check`, and `npx wrangler deploy --dry-run` with isolated temporary spotter assets. Never deploy or set secrets without Maxx's explicit request.
+Relay work also requires its focused live Wrangler test, `npx wrangler types src/worker-configuration.d.ts --check`, and `npx wrangler deploy --dry-run` with isolated temporary spotter assets. Never deploy or set secrets without explicit permission.
 
+## Prompt for the receiving LLM
+
+> Read `HANDOFF.md`, `AGENTS.md`, the constitution, current plan/progress, spec 020, and the race-relay-protocol skill. Do not edit yet. Confirm main and identify which of `T011-review-cap` or `T006c-scope` Maxx explicitly approved. For an approved item, record an isolated lease, make only the documented minimal repair, run every Node 22/live Wrangler gate, obtain a fresh exact-range protocol review, integrate only on approval, and have the planner reconcile the result. Preserve unrelated and quarantined work.
