@@ -43,6 +43,10 @@ R6. `fake-spotter` MUST support scenarios `lanes`, `gap-sweep`, `message-ack`, `
 - 2026-09-03 Last-writer-wins for the driver role — why: the driver's own stale socket must never lock it out.
 - 2026-09-03 Reconcile both ready-role flags before the first replay after close or rehydration, target an empty room's alarm at `updatedAt + ROOM_TTL_MS`, and reduce `expire` before deleting storage — why: replay must preserve intents and sequence without advertising dead peers, while expiry alone starts a fresh room lifetime.
 
+- 2026-09-03 (audit) `ping` → `pong` is a relay obligation and the alarm is self-arming, never re-pointed on data frames — why: the integrated relay re-armed the tick on every frame (so AC-7's silent-peer detection could never fire while anyone pinged) and never answered pings (so a quiet healthy room would trip the driver's NO LINK); both are fixed as T016 before T011/T009/T012 build on them.
+- 2026-09-03 (audit) Rate limiting (R4) belongs to T013's scope; frame-size checks are on UTF-8 byte length before `JSON.parse`; only a `hello` that contradicts the URL closes 4400, other malformed frames get `error{bad_frame}` and stay open; `hello.v !== PROTOCOL_VERSION` → `error{version}` + 4426.
+- 2026-09-03 (audit) AC-8's backoff test must open the reconnected socket and close it *without* a replay, and pin `random: () => 0` — why: the quarantined candidate's test never opened the reconnected socket, which is how a reset-on-open defect and a sub-floor jitter survived three reviews.
+
 ## Open questions
 
 - Should multiple spotters be allowed in v1 UI? Protocol allows it; UI assumes one.

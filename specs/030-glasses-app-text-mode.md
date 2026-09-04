@@ -19,7 +19,7 @@ Note: text mode is no longer the "simulator mode" — the pinned simulator rende
 
 R1. MUST follow `.agents/skills/g2-hud-display/SKILL.md` for container IDs/rects, render-mode selection, text layout, queue rules, and input mapping.
 R2. MUST call `createStartUpPageContainer` once; in text mode slot 2 is a text container. Until 050 lands, the default (image) mode may build slot 2 as an empty image container and leave it blank — text mode is where this spec's rendering is verified.
-R3. MUST show `NO LINK` and halve HUD intensity when `Date.now() - lastFrameAt > DRIVER_NO_LINK_MS`; recover automatically.
+R3. MUST show `NO LINK` and halve HUD intensity when `lastFrameAt === undefined` (no frame yet this session) or `Date.now() - lastFrameAt > DRIVER_NO_LINK_MS`; recover automatically on the next frame of any kind (`pong` counts).
 R4. MUST render `msg.text` only when `msg.ackedAt === null`; single tap sends `ack{msgId}`; never clears locally.
 R5. MUST persist room/PIN/name via bridge KV keys from the protocol skill; the companion page edits them.
 R6. Every non-ASCII glyph MUST live in `src/render/glyphs.ts` with an ASCII fallback switchable per glyph.

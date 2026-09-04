@@ -17,7 +17,7 @@ Out: accounts, encryption beyond TLS, analytics.
 
 R1. On `FOREGROUND_ENTER_EVENT` the glasses app MUST re-arm the socket and re-render from the last state; on cold start it MUST restore room/PIN/name from bridge KV and wait for the replayed `state` before drawing the HUD.
 R2. Relay MUST enforce `RATE_LIMIT_PER_S`/`RATE_BURST` per socket and log drops without closing.
-R3. Both UIs MUST surface `error` frames (`auth`, `role_taken`, `version`) in plain language and offer the fix (re-enter PIN / reload).
+R3. Both UIs MUST surface `error` frames (`auth`, `role_taken`, `version`) in plain language and offer the fix (re-enter PIN / reload). This needs `RoomClient.onError(cb)` and the close code on the `closed` connection callback (a terminal close must not look like a reconnecting drop) — add them to the shared client as their own task; the client must not reconnect after a terminal code and must drop intents queued from a rejected session.
 R4. Relay logs MUST be structured `{room, role, t, seq, ms}` with no message bodies.
 R5. Companion page MUST show a warning when Even App < 2.2.7 or when the relay origin is not in `app.json`'s whitelist (detectable via a failed `/health` fetch).
 

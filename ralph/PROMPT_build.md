@@ -19,6 +19,15 @@ You are one worker iteration of a Ralph loop for the G2 Race Spotter repo. You h
 - Follow the repo's existing patterns (`packages/protocol` types, `src/lib`-style helpers if present). Never redefine a wire type.
 - Never edit `specs/*.md`, `IMPLEMENTATION_PLAN.md`, or `ralph/PROGRESS.md` — those belong to the planner. Never weaken a test to pass.
 
+## 1.5 Self-review before hand-off (before running the gates)
+
+- Re-read the criterion's Given/When/Then. Does your test hit the *real* boundary it names — a CLI subprocess with exit code and stderr, the actual output root on disk, a plain Node/tsc consumer, a live `wrangler dev` socket — rather than an internal function standing in for it?
+- Does the named verifier file exist **and** run inside the root `npm test` / lint chain, not only locally?
+- Run `npm run lint` yourself on the exact changed files; green `typecheck` + `test` is not evidence lint is clean.
+- If you changed text files on Windows, confirm they reproduce from the committed LF blobs, not your CRLF working copy.
+- If the task touches sockets or timers: does a test open the connection *and* close it without the happy path (no replay, no pong), and pin `random`/`now` to their extremes?
+- Reviewers block on invariants (constitution §1–§8), placeholder tests (§16), and spec deviations; nits do not block. Fix the first two categories now.
+
 ## 2. Verify (backpressure)
 
 Run each root script that exists, in order, and fix until green (a script that does not exist yet — e.g. `lint` before spec 010 is complete — is a note for the planner, not a failure):

@@ -22,6 +22,7 @@ git diff <base>..<head> -- . ':(exclude)package-lock.json'
 Check, in this order, and stop at the first `block`-level finding only after you have also listed the rest:
 
 1. **Criterion actually met** — does the test the task names exist, run in `npm test`, and assert the Given/When/Then of the AC? A test that passes without exercising the criterion is a `block`.
+   1a. **Boundary check** — if the AC names a CLI, a filesystem path, an external consumer, or a live socket, the test must invoke that real boundary (subprocess + exit code, actual path, real import, real `wrangler dev`); an internal-function stand-in is a `block` even when green. For socket/timer code, a test that never opens the reconnected socket, or never exercises the failure branch, does not prove the criterion.
 2. **Invariants** — constitution §1–§8. Any violation is a `block`.
 3. **Protocol fidelity** — shapes, constants, timings imported from `packages/protocol`; nothing re-typed. `seq`, `lastSeen` reset, ack semantics, driver eviction ordering, alarm scheduling — per the `race-relay-protocol` skill.
 4. **Scope** — did the worker do exactly one task and remain inside the leased write scope? An out-of-scope write or a range containing more than the one worker commit is a `block`.

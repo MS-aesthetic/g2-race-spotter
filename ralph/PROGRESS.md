@@ -24,6 +24,12 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 ## Process decisions
 - 2026-09-03 — Human authorized parallel subagent streams for independent tasks. Each stream uses an isolated Git worktree and an explicit lease (base, dependency, write scope, exclusive locks); one worker still owns one task/commit, exact commit ranges are reviewed, approved commits integrate serially, the planner remains the sole plan/spec/progress writer, and root gates run after each integration. The existing Ralph shell loop remains serial.
 
+## Audit (2026-09-03, Fable 5.1 as final auditor/QA)
+- Re-ran the root gates on the local machine: typecheck, 59/59 tests, lint (2 generated-d.ts warnings), pins, sync, environment — HANDOFF claims hold at `ee74cd7`.
+- Relay (`race-room.ts`) latent defects found by an Opus `protocol-keeper` pass: alarm re-armed on every frame (silent-peer detection could never fire while anyone pinged) and no `pong` reply (a quiet healthy room would trip the driver's NO LINK). Added as T016 ahead of T011; traps for T011/T009/T012/T013 written into the task lines; rate limiting (R4) added to T013.
+- Quarantined `RoomClient` (`e588729`) independently 4th-reviewed: `block` on exactly the two known 3-line findings; AC-8 has a real test; recommendation is one targeted repair (T006c) — awaiting Maxx's explicit reversal, nothing leased.
+- Process: 34 iterations, 12 chains integrated, 17 blocks (8 avoidable by a pre-hand-off checklist, 9 genuine reviewer catches). `PROMPT_build.md` §1.5 self-review, `PROMPT_review.md` §1a boundary check, and planner task-slicing rules added; skill/spec clarifications for `pong`, self-arming alarm, `lastFrameAt === undefined`, `onError`.
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |

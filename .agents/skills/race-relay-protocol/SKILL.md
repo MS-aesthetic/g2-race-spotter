@@ -51,6 +51,8 @@ Rules:
 - One driver per room, **last writer wins**: when a new driver joins **and passes the PIN check**, the relay sends `error{code:"role_taken"}` + close 4409 to the *previous* driver socket (which is usually a dead socket left behind by an Android suspend or a network switch) and accepts the new one. The driver must never be locked out by its own stale connection. Multiple spotters are allowed by the protocol (v1 UI assumes one).
 - Unknown `t`: ignore. Malformed frame: `error{code:"bad_frame"}`, keep the socket — except a `hello` that contradicts the URL's role/name, which closes 4400 after the error frame.
 - Every `state` broadcast goes to **all** sockets (spotters too — that is how the spotter sees `driverOnline` and `ackedAt`).
+- **The relay answers every `ping` from a ready socket with `pong {ts: ping.ts, serverTs}`** and refreshes that socket's `lastPing`. `pong` is the liveness frame a quiet room relies on: without it a healthy link with no state changes would trip the driver's `DRIVER_NO_LINK_MS` watchdog. `ping`/`pong` never touch room state or `seq`.
+- The relay's alarm is self-arming: it is scheduled when a socket becomes ready, on close/error, and at the end of `alarm()` itself — never re-pointed on data frames (a `ping` every 2 s would otherwise push a 3 s tick forever and no silent peer would ever be detected).
 - `seq` starts at 1 per room lifetime and only increases; clients drop `state` with `seq ≤ lastSeen`. `seq` persists in DO storage so hibernation cannot reset it. **Clients reset `lastSeen = 0` on every socket open** — frames are ordered within a socket, and the room may have been expired and recreated with `seq` back at 1 since the last connection.
 - **Ack semantics:** `ack` leaves `msg` in state but stamps `ackedAt`. The driver renders `msg.text` only while `msg.ackedAt === null`; the spotter shows a tick while `ackedAt !== null`. `clear` (or a new `msg`) removes/replaces it. The driver therefore does not "clear locally" — it sends `ack` and the next `state` frame hides the text.
 
@@ -73,14 +75,14 @@ Pure, total. `ctx = { now: number, newId: () => string }` is injected by the cal
 | `GAP_SEND_MIN_MS` | 100 | spotter (drag throttle) |
 | `HUD_GAP_FLUSH_MS` | 250 | glasses render queue |
 | `RECONNECT_MIN_MS` / `RECONNECT_MAX_MS` | 500 / 8000 (+ jitter) | both clients |
-| `RATE_LIMIT_PER_S` / `RATE_BURST` | 30 / 60 | relay: fixed 1 s window per socket, at most `RATE_BURST` frames applied per window, the rest dropped and counted; `RATE_LIMIT_PER_S` is the sustained rate clients must stay under (the spotter's 100 ms gap throttle already does) |
+| `RATE_LIMIT_PER_S` / `RATE_BURST` | 30 / 60 | relay: fixed 1 s window per socket, at most `RATE_BURST` frames applied per window, the rest dropped and counted (at most one `error{code:"rate"}` per window, socket stays open); `RATE_LIMIT_PER_S` is the sustained rate clients must stay under (the spotter's 100 ms gap throttle already does) |
 | `ROOM_TTL_MS` | 12 h | relay alarm |
 | `MSG_MAX_CHARS` | 80 | all |
 | `FRAME_MAX_BYTES` | 1024 | relay |
 
 ## Shared client (`packages/protocol/src/client.ts`)
 
-One `RoomClient` used by both the spotter PWA and the glasses app, **built in Phase 1 alongside the relay** so neither app writes its own: `connect(url)`, `send(msg)`, `onState(cb)`, `onConnection(cb)` (`connecting|open|closed`), automatic `hello`, ping loop, backoff reconnect, `lastSeq` filtering (reset to 0 on each open), `lastFrameAt` for NO LINK. It takes a `WebSocket` constructor as a parameter so Node tests can inject `ws`. No DOM or bridge references inside.
+One `RoomClient` used by both the spotter PWA and the glasses app, **built in Phase 1 alongside the relay** so neither app writes its own: `connect(url)`, `send(msg)`, `onState(cb)`, `onConnection(cb)` (`connecting|open|closed`), automatic `hello`, ping loop, backoff reconnect, `lastSeq` filtering (reset to 0 on each open), `lastFrameAt` for NO LINK (`undefined` until the first frame of the current session — consumers treat `undefined` as *no link*), `onError(cb)` for `error` frames, and the close code on the `closed` connection callback so UIs can tell a terminal rejection (`auth`, `role_taken`, `version`) from a reconnecting drop. It takes a `WebSocket` constructor as a parameter so Node tests can inject `ws`. No DOM or bridge references inside. `reconnectAttempt` resets only after the first valid `state` replay of a socket (an `open` that closes before replay is not success), and every reconnect delay is clamped to `[RECONNECT_MIN_MS, RECONNECT_MAX_MS]` after jitter.
 
 Reconnect rule: on re-open the client sends `hello` and waits for the replayed `state`; it does **not** blindly re-send its last intents. The room already holds them. Only intents the user issued *while the socket was down* are queued (latest `lane`, latest `gap`, and any `msg`/`clear` in order) and flushed after the replay. Never re-send an already-delivered `msg` — every `msg` creates a new id and would duplicate.
 

@@ -58,6 +58,12 @@ Do not start or repair T006. Maxx explicitly declined exceeding its three-review
 
 Preserve these worktrees for traceability unless Maxx explicitly asks for cleanup.
 
+## Audit note (2026-09-03)
+
+An independent audit (`docs/AUDIT-2026-09-03.md`) re-verified the gates above and inserted **T016** ahead of T011 (relay `pong` reply + self-arming alarm — without it T012's silent-peer detection cannot fire and the glasses would show NO LINK on a quiet room). T011/T009/T012/T013 now carry reviewer traps inline. The T006 quarantine stands; the auditor's 4th-review verdict and a scoped repair proposal (T006c) sit in the plan for Maxx's decision.
+
+Agents on a non-Windows host: the PowerShell lines below have no analogue here — use Node 22 from your own toolchain; the Claude-side model mapping (Sonnet 5 workers, Opus 5 reviewers/planner) is in `ralph/README.md`; re-check its "Verify before first run" list before driving the loop; treat the repository path below as illustrative.
+
 ## Local toolchain
 
 The verified Node runtime is `v22.23.2` at:
