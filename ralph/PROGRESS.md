@@ -54,6 +54,11 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 - Consolidation worked: 2 app-sized tasks → 2 iterations + 2 nit commits, versus ~12 iterations under the old slicing. Keep it.
 - Flake fixed: `eviction.test.ts` raced a `peer` broadcast; live tests now wait for the matching frame.
 
+## Design rounds (2026-09-04 evening, Maxx iterating live against the deployed relay + simulator)
+- Relay + spotter PWA deployed to https://g2-race-relay.maxx-384.workers.dev (T102 done by Maxx via `wrangler login` + `wrangler deploy`; redeployed by the auditor after each round). Simulator driven on Maxx's PC from `npm run dev:sim` with `?relay=…&room=QA01&pin=1234`.
+- Round 1 (T052): ▼●▲ fixed slots, dithered fills, ◀/▶ "car inside/outside" (new protocol `side`), L/S status bottom-right, spotter buttons. Round 2 (T053): messages auto-clear + auto-ack after 5 s, gap buttons replace the slider, no-scroll console proven in real Chromium. Record: `docs/reviews/2026-09-04-round-4-5-T052-T053.md`.
+- Lesson: a worktree whose `node_modules` is a symlink to the main install resolves `@g2-race-spotter/*` to MAIN, not the worktree — give worktrees their own workspace links (or a real install) before running tests there. `npm install` inside such a worktree damages the main install.
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |
@@ -109,3 +114,5 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 48 | 2026-09-04 | T017 | relay-backend-dev | done | approve with nits | c9fb8b6 | `onError`, `{code, terminal}` on `closed`, queue cleared on terminal close, `connect()` requires a replayed session; auditor froze the shared detail object (`8bf5531`); T018 collects the verifier nits. 060 R3 / 030 R3 client side met (92/92 on master). |
 | 49 | 2026-09-04 | T030 | g2-glasses-dev | done | approve with nits | 9fe6c90 | Whole glasses app in one lease (render primitives + editable `hud-design.ts`, gray4, queue, watchdog, input, settings, companion); nits (ack latch after a blip, double send on recovery) fixed in-lease with tests. 030 AC-1–6 + 050 AC-1–5 met. |
 | 50 | 2026-09-04 | T040 | spotter-pwa-dev | done | approve with nits | c000566 | Whole spotter PWA in one lease (6 KB gz JS); nits (banner toggle killing a drag, terminal-close handling, SW precache) fixed in-lease with tests. 040 AC-1–5 met. |
+| 51 | 2026-09-04 | T052 | g2-glasses-dev | done | approve with nits | b07aad5 | Design round 1 in one lease across protocol/glasses/spotter; additive `side` field is safe in both deployment directions. |
+| 52 | 2026-09-04 | T053 | spotter-pwa-dev | review-blocked → done | block → approve with nits | 50678f2 | Auto-clear must survive a dead socket: retry the auto-ack on replay (idempotent at the relay). Layout proven with a real browser, not jsdom. |
