@@ -3,6 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
+- T006/T006a/T006b — non-hardware third-review-block escalation (spec 020 AC-8); candidate `ae5f448..e588729` remains quarantined, and no fourth repair lease may start without explicit human direction
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -56,3 +57,4 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 | 26 | 2026-09-03 | T006 | relay-backend-dev | review-blocked | block | 5c424f4 | Quarantine the client candidate: terminal close policy, Ack/offline semantics, socket replacement cleanup, reconnect/timer regressions, and every-frame `lastFrameAt` ordering all need repair. |
 | 27 | 2026-09-03 | T007 | relay-backend-dev | review-blocked | block | df9eca8 | Quarantine the relay candidate: broadcasts must exclude pre-hello sockets, hello needs explicit latest replay, and invalid/missing URL roles must fail only after WebSocket acceptance. |
 | 28 | 2026-09-03 | T006a | relay-backend-dev | review-blocked | block | e02ed66 | Despite green gates, error-before-close can reconnect after terminal codes and Node numeric close codes bypass terminal detection; repair both event paths together. |
+| 29 | 2026-09-03 | T006b | relay-backend-dev | review-blocked | block | e588729 | A socket open is not reconnect success before valid replay, and jitter must remain within the normative 500–8000 ms bounds; the third block escalates the client chain to human review. |

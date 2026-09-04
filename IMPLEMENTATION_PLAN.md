@@ -1,21 +1,19 @@
-# Implementation plan — 2026-09-03T21:39:45-04:00
+# Implementation plan — 2026-09-03T21:51:05-04:00
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
-## Active stream leases (interactive coordinator only)
+## Stream leases and integration queue (interactive coordinator only)
 
-| lease | task | stream | repair base / combined review base | write scope | exclusive locks | review / integration gate |
-|---|---|---|---|---|---|---|
-| L005R2 | T006b | protocol-client-repair-2 | repair from `e02ed66cf79327e22f1d4d4da5d8939c30debd7f`; review from `ae5f4488ae12b3e987cbec6f583724799e541be6` | `packages/protocol/src/client.ts`; `packages/protocol/src/index.ts`; `packages/protocol/test/client.test.ts` only, as needed | `protocol-client` | protocol-keeper reviews exact combined range `ae5f448..T006b-head`; integrate `5c424f4` + `e02ed66` + T006b first only after approval, then run protocol and every root gate |
-| L006R | T007b | relay-repair | approved stack `df9eca80d8cadefb90ed182b09b4290d8344b3e1` + `910bf91e5116b9ca428b5e68c223ee9efcd46bc0`; review from `ae5f4488ae12b3e987cbec6f583724799e541be6` | frozen: `services/relay/**`; `package-lock.json` only if dependency installation genuinely required it; no protocol edits | `relay-room`, `root-lockfile` | exact combined-range review approved with 52 tests and live Wrangler; do not edit or integrate until T006/T006b is approved, integrated, and green; then integrate this stack second and run relay integration tests and every root gate |
+| lease | task | status / exact range | write scope and locks | review / integration gate |
+|---|---|---|---|---|
+| L006R | T007/T007b | approved and frozen; `ae5f448..910bf91` (`df9eca8` + `910bf91`) | `services/relay/**`; `package-lock.json` only if genuinely required; locks `relay-room`, `root-lockfile` | exact combined-range review approved with 52 tests and live Wrangler; integrate `df9eca8` then `910bf91` serially, running relay integration tests and every Node 22 root gate after each integration |
+| L005R2 | T006/T006a/T006b | third review block; quarantined `ae5f448..e588729` (`5c424f4` + `e02ed66` + `e588729`) | frozen: `packages/protocol/src/client.ts`, `packages/protocol/src/index.ts`, `packages/protocol/test/client.test.ts`; lock `protocol-client` | no integration and no automatic fourth repair lease; resume only after explicit human direction on the non-hardware review escalation below |
 
-The T006 client chain (`5c424f4` + `e02ed66`) remains quarantined after T006a's second `block` review. The T007 relay chain (`df9eca8` + `910bf91`) is independently approved but remains unintegrated; client-first dependency order is unchanged.
+The relay stack is independently approved and disjoint from the quarantined client stack. It may now integrate without waiting for T006; the prior client-first ordering is removed because three blocked client reviews have exhausted automatic repair.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
-- [ ] T006b (owner: relay-backend-dev) (spec: 020 AC-8) [stream: protocol-client-repair-2; lease: L005R2; lock: protocol-client; repair base: `e02ed66`; combined review base: `ae5f448`] Repair only the two remaining RoomClient event-ordering/close-shape findings within the exact L005R2 scope: “error event finalizes/reconnects before later terminal close, so terminal 4400/4401/4409/4426 can still reconnect; error must wait for close, tests error→terminal no timer and error→4408 one timer”; “Node EventEmitter `.on('close')` passes numeric code, but terminal detection accepts only `{code}`; normalize numeric or `CloseEvent` and test.” Preserve the approved offline-intent, replay, stale-event, jitter/cap, and timer-uniqueness behavior from T006a. Run protocol tests and every Node 22 root gate; one repair commit only.
-- [ ] T006 (owner: relay-backend-dev) (spec: 020 AC-8) [quarantined chain `5c424f4` + `e02ed66`; depends: T006b exact combined-range approval] Complete the injected-WebSocket `RoomClient`; close only when `ae5f448..T006b-head` is approved, the three client commits integrate serially, and protocol plus every root gate pass on master.
-- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [approved but unintegrated chain `df9eca8` + `910bf91`; depends: T006 integrated] Integrate the already-approved Worker/RaceRoom stack second; close only after relay integration tests and every root gate pass on master.
+- [ ] T007 (owner: relay-backend-dev) (spec: 020 AC-3) [coordinator integration of approved L006R stack] Integrate `df9eca8` then `910bf91` from the frozen relay worktree. Preserve the approved exact-range verdict: pre-hello sockets are excluded, a valid hello receives the latest replay, and invalid/missing URL roles fail only after WebSocket acceptance. After each integration run `npm test -w services/relay` plus every Node 22 root gate; close only when both commits are on master and all gates pass.
 - [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-3; requirement R5) [stream: relay; lock: relay-room; depends: T007 integrated] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response; verify `services/relay/test/routes.test.ts` against self-managed `wrangler dev`.
 - [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4) [stream: relay; lock: relay-room; depends: T007 integrated] Preserve state and sequence across reconnect and Durable Object rehydration, and repoint the empty-room alarm to room TTL; verify `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`.
 - [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay; lock: relay-room; depends: T007 integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth error followed by close 4401; verify `services/relay/test/auth.test.ts`.
@@ -28,6 +26,10 @@ The T006 client chain (`5c424f4` + `e02ed66`) remains quarantined after T006a's 
 
 - [ ] T002c (owner: hud-qa) (spec: 010 AC-3) [SIM] Run `npm run sim:scenarios -- --smoke` on an interactive machine where simulator 0.9.5 creates its main window; commit `qa/<date>/sim/report.json` and `qa/<date>/sim/image/smoke-01.png`, including the actual simulator `getDeviceInfo()` value.
 - [ ] T003c (owner: relay-backend-dev) (spec: 010 AC-5) After T002c records the exact simulator `bridge.getDeviceInfo()` value, remove every non-hardware `TBD` allowance, make the valid fixture/test reject non-hardware `TBD`, add the root environment check to CI, and validate `engines.node` permits only major 22; verify `scripts/test/check-environment.test.ts`, the repository check, and full AC-1 gates.
+
+## Needs human — review escalation (not [HW] evidence)
+
+- [ ] T006/T006a/T006b (owner: maxx) (spec: 020 AC-8) [NON-HARDWARE REVIEW ESCALATION] Decide whether to authorize a fourth, narrowly scoped repair of quarantined candidate `ae5f448..e588729`. Three exact-range reviews blocked the chain. Remaining findings: `reconnectAttempt` resets on socket `open` before the first valid replay, so repeated open-then-close-before-state cycles never increase toward the capped delay; reset only after the first valid replay and prove increasing delays. The jitter formula can schedule 250 ms when the normative bounds are 500–8000 ms; clamp both bounds and test `random: () => 0`. This item is a code-review escalation only and does not satisfy or represent any `[HW]` criterion.
 
 ## Needs human [HW]
 
@@ -50,7 +52,7 @@ The T006 client chain (`5c424f4` + `e02ed66`) remains quarantined after T006a's 
 
 ## Done this cycle
 
-- [x] T007b (owner: relay-backend-dev) (spec: 020 AC-3) Repaired the quarantined relay candidate (commits `df9eca8` + `910bf91`); exact combined-range review approved with 52 tests and live Wrangler, but the stack is intentionally not integrated until the client chain lands first.
+- [x] T007b (owner: relay-backend-dev) (spec: 020 AC-3) Repaired the quarantined relay candidate (commits `df9eca8` + `910bf91`); exact combined-range review approved with 52 tests and live Wrangler, but the stack is not integrated yet.
 - [x] T004a/T004b/T004c (owner: relay-backend-dev) (spec: 020 AC-1) Repaired the protocol package export and consumer compile chain (integrated commits `087d31b`, `3ba292f`, `ae5f448`; exact combined-range review approved).
 - [x] T005/T005a (owner: relay-backend-dev) (spec: 020 AC-2) Implemented, repaired, and approved the pure room-state reducer stack (commits `35e74dc`, `42d7d5b`).
 - [x] T002h (owner: hud-qa) (spec: 010 AC-3) Hardened simulator evidence classification without claiming `[SIM]` success (commit `2ef2f63`; review `approve`).
@@ -58,11 +60,10 @@ The T006 client chain (`5c424f4` + `e02ed66`) remains quarantined after T006a's 
 
 ## Notes / why
 
-- The T006a gates were otherwise green (56 tests, typecheck, lint); review still blocks because an `error` can race a later terminal close and Node close events may supply a bare numeric code.
-- Error handling must defer reconnect finalization to `close`; otherwise terminal protocol/auth/eviction/version responses can revive a socket that must stay closed.
-- The independently approved relay stack stays frozen and unintegrated so client-first dependency order and serial root-gate integration remain auditable.
-- Quarantine means no blocked client candidate is reachable from `master`; exact combined-range approval is required before integration.
-- AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human.
-- AC audit 020: AC-1 and AC-2 met; AC-3–AC-9 unmet on master; AC-10 under Needs human with local prerequisite T014.
-- AC audits 030–070 remain unchanged: automated criteria are unmet, `[SIM]` evidence is absent, and every `[HW]` criterion remains under Needs human.
+- T006b's gates were green, and prior findings R1/R2/R3/R5/R6/R7 were resolved; review still blocks because reconnect success is defined too early and the jitter lower bound is not enforced. R4 remains incomplete only in its backoff proof.
+- Three blocked reviews trigger the planner's human-escalation rule; the client candidate remains unreachable from master and no fourth repair is assigned automatically.
+- T006 is not a dependency of the already-approved, disjoint relay stack; integrating the relay now preserves useful progress while the client decision waits.
+- AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human [HW].
+- AC audit 020: AC-1 and AC-2 met; AC-3–AC-9 unmet on master; AC-10 under Needs human [HW] with local prerequisite T014.
+- AC audits 030–070 remain unchanged: automated criteria are unmet, `[SIM]` evidence is absent, and every `[HW]` criterion remains under Needs human [HW].
 - No criterion is `DISPUTED`; `qa/` remains absent, so no simulator or hardware evidence is claimed.
