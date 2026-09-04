@@ -47,10 +47,10 @@ export interface ConnectionCloseDetail {
   terminal: boolean;
 }
 
-const NON_CLOSE_DETAIL: ConnectionCloseDetail = {
+const NON_CLOSE_DETAIL: Readonly<ConnectionCloseDetail> = Object.freeze({
   code: undefined,
   terminal: false,
-};
+});
 
 export interface WebSocketMessageEvent {
   data: unknown;
