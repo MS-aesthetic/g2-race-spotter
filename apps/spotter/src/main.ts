@@ -12,10 +12,11 @@ import {
   PING_INTERVAL_MS,
 } from '@g2-race-spotter/protocol';
 
-import { createGapThrottle, nextSide, normaliseMessage } from './intents.ts';
+import { nextSide, normaliseMessage } from './intents.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
+  selectedGap,
   selectedLane,
   selectedSide,
   type Model,
@@ -80,18 +81,10 @@ const client: RoomClient = createSpotterClient({
   },
 });
 
-const gapThrottle = createGapThrottle({
-  send: (value) => client.send({ t: 'gap', value }),
-});
-
-/** True between the first `input` of a drag and its `change`. */
-let draggingGap = false;
-
 client.onState((state: State) => {
-  // Room state is the truth (R6) — except for the one value the spotter's
-  // finger is on right now: the relay echoes each throttled `gap`, and an echo
-  // that lands mid-drag would jerk the thumb back to an already-stale value.
-  update({ state, ...(draggingGap ? {} : { gap: state.gap }) });
+  // Room state is the truth (R6); the gap buttons reconcile to `state.gap` as
+  // soon as the optimistic window closes, exactly like the lanes.
+  update({ state });
 });
 
 client.onConnection((conn: ConnectionState, detail: ConnectionCloseDetail) => {
@@ -138,7 +131,6 @@ function join(): void {
   }
 
   saveJoinForm(window.localStorage, form);
-  gapThrottle.reset();
   update({ form, notice: null, screen: 'console', state: null });
   client.connect(roomUrl(origin, form));
 }
@@ -166,6 +158,18 @@ function setLane(lane: Lane | null): void {
   update({ optimisticLane: { lane, at: Date.now() } });
   // Nothing else wakes the UI when the socket is down and no `state` follows,
   // so the optimistic highlight would otherwise linger until the next ping tick.
+  window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
+}
+
+/** One `gap` per tap; the button already lit is a no-op (040 AC-2). */
+function setGap(value: number): void {
+  if (value === selectedGap(model)) {
+    return;
+  }
+
+  vibrate();
+  client.send({ t: 'gap', value });
+  update({ optimisticGap: { value, at: Date.now() } });
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
@@ -222,13 +226,9 @@ root.addEventListener('click', (event) => {
     case 'side':
       setSide(action.arg as Side);
       break;
-    case 'gap-chip': {
-      const value = Number(action.arg);
-      draggingGap = false;
-      gapThrottle.release(value);
-      update({ gap: value });
+    case 'gap':
+      setGap(Number(action.arg));
       break;
-    }
     case 'send':
       sendMessage(model.draft);
       break;
@@ -267,26 +267,9 @@ root.addEventListener('input', (event) => {
     case 'draft':
       update({ draft: raw.slice(0, MSG_MAX_CHARS) });
       break;
-    case 'gap': {
-      const value = Number(raw);
-      draggingGap = true;
-      gapThrottle.input(value);
-      update({ gap: value });
-      break;
-    }
     default:
       break;
   }
-});
-
-root.addEventListener('change', (event) => {
-  const action = actionOf(event);
-  if (action === null || action.act !== 'gap') {
-    return;
-  }
-
-  draggingGap = false;
-  gapThrottle.release(Number(inputValue(action.el)));
 });
 
 root.addEventListener('keydown', (event) => {

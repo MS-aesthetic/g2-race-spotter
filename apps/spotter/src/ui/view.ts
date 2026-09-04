@@ -1,8 +1,10 @@
 import { MSG_MAX_CHARS, type Lane, type Side } from '@g2-race-spotter/protocol';
 
+import { GAP_LABELS, GAP_VALUES } from '../intents.ts';
 import {
   isLatencyStale,
   isLive,
+  selectedGap,
   selectedLane,
   selectedSide,
   type Model,
@@ -36,10 +38,11 @@ const SIDES: readonly SideButton[] = [
   { side: 'outside', glyph: '▶', label: 'CAR OUTSIDE' },
 ];
 
-const GAP_CHIPS: readonly number[] = [0, 25, 50, 75, 100];
-
-/** Above this the track turns red, mirroring the glasses' inverted bar. */
+/** Above this the button turns red, mirroring the glasses' inverted bar. */
 export const GAP_HOT = 75;
+
+/** Only the last three fit the one-row strip; the console never scrolls. */
+export const RECENT_CHIPS_SHOWN = 3;
 
 function latencyText(model: Model): string {
   return model.latencyMs === null ? '— ms' : `${model.latencyMs} ms`;
@@ -164,46 +167,45 @@ function laneStack(model: Model): VNode {
   ]);
 }
 
+/**
+ * Five buttons instead of a slider: one tap, one `gap`, and a value the driver
+ * and the spotter can both name out loud.
+ */
 function gapSection(model: Model): VNode {
-  const gap = model.gap;
+  const selected = selectedGap(model);
 
-  return h('section', { class: gap > GAP_HOT ? 'gap is-hot' : 'gap' }, [
-    h('div', { class: 'gap__value', 'data-testid': 'gap-value' }, [
-      String(gap),
-    ]),
-    h('input', {
-      type: 'range',
-      min: 0,
-      max: 100,
-      step: 1,
-      value: gap,
-      class: 'gap__range',
-      'data-act': 'gap',
-      'data-testid': 'gap-range',
+  return h(
+    'section',
+    {
+      class: 'gaps',
+      role: 'group',
       'aria-label': 'Car behind',
-      style: `--gap:${gap}%`,
+      'data-testid': 'gap-buttons',
+    },
+    GAP_VALUES.map((value, index) => {
+      const isSelected = value === selected;
+      const classes = ['gapbtn'];
+      if (value > GAP_HOT) {
+        classes.push('gapbtn--hot');
+      }
+      if (isSelected) {
+        classes.push('is-selected');
+      }
+
+      return h(
+        'button',
+        {
+          type: 'button',
+          class: classes.join(' '),
+          'data-act': 'gap',
+          'data-arg': value,
+          'data-gap': value,
+          'aria-pressed': isSelected ? 'true' : 'false',
+        },
+        [GAP_LABELS[index] ?? String(value)],
+      );
     }),
-    h('div', { class: 'gap__scale' }, [
-      h('span', {}, ['CLEAR']),
-      h('span', {}, ['ON BUMPER']),
-    ]),
-    h(
-      'div',
-      { class: 'gap__chips' },
-      GAP_CHIPS.map((value) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'chip',
-            'data-act': 'gap-chip',
-            'data-arg': value,
-          },
-          [String(value)],
-        ),
-      ),
-    ),
-  ]);
+  );
 }
 
 /**
@@ -254,25 +256,25 @@ function messageSection(model: Model): VNode {
       'data-testid': 'msg-input',
       'aria-label': 'Message',
     }),
-    h('div', { class: 'msg__actions' }, [
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'btn btn--primary',
-          'data-act': 'send',
-          'data-testid': 'send',
-        },
-        ['Send'],
-      ),
-      h('button', { type: 'button', class: 'btn', 'data-act': 'clear' }, [
-        'Clear',
-      ]),
-    ]),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'btn btn--primary btn--send',
+        'data-act': 'send',
+        'data-testid': 'send',
+      },
+      ['Send'],
+    ),
+    h(
+      'button',
+      { type: 'button', class: 'btn btn--clear', 'data-act': 'clear' },
+      ['Clear'],
+    ),
     h(
       'div',
       { class: 'msg__chips', 'data-testid': 'recent-chips' },
-      model.recent.map((text) =>
+      model.recent.slice(0, RECENT_CHIPS_SHOWN).map((text) =>
         h(
           'button',
           {

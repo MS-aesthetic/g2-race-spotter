@@ -116,27 +116,32 @@ button {
   font-size: 22px;
 }
 
-/* ---------- Console ---------- */
+/* ---------- Console ----------
+
+   One screen, never a scroll (Maxx, 2026-09-04 design round 2): the console is
+   a full-viewport grid whose lane stack takes whatever is left after the fixed
+   rows, and the whole thing clips rather than scrolls. Every row below is
+   sized so the stack still clears 64 px at 360x640. */
 
 .console {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
+  display: grid;
+  /* header / banner / body / update toast */
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100vh; /* fallback for browsers without dvh */
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px 6px;
   align-items: center;
-  padding: max(8px, env(safe-area-inset-top)) var(--pad) 8px;
+  padding: max(6px, env(safe-area-inset-top)) var(--pad) 6px;
   background: var(--surface);
   border-bottom: 2px solid var(--border);
-  font-size: 15px;
-  letter-spacing: 0.06em;
+  font-size: 14px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
@@ -164,10 +169,11 @@ button {
 }
 
 .banner {
-  padding: 10px var(--pad);
+  padding: 5px var(--pad);
   background: var(--alert);
   color: #1a0707;
   font-weight: 700;
+  font-size: 15px;
   letter-spacing: 0.12em;
   text-align: center;
 }
@@ -175,15 +181,17 @@ button {
 .console__body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  flex: 1;
-  padding: 14px var(--pad) max(18px, env(safe-area-inset-bottom));
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px var(--pad) max(8px, env(safe-area-inset-bottom));
 }
 
 .console__right {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
+  min-height: 0;
 }
 
 /* ---------- Lanes ---------- */
@@ -191,14 +199,19 @@ button {
 .lanes {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .lane {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 88px;
+  /* Stretch into the space the fixed rows leave, but never below the 64 px
+     floor the skill sets for a gloved thumb. */
+  flex: 1 1 0;
+  min-height: 64px;
   padding: 0 20px;
   border: 2px solid var(--accent);
   border-radius: 12px;
@@ -213,7 +226,7 @@ button {
 }
 
 .lane__glyph {
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1;
 }
 
@@ -224,7 +237,8 @@ button {
 }
 
 .lane-clear {
-  align-self: center;
+  flex: 0 0 auto;
+  align-self: stretch;
   min-height: 44px;
   padding: 0 16px;
   border: 0;
@@ -236,67 +250,47 @@ button {
 
 /* ---------- Car behind ---------- */
 
-.gap {
-  --track: var(--accent);
-
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.gaps {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
-.gap.is-hot {
-  --track: var(--alert);
-}
-
-.gap__value {
-  font-size: 40px;
+.gapbtn {
+  min-height: 56px;
+  padding: 0 2px;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 15px;
   font-weight: 700;
-  line-height: 1;
+  letter-spacing: 0.04em;
+  transition: background 120ms linear;
 }
 
-.gap__range {
-  width: 100%;
-  height: 44px;
-  margin: 0;
-  appearance: none;
-  background: linear-gradient(
-    to right,
-    var(--track) 0 var(--gap, 0%),
-    var(--border) var(--gap, 0%) 100%
-  );
-  border-radius: 10px;
+.gapbtn--hot {
+  border-color: var(--alert);
+  color: var(--alert);
 }
 
-.gap__range::-webkit-slider-thumb {
-  appearance: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--fg);
-  border: 3px solid var(--bg);
+.gapbtn.is-selected {
+  background: var(--accent);
+  color: #06120a;
 }
 
-.gap__range::-moz-range-thumb {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--fg);
-  border: 3px solid var(--bg);
-}
-
-.gap__scale {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13px;
-  letter-spacing: 0.1em;
-  color: #9fb2bf;
+.gapbtn--hot.is-selected {
+  background: var(--alert);
+  color: #1a0707;
 }
 
 /* ---------- Car alongside ---------- */
 
 .sides {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 
 .side {
@@ -304,9 +298,9 @@ button {
   flex: 1;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 0 12px;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 8px;
   border: 2px solid var(--amber);
   border-radius: 12px;
   background: var(--bg);
@@ -320,34 +314,27 @@ button {
 }
 
 .side__glyph {
-  font-size: 26px;
+  font-size: 22px;
   line-height: 1;
 }
 
 .side__label {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.gap__chips,
-.msg__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  letter-spacing: 0.06em;
 }
 
 .chip {
   min-height: 44px;
-  padding: 0 16px;
+  padding: 0 14px;
   border: 2px solid var(--border);
   border-radius: 22px;
   background: var(--surface);
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .chip--msg {
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -356,31 +343,35 @@ button {
 /* ---------- Message ---------- */
 
 .msg {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 .msg__input {
-  min-height: 56px;
-  padding: 0 14px;
+  min-height: 52px;
+  min-width: 0;
+  padding: 0 12px;
   background: var(--surface);
   border: 2px solid var(--border);
   border-radius: 10px;
 }
 
-.msg__actions {
+.msg__chips {
+  grid-column: 1 / -1;
   display: flex;
-  gap: 10px;
+  gap: 6px;
+  overflow: hidden;
 }
 
 .btn {
-  flex: 1;
-  min-height: 56px;
+  min-height: 52px;
+  padding: 0 14px;
   border: 2px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -391,10 +382,8 @@ button {
 }
 
 .toast {
-  position: sticky;
-  bottom: max(10px, env(safe-area-inset-bottom));
-  margin: 0 var(--pad) 10px;
   min-height: 44px;
+  margin: 0 var(--pad) max(8px, env(safe-area-inset-bottom));
   border: 2px solid var(--accent);
   border-radius: 10px;
   background: var(--surface);
@@ -406,7 +395,7 @@ button {
 @media (orientation: landscape) and (max-height: 560px) {
   .console__body {
     flex-direction: row;
-    align-items: flex-start;
+    align-items: stretch;
   }
 
   .lanes {
@@ -414,7 +403,8 @@ button {
   }
 
   .console__right {
-    flex: 1;
+    flex: 1 1 auto;
+    justify-content: flex-start;
   }
 
   .lane {
@@ -422,11 +412,15 @@ button {
   }
 
   .lane__glyph {
-    font-size: 26px;
+    font-size: 24px;
   }
 
-  .gap__value {
-    font-size: 32px;
+  .lane__label {
+    font-size: 18px;
+  }
+
+  .side__label {
+    font-size: 15px;
   }
 }
 

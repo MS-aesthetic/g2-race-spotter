@@ -5,6 +5,8 @@ import type {
   State,
 } from '@g2-race-spotter/protocol';
 
+import { nearestGapValue } from './intents.ts';
+
 /** How long an optimistic lane or side highlight survives before the server's
  * `state` frame is the only truth again (constitution §2 keeps the *glasses*
  * free of optimism; the spotter may pre-light its own button for one beat). */
@@ -30,6 +32,11 @@ export interface OptimisticSide {
   at: number;
 }
 
+export interface OptimisticGap {
+  value: number;
+  at: number;
+}
+
 export interface Model {
   screen: 'join' | 'console';
   form: JoinForm;
@@ -40,14 +47,13 @@ export interface Model {
   conn: ConnectionState;
   /** Last replayed room state; `null` until the first `state` frame. */
   state: State | null;
-  /** Slider position. Local while dragging, reconciled from `state.gap`. */
-  gap: number;
   draft: string;
   recent: readonly string[];
   latencyMs: number | null;
   latencyAt: number | null;
   optimisticLane: OptimisticLane | null;
   optimisticSide: OptimisticSide | null;
+  optimisticGap: OptimisticGap | null;
   now: number;
   updateReady: boolean;
   showInstallHint: boolean;
@@ -61,13 +67,13 @@ export function createModel(overrides: Partial<Model> = {}): Model {
     relayHost: '',
     conn: 'closed',
     state: null,
-    gap: 0,
     draft: '',
     recent: [],
     latencyMs: null,
     latencyAt: null,
     optimisticLane: null,
     optimisticSide: null,
+    optimisticGap: null,
     now: 0,
     updateReady: false,
     showInstallHint: false,
@@ -99,6 +105,19 @@ export function selectedSide(model: Model): Side | null {
   }
 
   return model.state?.side ?? null;
+}
+
+/**
+ * Which gap button is lit: the optimistic tap for its first
+ * `OPTIMISTIC_LANE_MS`, then the nearest button to whatever the relay said.
+ */
+export function selectedGap(model: Model): number {
+  const optimistic = model.optimisticGap;
+  if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
+    return nearestGapValue(optimistic.value);
+  }
+
+  return nearestGapValue(model.state?.gap ?? 0);
 }
 
 /** The console is trustworthy only when the socket is open *and* the room has

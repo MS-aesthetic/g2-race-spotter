@@ -127,12 +127,12 @@ describe('car inside / car outside (T052)', () => {
       [...root.querySelectorAll('.side__glyph')].map((el) => el.textContent),
     ).toEqual(['◀', '▶']);
     expect(root.querySelectorAll('.side.is-selected')).toHaveLength(0);
-    // Under the slider, above the message box — the console order the spotter
-    // reads top to bottom.
-    const order = [...root.querySelectorAll('.gap, .sides, .msg')].map(
+    // Under the gap row, above the message box — the console order the
+    // spotter reads top to bottom.
+    const order = [...root.querySelectorAll('.gaps, .sides, .msg')].map(
       (el) => el.className.split(' ')[0],
     );
-    expect(order).toEqual(['gap', 'sides', 'msg']);
+    expect(order).toEqual(['gaps', 'sides', 'msg']);
   });
 
   it('lights the side the room state carries, and only that one', () => {
@@ -179,6 +179,84 @@ describe('car inside / car outside (T052)', () => {
   });
 });
 
+describe('AC-2 gap buttons (Maxx design round 2)', () => {
+  it('offers exactly five buttons CLEAR · 25 · 50 · 75 · BUMPER in one row', () => {
+    render(consoleModel());
+
+    const buttons = [...root.querySelectorAll('[data-act="gap"]')];
+    expect(buttons.map((el) => el.getAttribute('data-arg'))).toEqual([
+      '0',
+      '25',
+      '50',
+      '75',
+      '100',
+    ]);
+    expect(buttons.map((el) => el.textContent)).toEqual([
+      'CLEAR',
+      '25',
+      '50',
+      '75',
+      'BUMPER',
+    ]);
+    // No slider survives anywhere in the console.
+    expect(root.querySelectorAll('input[type="range"]')).toHaveLength(0);
+  });
+
+  it('lights the button the room state carries, and only that one', () => {
+    render(consoleModel({ state: stateWith({ gap: 50 }) }));
+
+    const selected = root.querySelectorAll('.gapbtn.is-selected');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]!.getAttribute('data-gap')).toBe('50');
+    expect(selected[0]!.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('snaps a value from outside the five to the nearest button', () => {
+    // The relay carries 0–100 and another client may set anything; the console
+    // must still show the spotter which call is closest to the truth.
+    render(consoleModel({ state: stateWith({ gap: 63 }) }));
+    expect(
+      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
+    ).toBe('75');
+
+    render(consoleModel({ state: stateWith({ seq: 2, gap: 12 }) }));
+    expect(
+      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
+    ).toBe('0');
+  });
+
+  it('shows the optimistic tap first, then reconciles to the room', () => {
+    render(
+      consoleModel({
+        state: stateWith({ gap: 0 }),
+        optimisticGap: { value: 100, at: 5_000 },
+        now: 5_100,
+      }),
+    );
+    expect(
+      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
+    ).toBe('100');
+
+    render(
+      consoleModel({
+        state: stateWith({ gap: 0 }),
+        optimisticGap: { value: 100, at: 5_000 },
+        now: 5_400,
+      }),
+    );
+    expect(
+      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
+    ).toBe('0');
+  });
+
+  it('marks the bumper call hot, mirroring the glasses inverted bar', () => {
+    render(consoleModel({ state: stateWith({ gap: 100 }) }));
+
+    const hot = [...root.querySelectorAll('.gapbtn--hot')];
+    expect(hot.map((el) => el.getAttribute('data-gap'))).toEqual(['100']);
+  });
+});
+
 describe('AC-3 reconnect banner', () => {
   it('shows the banner with controls still enabled when the socket is closed', () => {
     render(consoleModel({ conn: 'closed', state: null }));
@@ -202,12 +280,11 @@ describe('AC-3 reconnect banner', () => {
   it('drops the banner and reconciles to the replayed state on reopen', () => {
     // Same renderer across both frames: this is the real patch path, not a
     // fresh mount, so a stale highlight would survive if reconciliation broke.
-    render(consoleModel({ conn: 'closed', state: null, gap: 0 }));
+    render(consoleModel({ conn: 'closed', state: null }));
     render(
       consoleModel({
         conn: 'open',
-        state: stateWith({ seq: 9, lane: 'bot', gap: 80 }),
-        gap: 80,
+        state: stateWith({ seq: 9, lane: 'bot', gap: 100 }),
       }),
     );
 
@@ -215,30 +292,25 @@ describe('AC-3 reconnect banner', () => {
     const selected = root.querySelectorAll('.lane.is-selected');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
-    expect(text('[data-testid="gap-value"]')).toBe('80');
     expect(
-      (root.querySelector('[data-testid="gap-range"]') as HTMLInputElement)
-        .value,
-    ).toBe('80');
-    expect(root.querySelector('.gap')!.className).toContain('is-hot');
+      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
+    ).toBe('100');
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
   });
 });
 
 describe('banner toggling never re-creates the controls', () => {
-  it('keeps the same slider and message input across hide and show', () => {
+  it('keeps the same gap buttons and message input across hide and show', () => {
     render(consoleModel({ conn: 'closed', state: null }));
-    const rangeWhileDown = root.querySelector('[data-testid="gap-range"]');
+    const gapsWhileDown = [...root.querySelectorAll('.gapbtn')];
     const inputWhileDown = root.querySelector('[data-testid="msg-input"]');
-    expect(rangeWhileDown).not.toBeNull();
+    expect(gapsWhileDown).toHaveLength(5);
 
-    // Socket recovers and the room replays: the banner hides, but a drag or a
+    // Socket recovers and the room replays: the banner hides, but a
     // half-typed message in flight must survive it.
     render(consoleModel({ conn: 'open', state: stateWith({ seq: 4 }) }));
     expect(banner()).toBeNull();
-    expect(root.querySelector('[data-testid="gap-range"]')).toBe(
-      rangeWhileDown,
-    );
+    expect([...root.querySelectorAll('.gapbtn')]).toEqual(gapsWhileDown);
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );
@@ -246,9 +318,7 @@ describe('banner toggling never re-creates the controls', () => {
     // And back again when it drops.
     render(consoleModel({ conn: 'closed', state: null }));
     expect(banner()).not.toBeNull();
-    expect(root.querySelector('[data-testid="gap-range"]')).toBe(
-      rangeWhileDown,
-    );
+    expect([...root.querySelectorAll('.gapbtn')]).toEqual(gapsWhileDown);
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );
@@ -313,21 +383,11 @@ describe('console controls', () => {
     expect(root.querySelector('[data-testid="lane-clear"]')).not.toBeNull();
   });
 
-  it('renders the quick-set chips 0 · 25 · 50 · 75 · 100', () => {
-    render(consoleModel());
-
-    expect(
-      [...root.querySelectorAll('[data-act="gap-chip"]')].map(
-        (el) => el.textContent,
-      ),
-    ).toEqual(['0', '25', '50', '75', '100']);
-  });
-
-  it('renders at most five recent-message chips', () => {
+  it('renders at most three recent-message chips', () => {
     render(consoleModel({ recent: ['a', 'b', 'c', 'd', 'e'] }));
 
     const chips = root.querySelectorAll('[data-act="recent"]');
-    expect(chips).toHaveLength(5);
+    expect(chips).toHaveLength(3);
     expect(chips[0]!.getAttribute('data-arg')).toBe('a');
   });
 });
