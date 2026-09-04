@@ -46,6 +46,9 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 - Lesson: the Windows gate run filtered the prettier output from `npm run lint`, so a formatting failure in `auth.test.ts` (from `4181e34`) was reported green; fixed `9fd612b`. Never grep a gate's output for "error" — read its exit code.
 - Housekeeping: `_to_delete/` (stale copies imported with the planning package) removed from the tree (`d447981`).
 
+## Consolidation (2026-09-04, Maxx)
+- "That seems way too low… this is a simple app… can we consolidate some of these tasks so it doesn't cost so many iterations and tokens?" → one task per app/subsystem (T030 glasses, T040 spotter, T050 relay heartbeat+validation), Opus-tier workers for consolidated tasks, one exact-range review per task, auditor over the batch. Image HUD first, drawn from primitives with the layout in one editable `hud-design.ts`; text mode is an ASCII fallback (030 AC-9 dropped). Rate limiting dropped from 020 R4. Fake-spotter scenarios, client verifier polish, 060, 070 deferred until after the first hardware session. Update-rate tuning deferred ("timers/update rates later"). Simulator runs are Maxx's on his machine.
+
 ## Iterations
 
 | # | date | task | owner | outcome | review | commit | lesson |

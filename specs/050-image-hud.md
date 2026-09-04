@@ -1,7 +1,7 @@
 # 050 — Image HUD (symbol + bar bitmap)
 
 Status: ACTIVE
-Depends on: 030
+Depends on: 020 (built together with 030's automated criteria in one task since 2026-09-04)
 Design reference: docs/BUILD_PLAN.md §3, §7 Phase 4; skill `g2-hud-display`
 
 ## Purpose
@@ -40,6 +40,9 @@ R6. Image mode MUST be the default everywhere (hardware and simulator); text mod
 
 - 2026-09-03 One image for symbol+bar — why: image cost is per call (~185 ms), not per byte.
 - 2026-09-03 Simulator evidence (`[SIM]`) covers bitmap content and queue behaviour; size limits, nibble order, pacing and `sendFailed` fallback stay `[HW]` — why: the simulator explicitly does not enforce on-device image limits or LZ4 and is faster than hardware.
+
+- 2026-09-04 (Maxx) Image is the primary path from day one (no text-first phase). `drawHud` is composed from primitives (`fillRect`, `fillTriangle`, `fillCircle`, `hline`, `vline`, `pixel`) in `apps/glasses/src/render/primitives.ts`; the layout lives in `apps/glasses/src/render/hud-design.ts` as the only file to edit when changing the look. The golden snapshot in AC-1 pins the *current* design — a deliberate design change updates the golden in the same commit.
+- 2026-09-04 (Maxx) The simulator is the primary functional check for the bitmap (AC-5b); R4/AC-6 nibble-order confirmation and AC-7/AC-8 pacing remain hardware questions to be discussed later.
 
 ## Open questions
 

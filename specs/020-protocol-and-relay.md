@@ -18,7 +18,7 @@ Out: any UI; deployment to a custom domain (see 070).
 R1. MUST implement every message and rule in `.agents/skills/race-relay-protocol/SKILL.md` — that skill is normative for this spec.
 R2. `reduce(state, event, ctx)` MUST be pure and total; `ctx = {now, newId}`.
 R3. `RoomClient` MUST take a `WebSocket` constructor, send `hello`, ping every `PING_INTERVAL_MS`, reconnect with jittered backoff, reset `lastSeen` on open, filter `seq`, expose `lastFrameAt`, and queue only intents issued while disconnected.
-R4. `RaceRoom` MUST use the WebSocket Hibernation API, persist `state`/`seq`/`pin` in DO storage, broadcast full state on every change, enforce PIN (first joiner sets), evict the previous driver on a new driver join *after* the PIN check, close silent sockets after `PEER_OFFLINE_MS`, rate-limit per socket, and re-point its single alarm to `updatedAt + ROOM_TTL_MS` when no sockets remain.
+R4. `RaceRoom` MUST use the WebSocket Hibernation API, persist `state`/`seq`/`pin` in DO storage, broadcast full state on every change, enforce PIN (first joiner sets), evict the previous driver on a new driver join *after* the PIN check, close silent sockets after `PEER_OFFLINE_MS`, ~~rate-limit per socket~~ (dropped 2026-09-04 by Maxx — two phones in one room cannot generate abusive load; revisit only if a deployed relay shows it), and re-point its single alarm to `updatedAt + ROOM_TTL_MS` when no sockets remain.
 R5. The Worker MUST route `/room/:id` upgrades, `/health`, `/room/:id/debug` (gated by `X-Debug-Key`), and fall through to static assets; all HTTP responses carry CORS headers.
 R6. `fake-spotter` MUST support scenarios `lanes`, `gap-sweep`, `message-ack`, `link-loss`, `reconnect-replay`, `driver-evict`, `soak`, and a `--role driver` mode.
 
@@ -48,6 +48,8 @@ R6. `fake-spotter` MUST support scenarios `lanes`, `gap-sweep`, `message-ack`, `
 - 2026-09-03 (audit) AC-8's backoff test must open the reconnected socket and close it *without* a replay, and pin `random: () => 0` — why: the quarantined candidate's test never opened the reconnected socket, which is how a reset-on-open defect and a sub-floor jitter survived three reviews.
 - 2026-09-04 Treat a client as joining for AC-6 when it sends the protocol-mandated first `hello`: `fetch()` accepts the upgrade and captures URL authority, while the first WebSocket message validates the URL/hello and either establishes the room or sends the rejection error and close synchronously in that event; tests send nothing after `hello` — why: pinned live Wrangler delivers an error frame but does not reliably deliver a server close initiated during the upgrade request without later client I/O, whereas `hello` is already mandatory and provides a supported WebSocket event without weakening the required error/close sequence.
 - 2026-09-04 For the first text frame, parse and require a structural `hello`, then reject `hello.v !== PROTOCOL_VERSION` before missing/invalid URL role, URL/hello role/name mismatch, or PIN/storage work — why: an incompatible protocol must consistently receive `error{version}` + 4426 without room side effects, even when URL authority is also invalid.
+
+- 2026-09-04 (Maxx) Per-socket rate limiting removed from R4 (human decision, not an agent weakening). AC-9 (byte cap, unknown `t`) stays and is built with AC-7 in one relay task. `fake-spotter` scenarios (R6) are deferred: real phones are the scenario runner; AC-10's deployed proof uses the spotter PWA and the glasses app instead.
 
 ## Open questions
 

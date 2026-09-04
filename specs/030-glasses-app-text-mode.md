@@ -38,13 +38,16 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 | AC-6 | Given `?render=text` or the stored `g2rs:v1:render=text` override, then startup builds the page with a text container in slot 2 and never creates an image container; given neither (including under `--mode simulator`), then startup creates the image container — the simulator is never detected to change rendering | `apps/glasses/test/render-mode.test.ts` |
 | AC-7 | Given `npm run sim:scenarios`, when `lanes`, `gap-sweep`, `message-ack`, `link-loss`, `reconnect-replay` run in **text mode** (`?render=text`), then every pixel assertion in the `hud-e2e-testing` skill passes and `report.json` is committed | `[SIM]` `qa/<date>/sim/text/*.png`, `qa/<date>/sim/report.json` |
 | AC-8 | Given real glasses, when `lanes`, `gap-sweep`, `message-ack`, `link-loss` run, then the HUD matches, ack works from the temple, and NO LINK appears within 5 s of the relay being stopped | `[HW]` `qa/<date>/REPORT.md` |
-| AC-9 | Given real glasses, when the glyph sheet (`▲ ● ▼ █ ░ · …`) is rendered, then each glyph is either visible or its ASCII fallback is enabled in `glyphs.ts` | `[HW]` note in `docs/ENVIRONMENT.md` |
+| AC-9 | DROPPED 2026-09-04 (Maxx): the text fallback uses ASCII only (`^ o v`, `#`, `-`), so no glyph sheet needs hardware verification | — |
 | AC-10 | Given an `https://` origin in `app.json`, when the app opens `wss://` to the same host on hardware, then the upgrade succeeds (or the `wss://` origin is added and recorded) | `[HW]` note in `docs/ENVIRONMENT.md` |
 
 ## Decisions
 
 - 2026-09-03 Text mode ships first — why: fastest end-to-end validation and it is the permanent fallback anyway.
 - 2026-09-04 (audit) `lastFrameAt` is per socket session: `RoomClient` resets it to `undefined` on every socket open, on `disconnect()`, and on a terminal close (4401/4409/4426). During a reconnect blip the HUD therefore shows `NO LINK` and dims until the new socket's replayed `state` arrives — why: R3 and the constitution's "never show stale driver data as live" invariant prefer a brief dim over a stale `LINK OK`; the glasses app must not cache the previous session's timestamp to paper over the blip.
+
+- 2026-09-04 (Maxx) **Image mode is built first and is the primary HUD; text mode is an ASCII-only fallback.** The HUD is drawn as a bitmap by `drawHud(state)` composed from drawing primitives in one editable design module, so the visual design (e.g. triangles made of bar segments) can change without touching the pipeline. AC-1–AC-6 of this spec are satisfied by the consolidated glasses task together with 050; the text renderer keeps AC-1/AC-2's layout but with ASCII characters (`^`/`o`/`v`, `#`/`-`). AC-7 `[SIM]` runs in image mode by default (050 AC-5b); a text-mode pass is optional.
+- 2026-09-04 (Maxx) Update-rate criteria are not a priority for v1; the 250 ms coalescing stays because it protects the BLE channel, but timing tuning is deferred to hardware testing.
 
 ## Open questions
 
