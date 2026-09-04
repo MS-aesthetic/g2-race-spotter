@@ -2,15 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-    <title>Even Hub Minimal</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no"
+    />
+    <title>G2 Race Spotter — driver</title>
     <style>
-      html, body {
+      html,
+      body {
         margin: 0;
-        height: 100%;
+        min-height: 100%;
         /* ER brand dark-theme surface (#232323) + Neutral-200 text (#E5E5E5). */
         background: #232323;
-        color: #E5E5E5;
+        color: #e5e5e5;
         font: 14px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
         /* Kill WebView zoom + iOS auto-sizing + rubber-band scroll. */
         touch-action: manipulation;
@@ -18,18 +22,60 @@
         overscroll-behavior: none;
       }
       #app {
-        display: flex;
-        height: 100%;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
         box-sizing: border-box;
-        text-align: center;
+        padding: 20px calc(20px + env(safe-area-inset-right)) 20px
+          calc(20px + env(safe-area-inset-left));
+        max-width: 640px;
+        margin: 0 auto;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      input,
+      select {
+        flex: 1 1 auto;
+        min-height: 40px;
+        padding: 6px 10px;
+        border: 1px solid #4a4a4a;
+        border-radius: 6px;
+        background: #191919;
+        color: inherit;
+        font: inherit;
+      }
+      button {
+        width: 100%;
+        min-height: 48px;
+        border: 0;
+        border-radius: 6px;
+        background: #e5e5e5;
+        color: #191919;
+        font: inherit;
+        font-weight: 600;
+      }
+      #g2rs-status {
+        font-weight: 600;
+      }
+      #g2rs-warning {
+        color: #f0c674;
+      }
+      #g2rs-log {
+        max-height: 40vh;
+        overflow: auto;
+        padding: 8px;
+        border-radius: 6px;
+        background: #191919;
+        color: #a8a8a8;
+        font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
       }
     </style>
   </head>
   <body>
-    <div id="app">Companion app is running. Check the glasses display.</div>
+    <div id="app">Starting…</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -1,0 +1,141 @@
+/**
+ * Wires the pieces together: room state → store → queue, the NO LINK watchdog,
+ * and glasses input. `main.ts` only builds the real bridge, client and queue and
+ * hands them here, so the wiring itself is what the tests exercise.
+ */
+
+import type {
+  Ack,
+  ConnectionCloseDetail,
+  ConnectionState,
+  ErrorMessage,
+  State,
+} from '@g2-race-spotter/protocol';
+
+import { HudApp, type RenderSink } from './app.ts';
+import type { Bridge, BridgeLogger } from './bridge.ts';
+import { createInputHandler } from './input.ts';
+import { createLinkWatchdog } from './link.ts';
+
+/** How often the watchdog re-checks a quiet socket. */
+export const LINK_CHECK_MS = 1_000;
+
+/** The `RoomClient` surface the driver app uses. */
+export interface DriverClient {
+  readonly lastFrameAt: number | undefined;
+  onState(listener: (state: State) => void): () => void;
+  onConnection(
+    listener: (state: ConnectionState, detail: ConnectionCloseDetail) => void,
+  ): () => void;
+  onError(listener: (error: ErrorMessage) => void): () => void;
+  send(intent: Ack): void;
+  disconnect(): void;
+}
+
+export interface IntervalTimers {
+  setInterval(callback: () => void, delayMs: number): number;
+  clearInterval(handle: number): void;
+}
+
+const browserIntervals: IntervalTimers = {
+  setInterval: (callback, delayMs) =>
+    globalThis.setInterval(callback, delayMs) as unknown as number,
+  clearInterval: (handle) => globalThis.clearInterval(handle),
+};
+
+export interface DriverOptions {
+  readonly bridge: Bridge;
+  readonly client: DriverClient;
+  readonly queue: RenderSink;
+  readonly hasRoom: boolean;
+  /** Status text already on the startup page (see `HudAppOptions`). */
+  readonly initialStatus?: string | undefined;
+  readonly now: () => number;
+  /** Re-arms the socket on `FOREGROUND_ENTER_EVENT`. */
+  readonly connect: () => void;
+  readonly timers?: IntervalTimers;
+  readonly log?: BridgeLogger;
+}
+
+export interface Driver {
+  readonly app: HudApp;
+  /** Re-evaluates the link now; the interval does this on its own. */
+  checkLink(): void;
+  stop(): void;
+}
+
+export function startDriver(options: DriverOptions): Driver {
+  const { bridge, client, queue } = options;
+  const timers = options.timers ?? browserIntervals;
+
+  const app = new HudApp({
+    queue,
+    ack: (msgId) => {
+      client.send({ t: 'ack', msgId });
+    },
+    hasRoom: options.hasRoom,
+    initialStatus: options.initialStatus,
+  });
+
+  const watchdog = createLinkWatchdog({
+    now: options.now,
+    lastFrameAt: () => client.lastFrameAt,
+    onChange: (linkOk) => {
+      app.setLinkOk(linkOk);
+    },
+  });
+
+  const unsubscribe = [
+    client.onState((state) => {
+      // Check first: the frame that just arrived is what clears NO LINK, and
+      // the state render must already carry the un-dimmed HUD.
+      watchdog.check();
+      app.applyState(state);
+    }),
+    client.onConnection((connection, detail) => {
+      app.setConnection(connection, detail);
+      watchdog.check();
+    }),
+    client.onError((error) => {
+      app.setError(error);
+    }),
+    bridge.onEvenHubEvent(
+      createInputHandler({
+        now: options.now,
+        shutDownPageContainer: (exitMode) =>
+          bridge.shutDownPageContainer(exitMode),
+        ack: (msgId) => {
+          app.ack(msgId);
+        },
+        unackedMessageId: () => app.unackedMessageId(),
+        reconnect: () => {
+          options.connect();
+          app.render();
+        },
+        disconnect: () => {
+          client.disconnect();
+        },
+        ...(options.log === undefined ? {} : { log: options.log }),
+      }),
+    ),
+  ];
+
+  const interval = timers.setInterval(() => {
+    watchdog.check();
+  }, LINK_CHECK_MS);
+
+  app.render();
+
+  return {
+    app,
+    checkLink: () => {
+      watchdog.check();
+    },
+    stop: () => {
+      timers.clearInterval(interval);
+      for (const off of unsubscribe) {
+        off();
+      }
+    },
+  };
+}
