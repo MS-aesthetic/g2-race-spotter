@@ -5,7 +5,9 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 
-No active leases. T011 is deliberately unleased until the interactive coordinator records its exact base, worktree, scope, and integration gate.
+| lease | task | stream | write scope | locks | dependency / integration gate |
+|---|---|---|---|---|---|
+| L011 | T011 | relay-room | `services/relay/src/race-room.ts`; `services/relay/test/auth.test.ts`; minimal existing live-test helper file only if strictly required by the named verifier | `relay-room` | Base `0115862c73410115baf18357648bbe1cd5c09abb`; worktree `C:\Users\maxx\.cache\g2rs-worktrees\L011`; branch `ralph/L011-T011`; depends on T016 integrated; review the exact leased range and integrate serially only after approval and full root gates. |
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
