@@ -5,7 +5,12 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 ## Active stream leases (interactive coordinator only)
 
-- None. T008/T008a is integrated. T006c (human-authorized repair) and T016 are independent (locks `room-client` vs `relay-room`) and may be leased in parallel; T011+ wait for T016.
+| lease | task | stream | write scope | locks | dependency / integration gate |
+|---|---|---|---|---|---|
+| L009 | T006c | protocol-client | `packages/protocol/src/client.ts`; `packages/protocol/test/client.test.ts` | `room-client` | Base `761b7484b3288e0747d23c5f63dd564d9afd5167`; worktree `C:\Users\maxx\.cache\g2rs-worktrees\L009`; branch `ralph/L009-T006c`; no implementation dependency; candidate ancestry must be the rebased/cherry-picked T006/T006a/T006b stack; review exact leased range and integrate serially after approval. |
+| L010 | T016 | relay-room | `services/relay/src/race-room.ts`; `services/relay/test/heartbeat-prereq.test.ts`; minimal existing internal debug route/helper file only if the named live verifier requires exposing the alarm | `relay-room` | Base `761b7484b3288e0747d23c5f63dd564d9afd5167`; worktree `C:\Users\maxx\.cache\g2rs-worktrees\L010`; branch `ralph/L010-T016`; depends on T008/T008a integrated; review exact leased range and integrate serially after approval. |
+
+L009 and L010 may build in parallel because their write scopes and exclusive locks do not overlap; review and integration remain serial.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
