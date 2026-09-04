@@ -43,9 +43,9 @@ Recent integrated relay history:
 
 ## Next safe action
 
-T011 is the first unchecked task under `## Next`: implement first-join/open-room/protected-room PIN semantics and authentication tests. It owns the `relay-room` lock and must be completed and reviewed before T009. No implementation lease has been opened, so a new coordinator may create a fresh isolated worktree from current `master`, record the lease, then dispatch `relay-backend-dev` with the build prompt and applicable relay/protocol skills.
+T006c and T016 are the first unchecked tasks under `## Next` (T011 follows T016): implement first-join/open-room/protected-room PIN semantics and authentication tests. It owns the `relay-room` lock and must be completed and reviewed before T009. No implementation lease has been opened, so a new coordinator may create a fresh isolated worktree from current `master`, record the lease, then dispatch `relay-backend-dev` with the build prompt and applicable relay/protocol skills.
 
-Do not start or repair T006. Maxx explicitly declined exceeding its three-review-block cap. The candidate remains quarantined in L005; it must not be leased, integrated, or silently reimplemented unless Maxx later explicitly reverses that decision.
+T006: Maxx reversed the stop on 2026-09-03 after the audit. The only permitted work is **T006c** as scoped in `IMPLEMENTATION_PLAN.md` (four exact changes on the L005 candidate, `protocol-keeper` reviews the exact range). Do not reimplement the client from scratch and do not widen the repair. T006c and T016 are independent and may be leased in parallel; T011 and later wait for T016.
 
 ## Quarantined and historical worktrees
 

@@ -3,7 +3,7 @@
 Append-only history of loop iterations. The planner keeps "Blocked on human" current; Maxx clears items by doing them and telling the loop (or by editing the plan).
 
 ## Blocked on human
-- T006/T006a/T006b — STOPPED non-hardware third-review-block escalation (spec 020 AC-8); Maxx declined a fourth repair, candidate `ae5f448..e588729` remains quarantined, and work may resume only after a future explicit reversal
+- (T006 escalation resolved 2026-09-03: Maxx authorized the scoped repair T006c after the audit; it is a normal worker task now)
 - T101b — QR sideload photo/log evidence (spec 010 AC-4); simulator evidence remains separate under T002c (`[SIM]`)
 - T102 — first Cloudflare deploy + `DEBUG_KEY` evidence (spec 020 AC-10)
 - T104–T106 — real-glasses scenarios, glyph sheet, and WebSocket whitelist evidence (spec 030 AC-8–AC-10); T103 (030 AC-7) is now a `[SIM]` worker task
@@ -29,6 +29,9 @@ Append-only history of loop iterations. The planner keeps "Blocked on human" cur
 - Relay (`race-room.ts`) latent defects found by an Opus `protocol-keeper` pass: alarm re-armed on every frame (silent-peer detection could never fire while anyone pinged) and no `pong` reply (a quiet healthy room would trip the driver's NO LINK). Added as T016 ahead of T011; traps for T011/T009/T012/T013 written into the task lines; rate limiting (R4) added to T013.
 - Quarantined `RoomClient` (`e588729`) independently 4th-reviewed: `block` on exactly the two known 3-line findings; AC-8 has a real test; recommendation is one targeted repair (T006c) — awaiting Maxx's explicit reversal, nothing leased.
 - Process: 34 iterations, 12 chains integrated, 17 blocks (8 avoidable by a pre-hand-off checklist, 9 genuine reviewer catches). `PROMPT_build.md` §1.5 self-review, `PROMPT_review.md` §1a boundary check, and planner task-slicing rules added; skill/spec clarifications for `pong`, self-arming alarm, `lastFrameAt === undefined`, `onError`.
+
+## Decision (2026-09-03)
+- Maxx: "yes on the fix" — T006c (four-change repair of the quarantined RoomClient candidate) authorized and placed first in `## Next`; T016 second; both may run as parallel leases.
 
 ## Iterations
 
