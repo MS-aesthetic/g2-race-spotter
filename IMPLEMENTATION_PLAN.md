@@ -1,4 +1,4 @@
-# Implementation plan — 2026-09-03T21:57:56-04:00
+# Implementation plan — 2026-09-03T22:22:29-04:00
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
 
@@ -6,13 +6,14 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 | lease | task | status / exact base | dependencies, write scope, and locks | review / integration gate |
 |---|---|---|---|---|
-| L007 | T007a | active from `a380d6f` | T007/T007b integrated; only `services/relay/src/index.ts`, `services/relay/src/worker-configuration.d.ts`, `services/relay/wrangler.jsonc`, `services/relay/test/routes.test.ts`, `services/relay/src/race-room.ts` solely for the internal debug-state path/RPC, and `services/relay/test/roundtrip.test.ts` solely to create/remove a temporary `apps/spotter/dist/index.html` around its self-managed Worker; lock `relay-http` | fresh `relay-backend-dev`; exact `a380d6f..HEAD` review by `protocol-keeper`; integrate only an approved commit, then run the live route test and every Node 22 root gate; no committed app asset or app edit is permitted |
+| L007R | T007c | active repair from `01e596b` atop quarantined T007a; integrated base remains `a380d6f` | T007a candidate only; write only `services/relay/src/index.ts`, generated `services/relay/src/worker-configuration.d.ts`, new `services/relay/src/env.d.ts`, `services/relay/tsconfig.json`, `services/relay/wrangler.jsonc`, `services/relay/test/routes.test.ts`, and `services/relay/test/roundtrip.test.ts`; lock `relay-http` | fresh `relay-backend-dev`; combined exact `a380d6f..HEAD` review by `protocol-keeper`; integrate T007a + T007c only if approved, then run both live relay tests, `wrangler types src/worker-configuration.d.ts --check`, and every Node 22 root gate |
 | L005R2 | T006/T006a/T006b | third review block; quarantined `ae5f448..e588729` | frozen: `packages/protocol/src/client.ts`, `packages/protocol/src/index.ts`, `packages/protocol/test/client.test.ts`; lock `protocol-client` | no integration and no automatic fourth repair lease; resume only after explicit human direction on the non-hardware review escalation below |
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
-- [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-10; requirement R5) [lease L007; stream: relay-http; lock: relay-http; base: `a380d6f`] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response. `RaceRoom` may change only to expose the internal debug-state path/RPC needed by that gated route; do not change protocol, WebSocket, or broader room semantics. Because the spotter build does not exist yet, `roundtrip.test.ts` may mirror the routes-test cleanup by creating/removing a minimal temporary `apps/spotter/dist/index.html` around its self-managed Worker; do not commit the asset or edit `apps/spotter`. Verify both live relay tests and all root gates.
-- [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4) [stream: relay-room; lock: relay-room; depends: T007a integrated] Preserve state and sequence across reconnect and Durable Object rehydration, and repoint the empty-room alarm to room TTL; verify `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`.
+- [ ] T007c (owner: relay-backend-dev) (spec: 020 AC-3/AC-10; requirement R5) [lease L007R; stream: relay-http; lock: relay-http; base: `01e596b`] Repair the quarantined T007a candidate without changing protocol or broader room semantics. Reviewer findings, verbatim: “public caller can forge `X-G2RS-Internal-Debug: 1` on `/room` upgrade and `RaceRoom` returns state without `DEBUG_KEY`; strip caller header on public forwards or use non-forgeable dispatch, inject only after public key check, regression.” “generated `worker-configuration.d.ts` manually appends `DEBUG_KEY` and `wrangler types ... --check` says stale; keep generated file exact and put secret augmentation in separate included `.d.ts`, check generation.” “roundtrip/routes tests overwrite then delete real `apps/spotter/dist/index.html`; use per-test temp assets/config or preserve/restore contents, regression.” Add the public-header forgery and real-asset-preservation regressions, keep Wrangler-generated types byte-current, run both live tests plus every root gate, and commit one repair.
+- [ ] T007a (owner: relay-backend-dev) (spec: 020 AC-10; requirement R5) [blocked ancestor; candidate `01e596b` remains quarantined until T007c's combined review] Complete `/health`, debug-key-gated `/room/:id/debug`, static-asset fallthrough, and CORS on every HTTP response; no committed app asset or app edit is permitted.
+- [ ] T008 (owner: relay-backend-dev) (spec: 020 AC-4) [stream: relay-room; lock: relay-room; depends: T007a/T007c integrated] Preserve state and sequence across reconnect and Durable Object rehydration, and repoint the empty-room alarm to room TTL; verify `services/relay/test/replay.test.ts` and `services/relay/test/alarm.test.ts`.
 - [ ] T011 (owner: relay-backend-dev) (spec: 020 AC-6) [stream: relay-room; lock: relay-room; depends: T008 integrated] Implement first-join PIN persistence, open-room `null` PIN semantics, and accepted-socket auth error followed by close 4401; verify `services/relay/test/auth.test.ts`.
 - [ ] T009 (owner: relay-backend-dev) (spec: 020 AC-5) [stream: relay-room; lock: relay-room; depends: T011 integrated] Enforce PIN-checked, last-writer-wins driver eviction by sending `role_taken`, closing the previous driver with 4409, and accepting the new driver; verify `services/relay/test/eviction.test.ts`.
 - [ ] T012 (owner: relay-backend-dev) (spec: 020 AC-7) [stream: relay-room; lock: relay-room; depends: T009 integrated] Implement shared-timing alarm ticks, silent-socket close 4408, peer-offline reduction, and broadcast; verify `services/relay/test/heartbeat.test.ts`.
@@ -58,10 +59,11 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 ## Notes / why
 
-- L006R is retired: both approved relay commits are on `master`, and the integrated live test plus root gates support marking 020 AC-3 met.
-- T014 is not leased in parallel with T007a: its required `reconnect-replay` and `driver-evict` live-relay scenarios depend on T008 and T009, so dispatching it now would make its named test impossible to close honestly.
-- T006 remains frozen after three blocked reviews; user approval is required only to authorize another non-hardware client repair, not for the current T007a relay work.
+- T007a remains quarantined after review `block`: the candidate exposes a forgeable internal debug path, drifts the generated Worker bindings, and mutates real spotter build output during tests; T007c repairs those findings on top so a reviewer can inspect the combined range.
+- The first T007a review produced no verdict, so it did not count as a block; iteration 31 records the fresh protocol-keeper block and retains the original task beneath its repair.
+- T014 is not leased before T008/T009 because its required live-relay scenarios depend on replay and driver eviction.
+- T006 remains frozen after three blocked reviews; user approval is required only to authorize another non-hardware client repair, not for T007c.
 - AC audit 010: AC-1/AC-2/AC-6/AC-7 met; AC-3 and AC-5 parked under Needs simulator; AC-4 under Needs human [HW].
-- AC audit 020: AC-1, AC-2, and AC-3 met; AC-4–AC-9 remain unmet except quarantined AC-8; AC-10 remains [HW] with local prerequisites T007a and T014.
+- AC audit 020: AC-1, AC-2, and AC-3 met; AC-4–AC-9 remain unmet except quarantined AC-8; AC-10 remains [HW] with local prerequisites T007a/T007c and T014.
 - AC audits 030–070 remain unchanged: automated criteria are unmet, `[SIM]` evidence is absent, and every `[HW]` criterion remains under Needs human [HW].
 - No criterion is `DISPUTED`; `qa/` remains absent, so no simulator or hardware evidence is claimed.
