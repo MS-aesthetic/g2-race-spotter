@@ -4,12 +4,14 @@ import { nextAlarmAt } from './alarm.js';
 
 import {
   CLOSE_CODE_BAD_HELLO,
+  CLOSE_CODE_VERSION,
   createInitialState,
   isClientMessage,
   isHello,
   isPing,
   reduce,
   ROOM_TTL_MS,
+  PROTOCOL_VERSION,
   type ErrorMessage,
   type Role,
   type State,
@@ -120,6 +122,12 @@ export class RaceRoom extends DurableObject<Env> {
     socket.close(CLOSE_CODE_BAD_HELLO, 'hello must match URL');
   }
 
+  private sendBadVersion(socket: WebSocket): void {
+    const error: ErrorMessage = { t: 'error', code: 'version' };
+    socket.send(serialize(error));
+    socket.close(CLOSE_CODE_VERSION, 'protocol version mismatch');
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('X-G2RS-Internal-Debug') === '1') {
       const state = await this.loadState();
@@ -161,11 +169,7 @@ export class RaceRoom extends DurableObject<Env> {
     raw: string | ArrayBuffer,
   ): Promise<void> {
     const attachment = this.attachment(socket);
-    if (
-      attachment === undefined ||
-      attachment.role === null ||
-      typeof raw !== 'string'
-    ) {
+    if (attachment === undefined || typeof raw !== 'string') {
       this.sendBadHello(socket);
       return;
     }
@@ -179,8 +183,16 @@ export class RaceRoom extends DurableObject<Env> {
     }
 
     if (!attachment.ready) {
+      if (!isHello(value)) {
+        this.sendBadHello(socket);
+        return;
+      }
+      if (value.v !== PROTOCOL_VERSION) {
+        this.sendBadVersion(socket);
+        return;
+      }
       if (
-        !isHello(value) ||
+        attachment.role === null ||
         value.role !== attachment.role ||
         value.name !== attachment.name
       ) {
@@ -196,6 +208,11 @@ export class RaceRoom extends DurableObject<Env> {
     }
 
     if (!isClientMessage(value) || value.t === 'hello') {
+      return;
+    }
+
+    if (attachment.role === null) {
+      this.sendBadHello(socket);
       return;
     }
 
