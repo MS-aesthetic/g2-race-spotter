@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 
 interface RunningWorker {
+  readonly assetDirectory: string;
   readonly origin: string;
   stop(): Promise<void>;
 }
@@ -25,16 +26,26 @@ const wranglerEntrypoint = join(
   'bin',
   'wrangler.js',
 );
-const assetDirectory = join(
+const productionAssetFixture = join(
   projectDirectory,
   '..',
   '..',
   'apps',
   'spotter',
   'dist',
+  'index.html',
 );
-const assetFixture = join(assetDirectory, 'index.html');
 
+async function readOptionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+}
 async function reservePort(): Promise<number> {
   const server = createServer();
   server.listen(0, '127.0.0.1');
@@ -68,7 +79,8 @@ async function removePersistence(directory: string): Promise<void> {
 }
 
 async function startWorker(): Promise<RunningWorker> {
-  await mkdir(assetDirectory, { recursive: true });
+  const assetDirectory = await mkdtemp(join(tmpdir(), 'g2rs-assets-'));
+  const assetFixture = join(assetDirectory, 'index.html');
   await writeFile(assetFixture, '<!doctype html><title>Spotter</title>');
 
   const port = await reservePort();
@@ -83,6 +95,8 @@ async function startWorker(): Promise<RunningWorker> {
       String(port),
       '--persist-to',
       persistenceDirectory,
+      '--assets',
+      assetDirectory,
     ],
     { cwd: projectDirectory, stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -100,11 +114,12 @@ async function startWorker(): Promise<RunningWorker> {
       const response = await fetch(`${origin}/health`);
       if (response.ok) {
         return {
+          assetDirectory,
           origin,
           async stop(): Promise<void> {
             await stopProcess(worker);
             await removePersistence(persistenceDirectory);
-            await rm(assetFixture, { force: true });
+            await rm(assetDirectory, { force: true, recursive: true });
           },
         };
       }
@@ -116,7 +131,7 @@ async function startWorker(): Promise<RunningWorker> {
 
   await stopProcess(worker);
   await removePersistence(persistenceDirectory);
-  await rm(assetFixture, { force: true });
+  await rm(assetDirectory, { force: true, recursive: true });
   throw new Error(`wrangler did not start:\n${output.join('')}`);
 }
 
@@ -204,7 +219,13 @@ describe('RaceRoom roundtrip', () => {
   });
 
   it('broadcasts a persisted lane state to the driver within 500 ms', async () => {
+    const productionAssetBefore = await readOptionalFile(
+      productionAssetFixture,
+    );
     worker = await startWorker();
+    await expect(readOptionalFile(productionAssetFixture)).resolves.toBe(
+      productionAssetBefore,
+    );
     const room = 'QA01';
     const spotter = await openSocket(
       `${worker.origin.replace('http', 'ws')}/room/${room}?role=spotter`,

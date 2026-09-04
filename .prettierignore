@@ -3,3 +3,4 @@ dist/
 .wrangler/
 package-lock.json
 qa/
+services/relay/src/worker-configuration.d.ts

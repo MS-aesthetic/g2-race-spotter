@@ -23,6 +23,12 @@ function withCors(response: Response): Response {
   });
 }
 
+function withoutInternalDebugHeader(request: Request): Request {
+  const headers = new Headers(request.headers);
+  headers.delete(INTERNAL_DEBUG_HEADER);
+  return new Request(request, { headers });
+}
+
 export { RaceRoom };
 
 export default {
@@ -69,6 +75,8 @@ export default {
     }
 
     const roomId = match[1].toUpperCase();
-    return env.ROOMS.get(env.ROOMS.idFromName(roomId)).fetch(request);
+    return env.ROOMS.get(env.ROOMS.idFromName(roomId)).fetch(
+      withoutInternalDebugHeader(request),
+    );
   },
 } satisfies ExportedHandler<Env>;

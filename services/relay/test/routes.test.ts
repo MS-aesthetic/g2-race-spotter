@@ -1,14 +1,16 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import WebSocket from 'ws';
 
 interface RunningWorker {
+  readonly assetDirectory: string;
   readonly origin: string;
   stop(): Promise<void>;
 }
@@ -24,7 +26,7 @@ const wranglerEntrypoint = join(
   'bin',
   'wrangler.js',
 );
-const assetDirectory = join(
+const productionAssetDirectory = join(
   projectDirectory,
   '..',
   '..',
@@ -32,7 +34,18 @@ const assetDirectory = join(
   'spotter',
   'dist',
 );
-const assetFixture = join(assetDirectory, 'route-test.txt');
+const productionAssetFixture = join(productionAssetDirectory, 'route-test.txt');
+
+async function readOptionalFile(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
+  }
+}
 
 async function reservePort(): Promise<number> {
   const server = createServer();
@@ -58,7 +71,8 @@ async function stopProcess(worker: ReturnType<typeof spawn>): Promise<void> {
 }
 
 async function startWorker(): Promise<RunningWorker> {
-  await mkdir(assetDirectory, { recursive: true });
+  const assetDirectory = await mkdtemp(join(tmpdir(), 'g2rs-assets-'));
+  const assetFixture = join(assetDirectory, 'route-test.txt');
   await writeFile(assetFixture, 'spotter asset');
 
   const port = await reservePort();
@@ -73,6 +87,8 @@ async function startWorker(): Promise<RunningWorker> {
       String(port),
       '--persist-to',
       persistenceDirectory,
+      '--assets',
+      assetDirectory,
       '--var',
       'DEBUG_KEY:test-debug-key',
     ],
@@ -91,6 +107,7 @@ async function startWorker(): Promise<RunningWorker> {
     try {
       if ((await fetch(`${origin}/health`)).ok) {
         return {
+          assetDirectory,
           origin,
           async stop(): Promise<void> {
             await stopProcess(worker);
@@ -100,7 +117,7 @@ async function startWorker(): Promise<RunningWorker> {
               recursive: true,
               retryDelay: 100,
             });
-            await rm(assetFixture, { force: true });
+            await rm(assetDirectory, { force: true, recursive: true });
           },
         };
       }
@@ -112,7 +129,7 @@ async function startWorker(): Promise<RunningWorker> {
 
   await stopProcess(worker);
   await rm(persistenceDirectory, { force: true, recursive: true });
-  await rm(assetFixture, { force: true });
+  await rm(assetDirectory, { force: true, recursive: true });
   throw new Error(`wrangler did not start:\n${output.join('')}`);
 }
 
@@ -173,7 +190,15 @@ describe('relay HTTP routes', () => {
   }, 20_000);
 
   it('falls through to static assets and preserves CORS on non-upgrade room requests', async () => {
+    const productionAssetBefore = await readOptionalFile(
+      productionAssetFixture,
+    );
     worker = await startWorker();
+
+    expect(worker.assetDirectory).not.toBe(productionAssetDirectory);
+    await expect(readOptionalFile(productionAssetFixture)).resolves.toBe(
+      productionAssetBefore,
+    );
 
     const asset = await fetch(`${worker.origin}/route-test.txt`);
     expect(asset.status).toBe(200);
@@ -183,5 +208,31 @@ describe('relay HTTP routes', () => {
     const room = await fetch(`${worker.origin}/room/QA01`);
     expect(room.status).toBe(426);
     expectCors(room);
+  }, 20_000);
+
+  it('does not allow a caller to forge the relay internal debug header', async () => {
+    worker = await startWorker();
+    const socket = new WebSocket(
+      `${worker.origin.replace('http', 'ws')}/room/QA01?role=driver`,
+      { headers: { 'X-G2RS-Internal-Debug': '1' } },
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', resolve);
+      socket.once('error', reject);
+    });
+    const state = new Promise<Record<string, unknown>>((resolve, reject) => {
+      socket.once('message', (data) => {
+        try {
+          resolve(JSON.parse(data.toString()) as Record<string, unknown>);
+        } catch (error) {
+          reject(error);
+        }
+      });
+      socket.once('error', reject);
+    });
+    socket.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+    await expect(state).resolves.toMatchObject({ t: 'state' });
+    socket.close();
   }, 20_000);
 });
