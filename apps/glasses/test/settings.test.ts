@@ -11,6 +11,7 @@ import {
   normaliseRoom,
   resolveRelayBase,
   saveSettings,
+  seedFromSearch,
   STORAGE_KEYS,
 } from '../src/settings.ts';
 import { MIN_EVEN_APP_VERSION } from '../src/render/sdk-quirks.ts';
@@ -126,5 +127,26 @@ describe('Even App version warning (050 R5)', () => {
     expect(evenAppWarning('image', undefined)).toContain(MIN_EVEN_APP_VERSION);
     expect(evenAppWarning('image', '2.2.7')).toBeNull();
     expect(evenAppWarning('text', '2.0.0')).toBeNull();
+  });
+});
+
+describe('URL seed', () => {
+  it('overrides stored room/pin/name from the page URL', () => {
+    const seeded = seedFromSearch(
+      { room: 'OLD1', pin: '', name: '', render: null },
+      '?room=qa01&pin=1234&name=Maxx&relay=wss://x',
+    );
+    expect(seeded).toEqual({
+      room: 'QA01',
+      pin: '1234',
+      name: 'Maxx',
+      render: null,
+    });
+  });
+
+  it('ignores absent or invalid values so a typo cannot wipe a saved room', () => {
+    const stored = { room: 'QA01', pin: '1234', name: 'd', render: null };
+    expect(seedFromSearch(stored, '')).toEqual(stored);
+    expect(seedFromSearch(stored, '?room=x&pin=12')).toEqual(stored);
   });
 });

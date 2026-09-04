@@ -82,6 +82,32 @@ export async function loadSettings(store: SettingsStore): Promise<Settings> {
   };
 }
 
+/**
+ * `?room=QA01&pin=1234&name=driver` in the page URL seeds the stored settings —
+ * the simulator harness and a sideloaded test build use it so nobody has to
+ * type into the companion page first. Only fields present in the URL change;
+ * invalid values are ignored so a typo cannot wipe a saved room.
+ */
+export function seedFromSearch(current: Settings, search: string): Settings {
+  const params = new URLSearchParams(
+    search.startsWith('?') ? search.slice(1) : search,
+  );
+  const room = params.get('room');
+  const pin = params.get('pin');
+  const name = params.get('name');
+  let next = current;
+  if (room !== null && isValidRoom(normaliseRoom(room))) {
+    next = { ...next, room: normaliseRoom(room) };
+  }
+  if (pin !== null && isValidPin(normalisePin(pin))) {
+    next = { ...next, pin: normalisePin(pin) };
+  }
+  if (name !== null && name.trim() !== '') {
+    next = { ...next, name: name.trim().slice(0, 24) };
+  }
+  return next;
+}
+
 export async function saveSettings(
   store: SettingsStore,
   settings: Settings,

@@ -21,12 +21,16 @@ import {
   loadSettings,
   resolveRelayBase,
   saveSettings,
+  seedFromSearch,
   type Settings,
 } from './settings.ts';
 import { buildPage, createStartupPage } from './startup-page.ts';
 
 const bridge = await createEvenBridge();
-let settings = await loadSettings(bridge);
+let settings = seedFromSearch(
+  await loadSettings(bridge),
+  globalThis.location?.search ?? '',
+);
 
 const mode = resolveRenderMode({
   search: globalThis.location?.search,
