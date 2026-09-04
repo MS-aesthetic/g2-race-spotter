@@ -1,4 +1,4 @@
-# Implementation plan — 2026-09-04T01:14:27-04:00
+# Implementation plan — 2026-09-04T01:20:00-04:00
 
 Status: BUILDING
 Current spec focus: specs/020-protocol-and-relay.md
@@ -7,8 +7,7 @@ Current spec focus: specs/020-protocol-and-relay.md
 
 | lease | task | stream | write scope | locks | dependency / integration gate |
 |---|---|---|---|---|---|
-
-_No active leases. L013/T011b is closed after the exact range `749e483..2d1edb6` was blocked; preserve `C:\Users\maxx\.cache\g2rs-worktrees\L013` at `2d1edb6` for evidence. T011c remains unleased for coordinator dispatch._
+| L014 | T011c | relay-room | `services/relay/src/race-room.ts`; `services/relay/test/auth.test.ts` | `relay-room` | Integration base `c950e71`; intended worktree `C:\Users\maxx\.cache\g2rs-worktrees\L014`; branch `ralph/L014-T011c`; T016 integrated. Apply the quarantined candidate stack `9053463` then `2d1edb6` after the lease, review the combined exact base-to-head range, and integrate application commits serially only after approval and full root gates. |
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
