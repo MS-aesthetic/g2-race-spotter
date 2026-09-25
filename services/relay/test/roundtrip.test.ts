@@ -235,9 +235,9 @@ describe('RaceRoom roundtrip', () => {
     );
 
     try {
-      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      spotter.send(JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }));
       await nextMessage(spotter);
-      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      driver.send(JSON.stringify({ t: 'hello', v: 2, role: 'driver' }));
       await nextMessage(driver);
 
       const state = nextMessage(driver);
@@ -255,7 +255,7 @@ describe('RaceRoom roundtrip', () => {
     }
   }, 20_000);
 
-  it('broadcasts a spotter side call and ignores one from the driver', async () => {
+  it('broadcasts a spotter cars call, clamped, and ignores one from the driver', async () => {
     worker = await startWorker();
     const room = 'QA05';
     const spotter = await openSocket(
@@ -266,28 +266,29 @@ describe('RaceRoom roundtrip', () => {
     );
 
     try {
-      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      spotter.send(JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }));
       await nextMessage(spotter);
-      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      driver.send(JSON.stringify({ t: 'hello', v: 2, role: 'driver' }));
       await nextMessage(driver);
 
       const called = nextMessage(driver);
-      spotter.send(JSON.stringify({ t: 'side', side: 'inside' }));
+      spotter.send(JSON.stringify({ t: 'cars', cars: [1, 2.4, 7] }));
       await expect(within(called, 500)).resolves.toMatchObject({
         t: 'state',
-        side: 'inside',
+        cars: [1, 2, 3],
       });
 
-      // Role check: the driver cannot call a side on itself, so the frame is
-      // dropped without a state broadcast.
-      driver.send(JSON.stringify({ t: 'side', side: 'outside' }));
+      // Role check: the driver cannot call cars on itself, so the frame is
+      // dropped without a state broadcast; a repeat is a no-op as well.
+      driver.send(JSON.stringify({ t: 'cars', cars: [0, 0, 0] }));
+      spotter.send(JSON.stringify({ t: 'cars', cars: [1, 2, 3] }));
       await expectNoMessage(driver, 250);
 
       const cleared = nextMessage(driver);
-      spotter.send(JSON.stringify({ t: 'side', side: null }));
+      spotter.send(JSON.stringify({ t: 'cars', cars: [0, 0, 0] }));
       await expect(within(cleared, 500)).resolves.toMatchObject({
         t: 'state',
-        side: null,
+        cars: [0, 0, 0],
       });
     } finally {
       spotter.close();
@@ -306,7 +307,7 @@ describe('RaceRoom roundtrip', () => {
     );
 
     try {
-      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      spotter.send(JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }));
       await nextMessage(spotter);
       await expectNoMessage(driver, 150);
 
@@ -315,7 +316,7 @@ describe('RaceRoom roundtrip', () => {
       await nextMessage(spotter);
       await expectNoMessage(driver, 150);
 
-      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      driver.send(JSON.stringify({ t: 'hello', v: 2, role: 'driver' }));
       await expect(within(replay, 500)).resolves.toMatchObject({
         t: 'state',
         lane: 'bot',
@@ -336,7 +337,7 @@ describe('RaceRoom roundtrip', () => {
         `${worker.origin.replace('http', 'ws')}/room/QA03${query}`,
       );
       rejected.socket.send(
-        JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }),
+        JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }),
       );
 
       await expect(within(rejected.message, 500)).resolves.toEqual({

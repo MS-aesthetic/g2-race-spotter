@@ -27,7 +27,7 @@ async function hello(
   role: 'spotter' | 'driver',
 ): Promise<Record<string, unknown>> {
   const replay = nextMessage(socket);
-  socket.send(JSON.stringify({ t: 'hello', v: 1, role }));
+  socket.send(JSON.stringify({ t: 'hello', v: 2, role }));
   return within(replay, 500);
 }
 
@@ -146,7 +146,7 @@ describe('RaceRoom driver eviction', () => {
         roomUrl(worker, 'QA21', '?role=driver&token=9999'),
       );
       rejected.socket.send(
-        JSON.stringify({ t: 'hello', v: 1, role: 'driver' }),
+        JSON.stringify({ t: 'hello', v: 2, role: 'driver' }),
       );
       await expect(within(rejected.message, 500)).resolves.toEqual({
         t: 'error',

@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ROOM_TTL_MS, type State } from '@g2-race-spotter/protocol';
+import {
+  ALARM_TICK_MS,
+  HUD_STALE_CLEAR_MS,
+  ROOM_TTL_MS,
+  type State,
+} from '@g2-race-spotter/protocol';
 
-import { nextAlarmAt } from '../src/alarm.js';
+import { earlierAlarmAt, nextAlarmAt } from '../src/alarm.js';
 
 import {
   nextMessage,
@@ -46,7 +51,7 @@ describe('RaceRoom room-expiry alarm', () => {
     await worker?.stop();
   });
 
-  it('repoints a closed live room to its persisted-state TTL without losing intents', async () => {
+  it('repoints a closed live room to its stale clear (earlier than the TTL) without losing intents', async () => {
     worker = await startWorker();
     const socket = await openSocket(
       `${worker.origin.replace('http', 'ws')}/room/QA09?role=spotter`,
@@ -54,7 +59,7 @@ describe('RaceRoom room-expiry alarm', () => {
 
     try {
       const replay = nextMessage(socket);
-      socket.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      socket.send(JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }));
       await within(replay, 500);
 
       const tick = await readAlarm(worker);
@@ -65,7 +70,7 @@ describe('RaceRoom room-expiry alarm', () => {
 
       for (const frame of [
         { t: 'lane', lane: 'top' },
-        { t: 'gap', value: 63 },
+        { t: 'cars', cars: [3, 0, 1] },
         { t: 'msg', text: 'hold line' },
       ]) {
         const state = nextMessage(socket);
@@ -80,17 +85,45 @@ describe('RaceRoom room-expiry alarm', () => {
       const empty = await waitForEmptyRoom(worker);
       expect(empty.state).toMatchObject({
         lane: 'top',
-        gap: 63,
+        cars: [3, 0, 1],
         msg: expect.objectContaining({ text: 'hold line' }),
         spotterOnline: false,
         driverOnline: false,
       });
-      expect(empty.alarm).toBeCloseTo(empty.state.updatedAt + ROOM_TTL_MS, -3);
+      // The room still shows a call, so its stale clear (T055) is EARLIER
+      // than the TTL and is what the single alarm points at; once cleared,
+      // the empty room falls back to the TTL (stale-clear.test.ts).
+      expect(empty.alarm).toBe(empty.state.updatedAt + HUD_STALE_CLEAR_MS);
 
-      const emptyState: State = { ...empty.state, updatedAt: 123_456 };
+      const emptyState: State = {
+        ...empty.state,
+        lane: null,
+        cars: [0, 0, 0],
+        msg: null,
+        updatedAt: 123_456,
+      };
       expect(nextAlarmAt(0, emptyState, Date.now())).toBe(
         emptyState.updatedAt + ROOM_TTL_MS,
       );
+      const called: State = { ...emptyState, lane: 'top' };
+      expect(nextAlarmAt(0, called, Date.now())).toBe(
+        called.updatedAt + HUD_STALE_CLEAR_MS,
+      );
+      // With sockets open the tick wins while it is earlier.
+      expect(nextAlarmAt(1, called, called.updatedAt)).toBe(
+        called.updatedAt + ALARM_TICK_MS,
+      );
+      // A state change only ever pulls the alarm earlier.
+      expect(earlierAlarmAt(null, called)).toBe(
+        called.updatedAt + HUD_STALE_CLEAR_MS,
+      );
+      expect(earlierAlarmAt(called.updatedAt + 9_000, called)).toBe(
+        called.updatedAt + HUD_STALE_CLEAR_MS,
+      );
+      expect(earlierAlarmAt(called.updatedAt + 1_000, called)).toBeUndefined();
+      expect(
+        earlierAlarmAt(called.updatedAt + 9_000, emptyState),
+      ).toBeUndefined();
     } finally {
       socket.terminate();
     }

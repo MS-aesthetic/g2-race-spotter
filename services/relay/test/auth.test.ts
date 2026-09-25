@@ -34,7 +34,7 @@ async function hello(
   role: 'spotter' | 'driver',
 ): Promise<Record<string, unknown>> {
   const replay = nextMessage(socket);
-  socket.send(JSON.stringify({ t: 'hello', v: 1, role }));
+  socket.send(JSON.stringify({ t: 'hello', v: 2, role }));
   return within(replay, 500);
 }
 
@@ -66,7 +66,7 @@ async function expectRejected(
   closeCode: number,
 ): Promise<void> {
   const rejected = await openRejectedSocket(url);
-  rejected.socket.send(JSON.stringify({ t: 'hello', v: 1, role }));
+  rejected.socket.send(JSON.stringify({ t: 'hello', v: 2, role }));
   await expect(within(rejected.message, 500)).resolves.toEqual({
     t: 'error',
     code: error,
@@ -116,9 +116,10 @@ describe('RaceRoom PIN authentication', () => {
 
     try {
       rejected.socket.send(
+        // A protocol v1 client (gap/side era) after the v2 bump.
         JSON.stringify({
           t: 'hello',
-          v: 999,
+          v: 1,
           role: 'driver',
           name: 'hello-name',
         }),
@@ -136,11 +137,11 @@ describe('RaceRoom PIN authentication', () => {
         state: { seq: 0, spotterOnline: false, driverOnline: false },
       });
 
-      const firstV1 = await openSocket(
+      const firstCurrent = await openSocket(
         roomUrl(worker, 'QA16', '?role=spotter&token=1234'),
       );
       try {
-        await expect(hello(firstV1, 'spotter')).resolves.toMatchObject({
+        await expect(hello(firstCurrent, 'spotter')).resolves.toMatchObject({
           t: 'state',
           spotterOnline: true,
         });
@@ -154,7 +155,7 @@ describe('RaceRoom PIN authentication', () => {
           4401,
         );
       } finally {
-        firstV1.terminate();
+        firstCurrent.terminate();
       }
     } finally {
       rejected.socket.terminate();

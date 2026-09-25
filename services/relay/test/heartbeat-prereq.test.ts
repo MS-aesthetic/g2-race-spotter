@@ -73,12 +73,12 @@ describe('RaceRoom heartbeat prerequisites', () => {
 
     try {
       const spotterReplay = nextMessage(spotter);
-      spotter.send(JSON.stringify({ t: 'hello', v: 1, role: 'spotter' }));
+      spotter.send(JSON.stringify({ t: 'hello', v: 2, role: 'spotter' }));
       await within(spotterReplay, 500);
 
       const spotterPresence = nextMessage(spotter);
       const driverReplay = nextMessage(driver);
-      driver.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+      driver.send(JSON.stringify({ t: 'hello', v: 2, role: 'driver' }));
       await Promise.all([
         within(spotterPresence, 500),
         within(driverReplay, 500),

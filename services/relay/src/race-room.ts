@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 
-import { nextAlarmAt } from './alarm.js';
+import { earlierAlarmAt, nextAlarmAt, staleClearDue } from './alarm.js';
 
 import {
   CLOSE_CODE_AUTH,
@@ -93,6 +93,18 @@ export class RaceRoom extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(
       nextAlarmAt(socketCount, current, Date.now()),
     );
+  }
+
+  /**
+   * A state change may pull the armed alarm EARLIER to its stale-clear
+   * target, never later — so a spotter call cannot postpone the tick, and
+   * the tick cannot postpone the clear.
+   */
+  private async pullAlarmEarlier(state: State): Promise<void> {
+    const target = earlierAlarmAt(await this.ctx.storage.getAlarm(), state);
+    if (target !== undefined) {
+      await this.ctx.storage.setAlarm(target);
+    }
   }
 
   private attachment(socket: WebSocket): SocketAttachment | undefined {
@@ -326,6 +338,7 @@ export class RaceRoom extends DurableObject<Env> {
     );
     if (next !== state) {
       await this.persistAndBroadcast(next);
+      await this.pullAlarmEarlier(next);
     }
   }
 
@@ -367,12 +380,22 @@ export class RaceRoom extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    const state = await this.loadState();
+    let state = await this.loadState();
+    const now = Date.now();
     if (this.ctx.getWebSockets().length === 0) {
-      if (Date.now() >= state.updatedAt + ROOM_TTL_MS) {
+      if (now >= state.updatedAt + ROOM_TTL_MS) {
         await this.expireRoom(state);
         return;
       }
+    }
+
+    if (staleClearDue(state, now)) {
+      state = reduce(
+        state,
+        { t: 'stale' },
+        { now, newId: () => crypto.randomUUID() },
+      );
+      await this.persistAndBroadcast(state);
     }
 
     await this.scheduleAlarm(state);

@@ -20,7 +20,7 @@ async function hello(
   role: 'spotter' | 'driver',
 ): Promise<Record<string, unknown>> {
   const replay = nextMessage(socket);
-  socket.send(JSON.stringify({ t: 'hello', v: 1, role }));
+  socket.send(JSON.stringify({ t: 'hello', v: 2, role }));
   return within(replay, 500);
 }
 
@@ -47,9 +47,9 @@ describe('RaceRoom replay', () => {
       const lane = nextMessage(spotter);
       spotter.send(JSON.stringify({ t: 'lane', lane: 'top' }));
       await within(lane, 500);
-      const gap = nextMessage(spotter);
-      spotter.send(JSON.stringify({ t: 'gap', value: 63 }));
-      await within(gap, 500);
+      const cars = nextMessage(spotter);
+      spotter.send(JSON.stringify({ t: 'cars', cars: [1, 2, 3] }));
+      await within(cars, 500);
       const message = nextMessage(spotter);
       spotter.send(JSON.stringify({ t: 'msg', text: 'hold line' }));
       const lastSeen = await within(message, 500);
@@ -60,7 +60,7 @@ describe('RaceRoom replay', () => {
         expect(replay).toMatchObject({
           t: 'state',
           lane: 'top',
-          gap: 63,
+          cars: [1, 2, 3],
           msg: expect.objectContaining({ text: 'hold line' }),
         });
         expect(replay.seq).toBeGreaterThanOrEqual(lastSeen.seq as number);
@@ -83,9 +83,9 @@ describe('RaceRoom replay', () => {
       const lane = nextMessage(spotter);
       spotter.send(JSON.stringify({ t: 'lane', lane: 'bot' }));
       await within(lane, 500);
-      const gap = nextMessage(spotter);
-      spotter.send(JSON.stringify({ t: 'gap', value: 21 }));
-      await within(gap, 500);
+      const cars = nextMessage(spotter);
+      spotter.send(JSON.stringify({ t: 'cars', cars: [0, 0, 2] }));
+      await within(cars, 500);
       const message = nextMessage(spotter);
       spotter.send(JSON.stringify({ t: 'msg', text: 'traffic ahead' }));
       const lastSeen = await within(message, 500);
@@ -98,7 +98,7 @@ describe('RaceRoom replay', () => {
         expect(replay).toMatchObject({
           t: 'state',
           lane: 'bot',
-          gap: 21,
+          cars: [0, 0, 2],
           msg: expect.objectContaining({ text: 'traffic ahead' }),
           spotterOnline: false,
           driverOnline: true,

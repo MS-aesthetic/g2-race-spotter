@@ -155,7 +155,7 @@ describe('relay HTTP routes', () => {
 
     const health = await fetch(`${worker.origin}/health`);
     expect(health.status).toBe(200);
-    await expect(health.json()).resolves.toEqual({ ok: true, version: 1 });
+    await expect(health.json()).resolves.toEqual({ ok: true, version: 2 });
     expectCors(health);
 
     const preflight = await fetch(`${worker.origin}/anything`, {
@@ -178,9 +178,8 @@ describe('relay HTTP routes', () => {
     expect(debug.status).toBe(200);
     await expect(debug.json()).resolves.toEqual({
       driverOnline: false,
-      gap: 0,
+      cars: [0, 0, 0],
       lane: null,
-      side: null,
       msg: null,
       seq: 0,
       spotterOnline: false,
@@ -232,7 +231,7 @@ describe('relay HTTP routes', () => {
       });
       socket.once('error', reject);
     });
-    socket.send(JSON.stringify({ t: 'hello', v: 1, role: 'driver' }));
+    socket.send(JSON.stringify({ t: 'hello', v: 2, role: 'driver' }));
     await expect(state).resolves.toMatchObject({ t: 'state' });
     socket.close();
   }, 20_000);
