@@ -73,7 +73,20 @@ export class RaceRoom extends DurableObject<Env> {
           'g2rs: discarding stored room state with an unknown shape (older protocol?)',
         );
       }
-      this.state = isState(stored) ? stored : createInitialState();
+      if (isState(stored)) {
+        this.state = stored;
+      } else {
+        // Keep the old room's clock so a v1 room nobody rejoins still gets
+        // its full TTL instead of expiring (and dropping its PIN) at once.
+        const updatedAt =
+          typeof stored === 'object' &&
+          stored !== null &&
+          typeof (stored as { updatedAt?: unknown }).updatedAt === 'number' &&
+          Number.isFinite((stored as { updatedAt: number }).updatedAt)
+            ? (stored as { updatedAt: number }).updatedAt
+            : 0;
+        this.state = { ...createInitialState(), updatedAt };
+      }
     }
     return this.state;
   }
