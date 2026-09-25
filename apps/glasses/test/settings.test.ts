@@ -92,6 +92,22 @@ describe('relay URL', () => {
     );
   });
 
+  it('uses the configured fallback for a sideloaded http dev page', () => {
+    expect(
+      resolveRelayBase({
+        origin: 'http://192.168.1.9:5173',
+        fallback: 'wss://g2-race-relay.example.workers.dev/',
+      }),
+    ).toBe('wss://g2-race-relay.example.workers.dev');
+    // A page served by the relay itself always talks to that relay.
+    expect(
+      resolveRelayBase({
+        origin: 'https://relay.example',
+        fallback: 'wss://other.example',
+      }),
+    ).toBe('wss://relay.example');
+  });
+
   it('lets ?relay= override the origin', () => {
     expect(
       resolveRelayBase({

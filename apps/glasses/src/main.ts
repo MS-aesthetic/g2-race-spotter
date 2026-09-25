@@ -39,6 +39,7 @@ const mode = resolveRenderMode({
 const relayBase = resolveRelayBase({
   search: globalThis.location?.search,
   origin: globalThis.location?.origin,
+  fallback: import.meta.env.VITE_RELAY_URL,
 });
 
 const root = document.getElementById('app');

@@ -125,6 +125,12 @@ export interface RelayBaseInput {
   readonly search?: string;
   /** `location.origin`, e.g. `https://relay.example`. */
   readonly origin?: string;
+  /**
+   * Relay to use when the page is NOT served by the relay itself — a QR
+   * sideload serves the page from the dev PC (`http://192.168.x.x:5173`), which
+   * has no WebSocket room endpoint. Comes from `VITE_RELAY_URL` (see `.env`).
+   */
+  readonly fallback?: string;
 }
 
 export function resolveRelayBase(input: RelayBaseInput = {}): string {
@@ -139,6 +145,10 @@ export function resolveRelayBase(input: RelayBaseInput = {}): string {
   const origin = (input.origin ?? '').replace(/\/+$/, '');
   if (origin.startsWith('https://')) {
     return `wss://${origin.slice('https://'.length)}`;
+  }
+  const fallback = (input.fallback ?? '').replace(/\/+$/, '');
+  if (fallback !== '') {
+    return fallback;
   }
   if (origin.startsWith('http://')) {
     return `ws://${origin.slice('http://'.length)}`;
