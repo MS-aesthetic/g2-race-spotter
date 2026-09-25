@@ -200,6 +200,7 @@ function state(seq: number) {
     spotterOnline: false,
     driverOnline: false,
     updatedAt: 100,
+    calledAt: 0,
   };
 }
 

@@ -143,6 +143,41 @@ describe('render queue, image mode (050 AC-4)', () => {
     );
   });
 
+  it('sends a stale clear of a cars-only state immediately', async () => {
+    const { bridge, clock, queue } = imageQueue();
+
+    queue.push({
+      kind: 'hud',
+      state: { lane: null, cars: [0, 2, 0] },
+      linkOk: true,
+    });
+    await queue.whenIdle();
+    // A cars change right after the first send would wait out the debounce…
+    queue.push({
+      kind: 'hud',
+      state: { lane: null, cars: [0, 3, 0] },
+      linkOk: true,
+    });
+    await clock.advance(20);
+    await queue.whenIdle();
+    expect(images(bridge)).toHaveLength(1);
+
+    // …but the relay emptying the HUD (no lane was up) goes out at once.
+    queue.push({
+      kind: 'hud',
+      state: { lane: null, cars: [0, 0, 0] },
+      linkOk: true,
+    });
+    await queue.whenIdle();
+
+    const sent = images(bridge);
+    expect(clock.ms).toBe(20);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.imageData).toEqual(
+      pack(drawHud({ lane: null, cars: [0, 0, 0] }, { linkOk: true })),
+    );
+  });
+
   it('never creates a second image container', async () => {
     const { bridge, clock, queue } = imageQueue();
 

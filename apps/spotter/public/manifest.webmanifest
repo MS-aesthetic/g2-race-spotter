@@ -1,7 +1,7 @@
 {
   "name": "G2 Race Spotter",
   "short_name": "Spotter",
-  "description": "Lane calls, car-behind gap and short messages to the driver's glasses.",
+  "description": "Lane calls, cars-behind bars and short messages to the driver's glasses.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

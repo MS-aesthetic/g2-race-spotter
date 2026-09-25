@@ -45,6 +45,28 @@ export function nextCars(
   return next[row] === current[row] ? null : next;
 }
 
+/** Row levels the spotter tapped while no replayed room state backed them. */
+export type PendingCarRows = Partial<Record<0 | 1 | 2, CarLevel>>;
+
+/**
+ * The triple to send after a reconnect: the replayed room's `cars` with only
+ * the rows the spotter tapped while offline overridden, or `null` if that is
+ * what the room already holds. Building it from the replayed state (not from
+ * the pre-drop local copy) keeps a row the relay cleared meanwhile — the 6 s
+ * stale clear, say — from coming back.
+ */
+export function rebaseCars(
+  server: Readonly<Cars>,
+  pending: PendingCarRows,
+): Cars | null {
+  const next: Cars = [
+    pending[0] ?? server[0],
+    pending[1] ?? server[1],
+    pending[2] ?? server[2],
+  ];
+  return next.every((level, index) => level === server[index]) ? null : next;
+}
+
 /**
  * Trim and cap to `MSG_MAX_CHARS`, then re-trim: slicing an 80-char boundary
  * can leave a trailing space, and `isSetMsg` rejects untrimmed text outright.

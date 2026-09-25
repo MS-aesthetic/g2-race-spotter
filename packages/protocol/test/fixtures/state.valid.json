@@ -11,5 +11,6 @@
   },
   "spotterOnline": true,
   "driverOnline": false,
-  "updatedAt": 1725408000100
+  "updatedAt": 1725408000100,
+  "calledAt": 1725408000000
 }

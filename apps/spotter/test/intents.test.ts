@@ -6,6 +6,7 @@ import {
   nextCarLevel,
   nextCars,
   normaliseMessage,
+  rebaseCars,
 } from '../src/intents.ts';
 
 describe('AC-2 car rows (Maxx design round 3)', () => {
@@ -43,6 +44,22 @@ describe('AC-2 car rows (Maxx design round 3)', () => {
     expect(next).toEqual([3, 2, 3]);
     expect(next).not.toBe(current);
     expect(current).toEqual([1, 2, 3]);
+  });
+});
+
+describe('offline car taps rebased on the replayed room (T055a)', () => {
+  it('overrides only the rows tapped offline', () => {
+    // Offline the spotter saw [2, 1, 0] and tapped RIGHT 3; meanwhile the relay
+    // stale-cleared the room. The replay says [0, 0, 0]: LEFT and MIDDLE must
+    // not come back.
+    expect(rebaseCars([0, 0, 0], { 2: 3 })).toEqual([0, 0, 3]);
+    expect(rebaseCars([1, 2, 0], { 0: 0 })).toEqual([0, 2, 0]);
+    expect(rebaseCars([1, 2, 0], { 0: 3, 1: 1 })).toEqual([3, 1, 0]);
+  });
+
+  it('sends nothing when nothing was tapped or the room already agrees', () => {
+    expect(rebaseCars([1, 2, 3], {})).toBeNull();
+    expect(rebaseCars([1, 2, 3], { 1: 2 })).toBeNull();
   });
 });
 

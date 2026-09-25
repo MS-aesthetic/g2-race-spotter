@@ -125,7 +125,14 @@ export interface State {
   msg: RoomMessage | null;
   spotterOnline: boolean;
   driverOnline: boolean;
+  /** Server ms of the last change of any kind (peer flips and acks included). */
   updatedAt: number;
+  /**
+   * Server ms of the last spotter-originated change (lane / cars / msg /
+   * clear); 0 for a fresh or stale-cleared room. The relay's stale clear runs
+   * from this, so driver acks and presence flips never postpone it.
+   */
+  calledAt: number;
 }
 
 export interface Pong {
@@ -291,7 +298,9 @@ export function isState(value: unknown): value is State {
     (value.msg === null || isRoomMessage(value.msg)) &&
     typeof value.spotterOnline === 'boolean' &&
     typeof value.driverOnline === 'boolean' &&
-    isFiniteNumber(value.updatedAt)
+    isFiniteNumber(value.updatedAt) &&
+    isFiniteNumber(value.calledAt) &&
+    value.calledAt >= 0
   );
 }
 

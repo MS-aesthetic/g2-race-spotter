@@ -16,6 +16,7 @@ function stateWith(overrides: Partial<State> = {}): State {
     spotterOnline: true,
     driverOnline: true,
     updatedAt: 1_000,
+    calledAt: 1_000,
     ...overrides,
   };
 }

@@ -185,6 +185,7 @@ describe('relay HTTP routes', () => {
       spotterOnline: false,
       t: 'state',
       updatedAt: 0,
+      calledAt: 0,
     });
     expectCors(debug);
   }, 20_000);

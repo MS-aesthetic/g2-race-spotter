@@ -62,6 +62,7 @@ function stateFrame(seq: number) {
     spotterOnline: true,
     driverOnline: false,
     updatedAt: 1,
+    calledAt: 0,
   };
 }
 

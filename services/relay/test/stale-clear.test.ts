@@ -165,6 +165,57 @@ describe('RaceRoom stale clear', () => {
     }
   }, 30_000);
 
+  it('does not let the driver ack at ~5 s postpone the clear', async () => {
+    worker = await startWorker();
+    const { spotter, driver } = await join(worker, 'QA35');
+    const stopPinging = keepPinging(spotter, driver);
+
+    try {
+      await call(spotter, driver, { t: 'lane', lane: 'bot' }, (s) => {
+        return s.lane === 'bot';
+      });
+      await call(spotter, driver, { t: 'cars', cars: [0, 3, 0] }, (s) => {
+        return JSON.stringify(s.cars) === '[0,3,0]';
+      });
+      const withMessage = nextMessageMatching(
+        driver,
+        (s) => s.t === 'state' && s.msg !== null,
+      );
+      const lastCallAt = Date.now();
+      spotter.send(JSON.stringify({ t: 'msg', text: 'pit now' }));
+      const shown = await within(withMessage, 500);
+      const msgId = (shown.msg as { id: string }).id;
+      const cleared = nextMessageMatching(driver, isCleared);
+
+      // The glasses' 5 s auto-ack: a state change, but not a spotter call.
+      await new Promise((resolve) =>
+        setTimeout(resolve, 5_000 - (Date.now() - lastCallAt)),
+      );
+      const acked = nextMessageMatching(
+        driver,
+        (s) =>
+          s.t === 'state' &&
+          (s.msg as { ackedAt: number | null } | null)?.ackedAt != null,
+      );
+      driver.send(JSON.stringify({ t: 'ack', msgId }));
+      const ackFrame = await within(acked, 500);
+      expect(ackFrame.updatedAt as number).toBeGreaterThan(
+        ackFrame.calledAt as number,
+      );
+
+      await within(cleared, HUD_STALE_CLEAR_MS + 2_000);
+      const silence = Date.now() - lastCallAt;
+      console.info(`stale clear after ${silence} ms despite a 5 s ack`);
+
+      expect(silence).toBeGreaterThanOrEqual(HUD_STALE_CLEAR_MS);
+      expect(silence).toBeLessThan(HUD_STALE_CLEAR_MS + CLEAR_WINDOW_MS);
+    } finally {
+      stopPinging();
+      spotter.terminate();
+      driver.terminate();
+    }
+  }, 30_000);
+
   it('restarts the 6 s window on a fresh call inside it', async () => {
     worker = await startWorker();
     const { spotter, driver } = await join(worker, 'QA32');
@@ -225,7 +276,7 @@ describe('RaceRoom stale clear', () => {
       }
       expect(armed?.state.cars).toEqual([0, 0, 3]);
       expect(armed?.alarm).toBe(
-        (armed?.state.updatedAt ?? 0) + HUD_STALE_CLEAR_MS,
+        (armed?.state.calledAt ?? 0) + HUD_STALE_CLEAR_MS,
       );
 
       await new Promise((resolve) =>

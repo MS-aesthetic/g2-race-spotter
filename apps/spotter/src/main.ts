@@ -12,7 +12,12 @@ import {
   PING_INTERVAL_MS,
 } from '@g2-race-spotter/protocol';
 
-import { nextCars, normaliseMessage } from './intents.ts';
+import {
+  nextCars,
+  normaliseMessage,
+  rebaseCars,
+  type PendingCarRows,
+} from './intents.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
@@ -80,17 +85,41 @@ const client: RoomClient = createSpotterClient({
   },
 });
 
+/**
+ * True once the current socket session has replayed the room. Until then a
+ * car tap is not sent as a triple built from the local (possibly stale) copy:
+ * the tapped row is held in `pendingCarRows` and rebased onto the replayed
+ * `state.cars` (040 Decision, T055a).
+ */
+let replayed = false;
+let pendingCarRows: PendingCarRows = {};
+
 client.onState((state: State) => {
   // Room state is the truth (R6); the car rows reconcile to `state.cars` as
   // soon as the optimistic window closes, exactly like the lanes.
+  const firstOfSession = !replayed;
+  replayed = true;
   update({ state });
+
+  if (firstOfSession) {
+    const next = rebaseCars(state.cars, pendingCarRows);
+    pendingCarRows = {};
+    if (next !== null) {
+      // RoomClient holds this until its replay bookkeeping finishes, then
+      // flushes it — still ahead of any later tap.
+      client.send({ t: 'cars', cars: next });
+      update({ optimisticCars: { cars: next, at: Date.now() } });
+    }
+  }
 });
 
 client.onConnection((conn: ConnectionState, detail: ConnectionCloseDetail) => {
+  replayed = false;
   // A terminal close (4400/4401/4409/4426) means RoomClient will never
   // reconnect. Staying on the console would leave RECONNECTING up forever, so
   // every terminal code goes back to Join with a reason instead of a spinner.
   if (detail.terminal) {
+    pendingCarRows = {};
     client.disconnect();
     update({
       screen: 'join',
@@ -129,6 +158,7 @@ function join(): void {
     return;
   }
 
+  pendingCarRows = {};
   saveJoinForm(window.localStorage, form);
   update({ form, notice: null, screen: 'console', state: null });
   client.connect(roomUrl(origin, form));
@@ -171,7 +201,11 @@ function setCar(row: 0 | 1 | 2, segment: CarLevel): void {
   }
 
   vibrate();
-  client.send({ t: 'cars', cars: next });
+  if (replayed) {
+    client.send({ t: 'cars', cars: next });
+  } else {
+    pendingCarRows = { ...pendingCarRows, [row]: next[row] };
+  }
   update({ optimisticCars: { cars: next, at: Date.now() } });
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }

@@ -54,6 +54,7 @@ export const INITIAL_STATE: Readonly<State> = {
   spotterOnline: false,
   driverOnline: false,
   updatedAt: 0,
+  calledAt: 0,
 };
 
 export function createInitialState(): State {
@@ -63,7 +64,10 @@ export function createInitialState(): State {
 function changed(
   state: State,
   changes: Partial<
-    Pick<State, 'lane' | 'cars' | 'msg' | 'spotterOnline' | 'driverOnline'>
+    Pick<
+      State,
+      'lane' | 'cars' | 'msg' | 'spotterOnline' | 'driverOnline' | 'calledAt'
+    >
   >,
   now: number,
 ): State {
@@ -75,6 +79,19 @@ function changed(
   };
 }
 
+/** A spotter call: an ordinary change that also restarts the stale window. */
+function called(
+  state: State,
+  changes: Partial<Pick<State, 'lane' | 'cars' | 'msg'>>,
+  now: number,
+): State {
+  return changed(
+    state,
+    { ...changes, calledAt: Math.max(state.calledAt, now) },
+    now,
+  );
+}
+
 function reduceLane(
   state: State,
   event: SetLane & { readonly role: Role },
@@ -84,7 +101,7 @@ function reduceLane(
     return state;
   }
 
-  return changed(state, { lane: event.lane }, ctx.now);
+  return called(state, { lane: event.lane }, ctx.now);
 }
 
 function carLevel(value: number): CarLevel {
@@ -107,7 +124,7 @@ function reduceCars(
   ];
   return cars.every((level, index) => level === state.cars[index])
     ? state
-    : changed(state, { cars }, ctx.now);
+    : called(state, { cars }, ctx.now);
 }
 
 function reduceMessage(
@@ -130,7 +147,7 @@ function reduceMessage(
     ts: ctx.now,
     ackedAt: null,
   };
-  return changed(state, { msg }, ctx.now);
+  return called(state, { msg }, ctx.now);
 }
 
 function reduceClear(
@@ -142,7 +159,7 @@ function reduceClear(
     return state;
   }
 
-  return changed(state, { msg: null }, ctx.now);
+  return called(state, { msg: null }, ctx.now);
 }
 
 function reduceAck(
@@ -199,7 +216,11 @@ export function reduce(
     case 'stale':
       return isHudEmpty(state)
         ? state
-        : changed(state, { lane: null, cars: [0, 0, 0], msg: null }, ctx.now);
+        : changed(
+            state,
+            { lane: null, cars: [0, 0, 0], msg: null, calledAt: 0 },
+            ctx.now,
+          );
     default:
       return state;
   }

@@ -6,8 +6,8 @@
  * - cars-only changes wait out `HUD_GAP_FLUSH_MS` (the old gap floor: at most
  *   one image send per 250 ms while the spotter taps through segments); a lane
  *   change or a link-state change bypasses the debounce (the driver must see
- *   those now) — the relay's stale clear resets the lane, so it is immediate
- *   whenever a lane was up;
+ *   those now), and so does any change to an all-empty HUD — the relay's stale
+ *   clear is immediate whether or not a lane was up;
  * - `msg` → container 3, `status` → container 4, both `textContainerUpgrade`;
  * - every call is timed and logged `{call, ms, result}` (030 R7);
  * - three consecutive `sendFailed` rebuild the page with a text HUD and the app
@@ -35,6 +35,11 @@ import { imageRawDataPayload } from './sdk-quirks.ts';
 import { renderText } from './text.ts';
 
 export const SEND_FAILED_LIMIT = 3;
+
+/** Nothing to draw but the empty slots: no lane, no car behind. */
+function isBlank(state: HudState): boolean {
+  return state.lane === null && state.cars.every((level) => level === 0);
+}
 
 export interface QueueTimers {
   setTimeout(callback: () => void, delayMs: number): number;
@@ -147,7 +152,10 @@ export class RenderQueue {
     return (
       last === undefined ||
       last.state.lane !== job.state.lane ||
-      last.linkOk !== job.linkOk
+      last.linkOk !== job.linkOk ||
+      // Going blank (the relay's stale clear of a cars-only state) is news
+      // the driver must see now, not after the cars debounce.
+      (isBlank(job.state) && !isBlank(last.state))
     );
   }
 

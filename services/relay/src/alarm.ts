@@ -7,11 +7,13 @@ import {
 } from '@g2-race-spotter/protocol';
 
 /**
- * When a non-empty room's HUD content goes stale and must be cleared, or
- * `null` while the room shows nothing (an empty room never re-arms for it).
+ * When a non-empty room's HUD content goes stale and must be cleared —
+ * `HUD_STALE_CLEAR_MS` after the spotter's last call (`calledAt`), so driver
+ * acks and presence flips never postpone it — or `null` while the room shows
+ * nothing (an empty room never re-arms for it).
  */
 export function staleClearAt(state: State): number | null {
-  return isHudEmpty(state) ? null : state.updatedAt + HUD_STALE_CLEAR_MS;
+  return isHudEmpty(state) ? null : state.calledAt + HUD_STALE_CLEAR_MS;
 }
 
 /** True when `alarm()` must reduce `{t:'stale'}` for this state. */

@@ -41,7 +41,8 @@ type State = {
   lane:Lane|null; cars:Cars;
   msg:{ id:string; text:string; ts:number; ackedAt:number|null } | null;
   spotterOnline:boolean; driverOnline:boolean;
-  updatedAt:number;                              // server ms epoch
+  updatedAt:number;                              // server ms epoch, last change of any kind
+  calledAt:number;                               // server ms of the last spotter call (lane/cars/msg/clear); 0 when fresh or stale-cleared
 };
 type Pong  = { t:'pong'; ts:number; serverTs:number };
 type Error = { t:'error'; code:'version'|'auth'|'role_taken'|'bad_frame'|'rate'; detail?:string };
@@ -56,7 +57,7 @@ Rules:
 - Every `state` broadcast goes to **all** sockets (spotters too — that is how the spotter sees `driverOnline` and `ackedAt`).
 - **The relay answers every `ping` from a ready socket with `pong {ts: ping.ts, serverTs}`** and refreshes that socket's `lastPing`. `pong` is the liveness frame a quiet room relies on: without it a healthy link with no state changes would trip the driver's `DRIVER_NO_LINK_MS` watchdog. `ping`/`pong` never touch room state or `seq`.
 - The relay's alarm is self-arming: it is scheduled when a socket becomes ready, on close/error, and at the end of `alarm()` itself — never re-pointed *later* on data frames (a `ping` every 2 s would otherwise push a 3 s tick forever and no silent peer would ever be detected).
-- **Stale clear (v2).** While the room state is non-empty (`isHudEmpty(state)` false: a lane, any car, or a msg), the alarm target is the EARLIER of the tick/TTL target and `updatedAt + HUD_STALE_CLEAR_MS`. A state-changing frame may pull an armed alarm earlier to that target, never later; pings never touch it. `alarm()` reduces `{t:'stale'}`, persists and broadcasts when `now - updatedAt >= HUD_STALE_CLEAR_MS` and the state is non-empty, then re-arms. An empty room never arms for it, so the alarm cannot loop: with sockets open it is the tick, with none it is the TTL. `updatedAt` moves on *any* state change (a peer flip or an ack too), which restarts the window.
+- **Stale clear (v2).** While the room state is non-empty (`isHudEmpty(state)` false: a lane, any car, or a msg), the alarm target is the EARLIER of the tick/TTL target and `calledAt + HUD_STALE_CLEAR_MS`. A state-changing frame may pull an armed alarm earlier to that target, never later; pings never touch it. `alarm()` reduces `{t:'stale'}`, persists and broadcasts when `now - calledAt >= HUD_STALE_CLEAR_MS` and the state is non-empty, then re-arms. An empty room never arms for it, so the alarm cannot loop: with sockets open it is the tick, with none it is the TTL. The window runs from the **spotter's last call** (`calledAt`): a driver `ack` (the glasses' 5 s auto-ack included) or a presence flip moves `updatedAt` but never postpones the clear.
 - `seq` starts at 1 per room lifetime and only increases; clients drop `state` with `seq ≤ lastSeen`. `seq` persists in DO storage so hibernation cannot reset it. **Clients reset `lastSeen = 0` on every socket open** — frames are ordered within a socket, and the room may have been expired and recreated with `seq` back at 1 since the last connection.
 - **Ack semantics:** `ack` leaves `msg` in state but stamps `ackedAt`. The driver renders `msg.text` only while `msg.ackedAt === null`; the spotter shows a tick while `ackedAt !== null`. `clear` (or a new `msg`) removes/replaces it. The driver therefore does not "clear locally" — it sends `ack` and the next `state` frame hides the text.
 
@@ -64,8 +65,8 @@ Rules:
 
 Pure, total. `ctx = { now: number, newId: () => string }` is injected by the caller (the relay passes `Date.now` and a ULID generator; tests pass fixed values). Events are inbound client messages tagged with role, plus internal `{t:'peer', role, online}`, `{t:'expire'}` and `{t:'stale'}`.
 
-- `lane` → set `lane`. `cars` → `cars[i] = clamp(round(cars[i]),0,3)` for each `i`. `msg` → `msg = {id: ctx.newId(), text, ts: ctx.now, ackedAt: null}`. `clear` → `msg = null`. `ack` with matching id → `ackedAt = ctx.now`; non-matching or already-acked id ignored. `peer` → set the online flag (no-op if unchanged). `expire` → return the initial state (used by the TTL alarm before `deleteAll`). `stale` → `lane:null, cars:[0,0,0], msg:null`, online flags kept (used by the stale-clear alarm); a no-op on an already-empty room. Any change bumps `seq` and sets `updatedAt`; a no-op (same lane, same cars triple after rounding, same online flag, `stale` on an empty room) does **not** bump `seq` or broadcast.
-- Initial state: `{seq:0, lane:null, cars:[0,0,0], msg:null, spotterOnline:false, driverOnline:false, updatedAt:0}`.
+- `lane` → set `lane`. `cars` → `cars[i] = clamp(round(cars[i]),0,3)` for each `i`. `msg` → `msg = {id: ctx.newId(), text, ts: ctx.now, ackedAt: null}`. `clear` → `msg = null`. `ack` with matching id → `ackedAt = ctx.now`; non-matching or already-acked id ignored. `peer` → set the online flag (no-op if unchanged). `expire` → return the initial state (used by the TTL alarm before `deleteAll`). `stale` → `lane:null, cars:[0,0,0], msg:null, calledAt:0`, online flags kept (used by the stale-clear alarm); a no-op on an already-empty room. Any change bumps `seq` and sets `updatedAt`; a spotter call (`lane`/`cars`/`msg`/`clear` that changes state) also sets `calledAt = now` (`peer` and `ack` leave it alone, `expire` resets it to 0); a no-op (same lane, same cars triple after rounding, same online flag, `stale` on an empty room) does **not** bump `seq` or broadcast.
+- Initial state: `{seq:0, lane:null, cars:[0,0,0], msg:null, spotterOnline:false, driverOnline:false, updatedAt:0, calledAt:0}`.
 - Because `peer` flips also bump `seq`, tests must assert `seq > 0` / `seq ≥ previous` and compare values, never an exact `seq` number.
 
 ## Timings (exported constants, never re-typed)
@@ -76,7 +77,7 @@ Pure, total. `ctx = { now: number, newId: () => string }` is injected by the cal
 | `PEER_OFFLINE_MS` | 6000 | relay alarm (checked every `ALARM_TICK_MS`, so worst case is `PEER_OFFLINE_MS + ALARM_TICK_MS`); the relay also **closes** sockets silent that long |
 | `ALARM_TICK_MS` | 3000 | relay, while any socket is open |
 | `DRIVER_NO_LINK_MS` | 5000 | glasses app (time since last frame of any kind) |
-| `HUD_STALE_CLEAR_MS` | 6000 | relay alarm: a non-empty room with no state change for this long is cleared (`{t:'stale'}`); observed 6.0 s on `wrangler dev` |
+| `HUD_STALE_CLEAR_MS` | 6000 | relay alarm: a non-empty room with no spotter call for this long (`calledAt`) is cleared (`{t:'stale'}`); observed 6.0 s on `wrangler dev`, also with a driver ack at 5 s |
 | `HUD_GAP_FLUSH_MS` | 250 | glasses render queue (now the floor for `cars`-only changes; the name predates v2) |
 | `RECONNECT_MIN_MS` / `RECONNECT_MAX_MS` | 500 / 8000 (+ jitter) | both clients |
 | `RATE_LIMIT_PER_S` / `RATE_BURST` | 30 / 60 | relay: fixed 1 s window per socket, at most `RATE_BURST` frames applied per window, the rest dropped and counted (at most one `error{code:"rate"}` per window, socket stays open); `RATE_LIMIT_PER_S` is the sustained rate clients must stay under (the spotter sends one frame per tap) |
@@ -102,7 +103,7 @@ Additive fields on `state` are non-breaking (clients must ignore unknown fields)
 
 Close codes: 4400 bad hello, 4401 auth, 4408 silent peer, 4409 driver evicted, 4426 version. Ship relay first, then clients, when bumping.
 
-**v2 (2026-09-25, Maxx design round 3):** `gap` and `side` removed, `cars` added, `{t:'stale'}` + `HUD_STALE_CLEAR_MS` added, `GAP_SEND_MIN_MS` removed. A v1 client's `hello` gets `error{code:"version"}` + 4426; the spotter PWA already turns that into its "reload the page" notice, and the glasses show `UPDATE APP`.
+**v2 (2026-09-25, Maxx design round 3):** `gap` and `side` removed, `cars` added, `{t:'stale'}` + `State.calledAt` + `HUD_STALE_CLEAR_MS` added, `GAP_SEND_MIN_MS` removed. A v1 client's `hello` gets `error{code:"version"}` + 4426; the spotter PWA already turns that into its "reload the page" notice, and the glasses show `UPDATE APP`.
 
 ## Test fixtures
 

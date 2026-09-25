@@ -133,6 +133,17 @@ describe('protocol v2 guards', () => {
     expect(isState({ ...base, cars: [0, 0] })).toBe(false);
   });
 
+  it('requires a non-negative calledAt on state frames', () => {
+    const base = stateValid as Record<string, unknown>;
+    const withoutCalledAt: Record<string, unknown> = { ...base };
+    delete withoutCalledAt.calledAt;
+
+    expect(isState(withoutCalledAt)).toBe(false);
+    expect(isState({ ...base, calledAt: 0 })).toBe(true);
+    expect(isState({ ...base, calledAt: -1 })).toBe(false);
+    expect(isState({ ...base, calledAt: '1' })).toBe(false);
+  });
+
   it('calls a room with no lane, no car and no message empty', () => {
     expect(isHudEmpty({ lane: null, cars: [0, 0, 0], msg: null })).toBe(true);
     expect(isHudEmpty({ lane: 'top', cars: [0, 0, 0], msg: null })).toBe(false);

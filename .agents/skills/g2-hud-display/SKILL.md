@@ -46,7 +46,7 @@ Layout (Maxx, 2026-09-25 design round 3 — icons half size, middle a dash, thre
   - Level 3 (`alertLevel`) swaps the bar to outline 15 and the dimmer alert fill `{8,3}` — the bright outline is the "on the bumper" cue.
   - Level 0 → a hollow bar with its dividers.
 - Stale (`linkOk === false`): after drawing, halve every pixel (`v >> 1`). Shapes remain, obviously dim.
-- The relay clears lane, cars and message after `HUD_STALE_CLEAR_MS` (6 s) without a room update; the glasses just draw that `state` like any other (constitution §2 — no local timer decides it).
+- The relay clears lane, cars and message `HUD_STALE_CLEAR_MS` (6 s) after the spotter's last call (a driver ack does not postpone it); the glasses just draw that `state` like any other (constitution §2 — no local timer decides it).
 
 Keep `drawHud(state): Uint8Array` pure and unit-tested with ASCII snapshots (render `#` for ≥8, `+` for 1–7, `.` for 0, downsampled 4×) so a reviewer can eyeball the shapes in a test file. The default `max` block sampling keeps thin features but hides the dither (a dithered block still holds a 15); `toAscii(frame, { sample: 'min' })` inverts that and gives a map of exactly which areas are dithered — keep one golden of each.
 
@@ -90,7 +90,7 @@ After switching to text mode mid-session, stay there until app restart (the imag
 Single async worker. Jobs: `{kind:'hud', state}`, `{kind:'msg', text}`, `{kind:'status', text}`.
 
 - At most one bridge call in flight.
-- A new `hud` job **replaces** any pending `hud` job (latest wins). Cars-only changes are additionally debounced to a 250 ms floor (`HUD_GAP_FLUSH_MS`); lane changes (including the relay's stale clear whenever a lane was up) and link-state changes bypass the debounce.
+- A new `hud` job **replaces** any pending `hud` job (latest wins). Cars-only changes are additionally debounced to a 250 ms floor (`HUD_GAP_FLUSH_MS`); lane changes, link-state changes and any change to an all-empty HUD (the relay's stale clear, with or without a lane up) bypass the debounce.
 - `msg` → `textContainerUpgrade` on container 3 only. `status` → container 4 only. Never rebuild for text.
 - Every call: measure `performance.now()` delta, log `{call, ms, result}`; count consecutive `sendFailed` for the fallback trigger.
 - Treat a resolved promise as "accepted", not "displayed" — never wait for confirmation that does not exist.

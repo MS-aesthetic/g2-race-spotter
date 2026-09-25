@@ -93,7 +93,9 @@ describe('RaceRoom room-expiry alarm', () => {
       // The room still shows a call, so its stale clear (T055) is EARLIER
       // than the TTL and is what the single alarm points at; once cleared,
       // the empty room falls back to the TTL (stale-clear.test.ts).
-      expect(empty.alarm).toBe(empty.state.updatedAt + HUD_STALE_CLEAR_MS);
+      expect(empty.alarm).toBe(empty.state.calledAt + HUD_STALE_CLEAR_MS);
+      // The presence flips on close moved updatedAt, not the spotter's call.
+      expect(empty.state.updatedAt).toBeGreaterThan(empty.state.calledAt);
 
       const emptyState: State = {
         ...empty.state,
@@ -101,29 +103,25 @@ describe('RaceRoom room-expiry alarm', () => {
         cars: [0, 0, 0],
         msg: null,
         updatedAt: 123_456,
+        calledAt: 0,
       };
       expect(nextAlarmAt(0, emptyState, Date.now())).toBe(
         emptyState.updatedAt + ROOM_TTL_MS,
       );
-      const called: State = { ...emptyState, lane: 'top' };
-      expect(nextAlarmAt(0, called, Date.now())).toBe(
-        called.updatedAt + HUD_STALE_CLEAR_MS,
-      );
+      // Called at 120 000, acked (updatedAt) at 123 456: the window runs from
+      // the call.
+      const called: State = { ...emptyState, lane: 'top', calledAt: 120_000 };
+      const staleAt = called.calledAt + HUD_STALE_CLEAR_MS;
+      expect(nextAlarmAt(0, called, Date.now())).toBe(staleAt);
       // With sockets open the tick wins while it is earlier.
-      expect(nextAlarmAt(1, called, called.updatedAt)).toBe(
-        called.updatedAt + ALARM_TICK_MS,
+      expect(nextAlarmAt(1, called, called.calledAt)).toBe(
+        called.calledAt + ALARM_TICK_MS,
       );
       // A state change only ever pulls the alarm earlier.
-      expect(earlierAlarmAt(null, called)).toBe(
-        called.updatedAt + HUD_STALE_CLEAR_MS,
-      );
-      expect(earlierAlarmAt(called.updatedAt + 9_000, called)).toBe(
-        called.updatedAt + HUD_STALE_CLEAR_MS,
-      );
-      expect(earlierAlarmAt(called.updatedAt + 1_000, called)).toBeUndefined();
-      expect(
-        earlierAlarmAt(called.updatedAt + 9_000, emptyState),
-      ).toBeUndefined();
+      expect(earlierAlarmAt(null, called)).toBe(staleAt);
+      expect(earlierAlarmAt(staleAt + 3_000, called)).toBe(staleAt);
+      expect(earlierAlarmAt(staleAt - 1_000, called)).toBeUndefined();
+      expect(earlierAlarmAt(staleAt + 3_000, emptyState)).toBeUndefined();
     } finally {
       socket.terminate();
     }

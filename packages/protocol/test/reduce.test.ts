@@ -37,6 +37,7 @@ describe('reduce', () => {
       spotterOnline: false,
       driverOnline: false,
       updatedAt: 0,
+      calledAt: 0,
     });
     expect(createInitialState()).not.toBe(createInitialState());
     expect(createInitialState().cars).not.toBe(createInitialState().cars);
@@ -135,6 +136,7 @@ describe('reduce', () => {
       msg: null,
       seq: state.seq + 1,
       updatedAt: 7_000,
+      calledAt: 0,
     });
     expect(cleared.driverOnline).toBe(true);
     // An empty room is left alone, so the relay's alarm cannot loop on it.
@@ -153,6 +155,60 @@ describe('reduce', () => {
     expect(
       reduce(onlyAcked, event({ t: 'stale' }), context(8_000)),
     ).toMatchObject({ msg: null, seq: onlyAcked.seq + 1 });
+  });
+
+  it('stamps calledAt on spotter calls only, never on acks or presence', () => {
+    let state = reduce(
+      createInitialState(),
+      event({ t: 'lane', role: 'spotter', lane: 'top' }),
+      context(1_000),
+    );
+    expect(state).toMatchObject({ calledAt: 1_000, updatedAt: 1_000 });
+    state = reduce(
+      state,
+      event({ t: 'cars', role: 'spotter', cars: [1, 0, 0] }),
+      context(2_000),
+    );
+    expect(state.calledAt).toBe(2_000);
+    state = reduce(
+      state,
+      event({ t: 'msg', role: 'spotter', text: 'box' }),
+      context(3_000),
+    );
+    expect(state.calledAt).toBe(3_000);
+
+    // The driver's ack (auto-ack at 5 s included) and presence flips move
+    // updatedAt but must not restart the stale window.
+    const acked = reduce(
+      state,
+      event({ t: 'ack', role: 'driver', msgId: 'message-1' }),
+      context(8_000),
+    );
+    expect(acked).toMatchObject({ updatedAt: 8_000, calledAt: 3_000 });
+    const flipped = reduce(
+      acked,
+      event({ t: 'peer', role: 'driver', online: true }),
+      context(8_500),
+    );
+    expect(flipped).toMatchObject({ updatedAt: 8_500, calledAt: 3_000 });
+
+    const cleared = reduce(
+      flipped,
+      event({ t: 'clear', role: 'spotter' }),
+      context(9_000),
+    );
+    expect(cleared.calledAt).toBe(9_000);
+    // A no-op call (same lane) is not a call.
+    expect(
+      reduce(
+        cleared,
+        event({ t: 'lane', role: 'spotter', lane: 'top' }),
+        context(9_500),
+      ),
+    ).toBe(cleared);
+    expect(reduce(cleared, event({ t: 'expire' }), context(10_000))).toEqual(
+      INITIAL_STATE,
+    );
   });
 
   it('trims a new spotter message and uses only injected clock and id dependencies', () => {
