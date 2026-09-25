@@ -16,22 +16,20 @@ import {
   type ErrorMessage,
   type Hello,
   type Role,
-  type SetGap,
+  type SetCars,
   type SetLane,
   type SetMsg,
-  type SetSide,
   type State,
 } from './index.ts';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 /**
  * User-originated frames accepted by the shared client.  Acknowledgements
- * are deliberately dropped while offline: unlike lane/gap/msg/clear they
+ * are deliberately dropped while offline: unlike lane/cars/msg/clear they
  * are not a durable user intent and must not acknowledge a later message
  * after the room replay establishes the current state.
  */
-export type RoomClientIntent =
-  SetLane | SetSide | SetGap | SetMsg | Clear | Ack;
+export type RoomClientIntent = SetLane | SetCars | SetMsg | Clear | Ack;
 
 /**
  * Second argument to every `onConnection` callback. Only meaningful when
@@ -176,8 +174,7 @@ export class RoomClient {
   private status: ConnectionState = 'closed';
   private replayed = false;
   private pendingLane: SetLane | undefined;
-  private pendingSide: SetSide | undefined;
-  private pendingGap: SetGap | undefined;
+  private pendingCars: SetCars | undefined;
   private readonly pendingMessages: Array<SetMsg | Clear> = [];
 
   /** Most recent accepted state sequence for the current socket only. */
@@ -354,12 +351,8 @@ export class RoomClient {
     }
 
     this.lastSeen = message.seq;
-    // `isState` tolerates a relay that predates the additive `side` field;
-    // consumers are handed the field either way, never `undefined`.
-    const state: State =
-      message.side === undefined ? { ...message, side: null } : message;
     for (const listener of this.stateListeners) {
-      listener(state);
+      listener(message);
     }
 
     if (!this.replayed) {
@@ -420,13 +413,8 @@ export class RoomClient {
       return;
     }
 
-    if (intent.t === 'side') {
-      this.pendingSide = intent;
-      return;
-    }
-
-    if (intent.t === 'gap') {
-      this.pendingGap = intent;
+    if (intent.t === 'cars') {
+      this.pendingCars = intent;
       return;
     }
 
@@ -436,8 +424,7 @@ export class RoomClient {
   private flushPending(): void {
     const pending = [
       this.pendingLane,
-      this.pendingSide,
-      this.pendingGap,
+      this.pendingCars,
       ...this.pendingMessages,
     ].filter(
       (message): message is Exclude<RoomClientIntent, Ack> =>
@@ -445,8 +432,7 @@ export class RoomClient {
     );
 
     this.pendingLane = undefined;
-    this.pendingSide = undefined;
-    this.pendingGap = undefined;
+    this.pendingCars = undefined;
     this.pendingMessages.length = 0;
 
     for (const intent of pending) {
@@ -500,8 +486,7 @@ export class RoomClient {
 
   private clearPending(): void {
     this.pendingLane = undefined;
-    this.pendingSide = undefined;
-    this.pendingGap = undefined;
+    this.pendingCars = undefined;
     this.pendingMessages.length = 0;
   }
 

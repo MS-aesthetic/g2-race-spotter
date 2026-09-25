@@ -2,7 +2,7 @@
   "t": "state",
   "seq": 4,
   "lane": "mid",
-  "gap": 101,
+  "cars": [0, 4, 1],
   "msg": null,
   "spotterOnline": true,
   "driverOnline": false,

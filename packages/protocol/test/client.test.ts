@@ -195,7 +195,7 @@ function state(seq: number) {
     t: 'state' as const,
     seq,
     lane: null,
-    gap: 0,
+    cars: [0, 0, 0],
     msg: null,
     spotterOnline: false,
     driverOnline: false,
@@ -276,17 +276,16 @@ describe('RoomClient', () => {
     first.fail();
 
     client.send({ t: 'lane', lane: 'top' });
-    client.send({ t: 'side', side: 'outside' });
-    client.send({ t: 'side', side: 'inside' });
-    client.send({ t: 'gap', value: 20 });
-    client.send({ t: 'gap', value: 80 });
+    client.send({ t: 'cars', cars: [1, 0, 0] });
+    client.send({ t: 'cars', cars: [1, 2, 0] });
+    client.send({ t: 'cars', cars: [1, 2, 3] });
     client.send({ t: 'ack', msgId: 'old-message' });
     client.send({ t: 'msg', text: 'first offline' });
     client.send({ t: 'clear' });
     client.send({ t: 'msg', text: 'hold line' });
 
     expect(sent(first)).toEqual([
-      { t: 'hello', v: 1, role: 'spotter', name: 'Pit wall' },
+      { t: 'hello', v: 2, role: 'spotter', name: 'Pit wall' },
       { t: 'msg', text: 'already delivered' },
     ]);
     expect([...timers.timeouts.values()]).toEqual([
@@ -297,16 +296,15 @@ describe('RoomClient', () => {
     const second = FakeWebSocket.sockets[1];
     second.open();
     expect(sent(second)).toEqual([
-      { t: 'hello', v: 1, role: 'spotter', name: 'Pit wall' },
+      { t: 'hello', v: 2, role: 'spotter', name: 'Pit wall' },
     ]);
     second.receive(state(1));
 
     expect(sent(second)).toEqual([
-      { t: 'hello', v: 1, role: 'spotter', name: 'Pit wall' },
+      { t: 'hello', v: 2, role: 'spotter', name: 'Pit wall' },
       { t: 'lane', lane: 'top' },
-      // Only the latest side survives the outage, like lane and gap.
-      { t: 'side', side: 'inside' },
-      { t: 'gap', value: 80 },
+      // Only the latest full cars triple survives the outage, like lane.
+      { t: 'cars', cars: [1, 2, 3] },
       { t: 'msg', text: 'first offline' },
       { t: 'clear' },
       { t: 'msg', text: 'hold line' },
@@ -326,7 +324,7 @@ describe('RoomClient', () => {
     client.send({ t: 'ack', msgId: 'current-message' });
 
     expect(sent(socket)).toEqual([
-      { t: 'hello', v: 1, role: 'driver' },
+      { t: 'hello', v: 2, role: 'driver' },
       { t: 'ack', msgId: 'current-message' },
     ]);
   });
@@ -363,21 +361,25 @@ describe('RoomClient', () => {
     expect(client.lastFrameAt).toBe(104);
   });
 
-  it('hands consumers a side on every state frame', () => {
+  it('hands consumers the cars triple and drops a v1 state frame', () => {
     FakeWebSocket.reset();
     const timers = new FakeTimers();
     const client = createClient(timers);
-    const sides: Array<string | null> = [];
-    client.onState((value) => sides.push(value.side));
+    const cars: unknown[] = [];
+    client.onState((value) => cars.push(value.cars));
 
     client.connect('ws://relay.test/room/CAR42?role=spotter');
     const socket = FakeWebSocket.sockets[0];
     socket.open();
-    // `state()` predates the additive field; the relay that has it sends it.
     socket.receive(state(1));
-    socket.receive({ ...state(2), side: 'outside' });
+    socket.receive({ ...state(2), cars: [0, 2, 3] });
+    // A v1 frame (gap/side, no cars) is not a v2 state and is dropped.
+    socket.receive({ ...state(3), cars: undefined, gap: 50, side: null });
 
-    expect(sides).toEqual([null, 'outside']);
+    expect(cars).toEqual([
+      [0, 0, 0],
+      [0, 2, 3],
+    ]);
   });
 
   it('uses one ping timer for the current socket and ignores stale replacement events', () => {
@@ -406,7 +408,7 @@ describe('RoomClient', () => {
 
     expect(connection).toEqual(['connecting', 'open', 'connecting', 'open']);
     expect(sent(second)).toEqual([
-      { t: 'hello', v: 1, role: 'spotter' },
+      { t: 'hello', v: 2, role: 'spotter' },
       { t: 'ping', ts: 123 },
     ]);
     expect([...timers.intervals.values()]).toEqual([
@@ -427,7 +429,7 @@ describe('RoomClient', () => {
     socket.open();
     socket.receive(state(1));
 
-    expect(sent(socket)).toEqual([{ t: 'hello', v: 1, role: 'spotter' }]);
+    expect(sent(socket)).toEqual([{ t: 'hello', v: 2, role: 'spotter' }]);
   });
 
   it('waits for browser close after an error, skipping terminal reconnects and retrying silent peers once', () => {
@@ -547,6 +549,6 @@ describe('RoomClient', () => {
     client.connect(url);
 
     expect(FakeWebSocket.sockets).toEqual([socket]);
-    expect(sent(socket)).toEqual([{ t: 'hello', v: 1, role: 'spotter' }]);
+    expect(sent(socket)).toEqual([{ t: 'hello', v: 2, role: 'spotter' }]);
   });
 });

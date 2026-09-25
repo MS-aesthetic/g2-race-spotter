@@ -2,8 +2,7 @@
   "t": "state",
   "seq": 4,
   "lane": "mid",
-  "side": "outside",
-  "gap": 72,
+  "cars": [0, 2, 3],
   "msg": {
     "id": "01J0MESSAGE",
     "text": "Pit this lap",

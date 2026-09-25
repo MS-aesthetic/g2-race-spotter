@@ -119,7 +119,7 @@ function state(seq: number) {
     t: 'state' as const,
     seq,
     lane: null,
-    gap: 0,
+    cars: [0, 0, 0],
     msg: null,
     spotterOnline: false,
     driverOnline: false,
@@ -213,7 +213,7 @@ describe('RoomClient errors and terminal closes', () => {
     next.open();
     next.receive(state(1));
     expect(next.sent.map((frame) => JSON.parse(frame))).toEqual([
-      { t: 'hello', v: 1, role: 'spotter' },
+      { t: 'hello', v: 2, role: 'spotter' },
     ]);
   });
 
@@ -285,7 +285,7 @@ describe('RoomClient errors and terminal closes', () => {
     fresh.receive(state(1));
     expect(client.lastSeen).toBe(1);
     expect(fresh.sent.map((frame) => JSON.parse(frame))).toEqual([
-      { t: 'hello', v: 1, role: 'spotter' },
+      { t: 'hello', v: 2, role: 'spotter' },
     ]);
   });
 });

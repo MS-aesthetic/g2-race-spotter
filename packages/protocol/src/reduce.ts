@@ -1,15 +1,18 @@
-import type {
-  Ack,
-  Clear,
-  ClientMessage,
-  Role,
-  RoomMessage,
-  SetGap,
-  SetLane,
-  SetMsg,
-  SetSide,
-  State,
-} from './index.js';
+import {
+  CAR_LEVEL_MAX,
+  isHudEmpty,
+  type Ack,
+  type CarLevel,
+  type Cars,
+  type Clear,
+  type ClientMessage,
+  type Role,
+  type RoomMessage,
+  type SetCars,
+  type SetLane,
+  type SetMsg,
+  type State,
+} from './index.ts';
 
 /** Dependencies supplied by the relay or a deterministic test. */
 export interface ReducerContext {
@@ -30,15 +33,23 @@ export interface ExpireEvent {
   readonly t: 'expire';
 }
 
-export type ReducerEvent = ClientEvent | PeerEvent | ExpireEvent;
+/**
+ * The relay's stale clear: nothing has updated a non-empty room for
+ * `HUD_STALE_CLEAR_MS`, so lane, cars and message go blank. Online flags are
+ * kept. A room that is already empty is left untouched (no `seq` bump).
+ */
+export interface StaleEvent {
+  readonly t: 'stale';
+}
+
+export type ReducerEvent = ClientEvent | PeerEvent | ExpireEvent | StaleEvent;
 
 /** The state for a fresh room. Call {@link createInitialState} for an owned copy. */
 export const INITIAL_STATE: Readonly<State> = {
   t: 'state',
   seq: 0,
   lane: null,
-  side: null,
-  gap: 0,
+  cars: Object.freeze([0, 0, 0]) as Cars,
   msg: null,
   spotterOnline: false,
   driverOnline: false,
@@ -46,16 +57,13 @@ export const INITIAL_STATE: Readonly<State> = {
 };
 
 export function createInitialState(): State {
-  return { ...INITIAL_STATE };
+  return { ...INITIAL_STATE, cars: [0, 0, 0] };
 }
 
 function changed(
   state: State,
   changes: Partial<
-    Pick<
-      State,
-      'lane' | 'side' | 'gap' | 'msg' | 'spotterOnline' | 'driverOnline'
-    >
+    Pick<State, 'lane' | 'cars' | 'msg' | 'spotterOnline' | 'driverOnline'>
   >,
   now: number,
 ): State {
@@ -79,29 +87,27 @@ function reduceLane(
   return changed(state, { lane: event.lane }, ctx.now);
 }
 
-function reduceSide(
-  state: State,
-  event: SetSide & { readonly role: Role },
-  ctx: ReducerContext,
-): State {
-  if (event.role !== 'spotter' || event.side === state.side) {
-    return state;
-  }
-
-  return changed(state, { side: event.side }, ctx.now);
+function carLevel(value: number): CarLevel {
+  return Math.min(CAR_LEVEL_MAX, Math.max(0, Math.round(value))) as CarLevel;
 }
 
-function reduceGap(
+function reduceCars(
   state: State,
-  event: SetGap & { readonly role: Role },
+  event: SetCars & { readonly role: Role },
   ctx: ReducerContext,
 ): State {
   if (event.role !== 'spotter') {
     return state;
   }
 
-  const gap = Math.min(100, Math.max(0, Math.round(event.value)));
-  return gap === state.gap ? state : changed(state, { gap }, ctx.now);
+  const cars: Cars = [
+    carLevel(event.cars[0]),
+    carLevel(event.cars[1]),
+    carLevel(event.cars[2]),
+  ];
+  return cars.every((level, index) => level === state.cars[index])
+    ? state
+    : changed(state, { cars }, ctx.now);
 }
 
 function reduceMessage(
@@ -168,10 +174,8 @@ export function reduce(
   switch (event.t) {
     case 'lane':
       return reduceLane(state, event, ctx);
-    case 'side':
-      return reduceSide(state, event, ctx);
-    case 'gap':
-      return reduceGap(state, event, ctx);
+    case 'cars':
+      return reduceCars(state, event, ctx);
     case 'msg':
       return reduceMessage(state, event, ctx);
     case 'clear':
@@ -192,6 +196,10 @@ export function reduce(
       return state;
     case 'expire':
       return createInitialState();
+    case 'stale':
+      return isHudEmpty(state)
+        ? state
+        : changed(state, { lane: null, cars: [0, 0, 0], msg: null }, ctx.now);
     default:
       return state;
   }

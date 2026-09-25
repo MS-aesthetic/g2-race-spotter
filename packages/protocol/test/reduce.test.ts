@@ -32,14 +32,14 @@ describe('reduce', () => {
       t: 'state',
       seq: 0,
       lane: null,
-      side: null,
-      gap: 0,
+      cars: [0, 0, 0],
       msg: null,
       spotterOnline: false,
       driverOnline: false,
       updatedAt: 0,
     });
     expect(createInitialState()).not.toBe(createInitialState());
+    expect(createInitialState().cars).not.toBe(createInitialState().cars);
   });
 
   it('sets lane only for the spotter and leaves same lanes alone', () => {
@@ -67,84 +67,92 @@ describe('reduce', () => {
     ).toBe(lane);
   });
 
-  it('sets side only for the spotter and leaves the same side alone', () => {
+  it('sets the cars triple only for the spotter, rounding and clamping each level', () => {
     const initial = createInitialState();
-    const inside = reduce(
+    const called = reduce(
       initial,
-      event({ t: 'side', role: 'spotter', side: 'inside' }),
+      event({ t: 'cars', role: 'spotter', cars: [1, 2.4, 3] }),
       context(),
     );
+    expect(called).toMatchObject({ cars: [1, 2, 3], seq: 1, updatedAt: 1_000 });
 
-    expect(inside).toMatchObject({ side: 'inside', seq: 1, updatedAt: 1_000 });
-    // A repeat is not news: no `seq` bump, so no broadcast.
+    // A repeat (after rounding) is not news: no `seq` bump, no broadcast.
     expect(
       reduce(
-        inside,
-        event({ t: 'side', role: 'spotter', side: 'inside' }),
+        called,
+        event({ t: 'cars', role: 'spotter', cars: [1.2, 1.6, 3] }),
         context(2_000),
       ),
-    ).toBe(inside);
-    // The driver may not call a side on itself.
+    ).toBe(called);
+    // The driver may not call cars on itself.
     expect(
       reduce(
-        inside,
-        event({ t: 'side', role: 'driver', side: 'outside' }),
+        called,
+        event({ t: 'cars', role: 'driver', cars: [0, 0, 0] }),
         context(2_000),
       ),
-    ).toBe(inside);
+    ).toBe(called);
 
-    const outside = reduce(
-      inside,
-      event({ t: 'side', role: 'spotter', side: 'outside' }),
-      context(2_000),
-    );
-    expect(outside).toMatchObject({ side: 'outside', seq: 2 });
-
-    const cleared = reduce(
-      outside,
-      event({ t: 'side', role: 'spotter', side: null }),
+    const clamped = reduce(
+      called,
+      event({ t: 'cars', role: 'spotter', cars: [-4, 9, 0] }),
       context(3_000),
     );
-    expect(cleared).toMatchObject({ side: null, seq: 3 });
-    expect(
-      reduce(
-        cleared,
-        event({ t: 'side', role: 'spotter', side: null }),
-        context(4_000),
-      ),
-    ).toBe(cleared);
-    // Side and lane are independent calls.
-    expect(cleared.lane).toBeNull();
+    expect(clamped).toMatchObject({ cars: [0, 3, 0], seq: 2 });
+    // The reducer never shares the caller's array.
+    expect(clamped.cars).not.toBe(called.cars);
+    // Cars and lane are independent calls.
+    expect(clamped.lane).toBeNull();
   });
 
-  it('rounds and clamps spotter gap changes', () => {
-    const initial = createInitialState();
-    const rounded = reduce(
-      initial,
-      event({ t: 'gap', role: 'spotter', value: 49.6 }),
-      context(),
+  it('stale-clears lane, cars and message but keeps presence', () => {
+    let state = reduce(
+      createInitialState(),
+      event({ t: 'peer', role: 'driver', online: true }),
+      context(500),
     );
-    const low = reduce(
-      rounded,
-      event({ t: 'gap', role: 'spotter', value: -4.5 }),
-      context(2_000),
+    state = reduce(
+      state,
+      event({ t: 'lane', role: 'spotter', lane: 'top' }),
+      context(1_000),
     );
-    const high = reduce(
-      low,
-      event({ t: 'gap', role: 'spotter', value: 123.4 }),
-      context(3_000),
+    state = reduce(
+      state,
+      event({ t: 'cars', role: 'spotter', cars: [0, 3, 1] }),
+      context(1_000),
+    );
+    state = reduce(
+      state,
+      event({ t: 'msg', role: 'spotter', text: 'box' }),
+      context(1_000),
     );
 
-    expect(rounded).toMatchObject({ gap: 50, seq: 1 });
-    expect(low).toMatchObject({ gap: 0, seq: 2 });
-    expect(high).toMatchObject({ gap: 100, seq: 3 });
-    expect(
+    const cleared = reduce(state, event({ t: 'stale' }), context(7_000));
+    expect(cleared).toEqual({
+      ...state,
+      lane: null,
+      cars: [0, 0, 0],
+      msg: null,
+      seq: state.seq + 1,
+      updatedAt: 7_000,
+    });
+    expect(cleared.driverOnline).toBe(true);
+    // An empty room is left alone, so the relay's alarm cannot loop on it.
+    expect(reduce(cleared, event({ t: 'stale' }), context(13_000))).toBe(
+      cleared,
+    );
+    const onlyAcked = reduce(
       reduce(
-        high,
-        event({ t: 'gap', role: 'driver', value: 20 }),
-        context(4_000),
+        createInitialState(),
+        event({ t: 'msg', role: 'spotter', text: 'box' }),
+        context(1_000),
       ),
-    ).toBe(high);
+      event({ t: 'ack', role: 'driver', msgId: 'message-1' }),
+      context(2_000),
+    );
+    expect(
+      reduce(onlyAcked, event({ t: 'stale' }), context(8_000)),
+    ).toMatchObject({ msg: null, seq: onlyAcked.seq + 1 });
   });
 
   it('trims a new spotter message and uses only injected clock and id dependencies', () => {
@@ -251,7 +259,7 @@ describe('reduce', () => {
     const initial = createInitialState();
 
     expect(
-      reduce(initial, event({ t: 'hello', role: 'spotter', v: 1 }), context()),
+      reduce(initial, event({ t: 'hello', role: 'spotter', v: 2 }), context()),
     ).toBe(initial);
     expect(
       reduce(initial, event({ t: 'ping', role: 'driver', ts: 1 }), context()),

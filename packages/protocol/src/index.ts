@@ -1,5 +1,5 @@
 /**
- * The transport-independent v1 contract shared by every Race Spotter client
+ * The transport-independent v2 contract shared by every Race Spotter client
  * and the relay. Keep this package free of runtime dependencies.
  */
 
@@ -12,6 +12,7 @@ export {
   type PeerEvent,
   type ReducerContext,
   type ReducerEvent,
+  type StaleEvent,
 } from './reduce.ts';
 
 export {
@@ -27,14 +28,21 @@ export {
   type WebSocketMessageEvent,
 } from './client.ts';
 
-export const PROTOCOL_VERSION = 1;
+/** v2 (2026-09-25): `gap`/`side` replaced by `cars`, `stale` clear. */
+export const PROTOCOL_VERSION = 2;
 
 export const PING_INTERVAL_MS = 2_000;
 export const PEER_OFFLINE_MS = 6_000;
 export const ALARM_TICK_MS = 3_000;
 export const DRIVER_NO_LINK_MS = 5_000;
-export const GAP_SEND_MIN_MS = 100;
 export const HUD_GAP_FLUSH_MS = 250;
+/**
+ * The relay clears lane, cars and message once a non-empty room state has
+ * gone this long without an update (Maxx, 2026-09-25).
+ */
+export const HUD_STALE_CLEAR_MS = 6_000;
+/** Highest `cars` level: 0 = no car, 3 = on the bumper. */
+export const CAR_LEVEL_MAX = 3;
 export const RECONNECT_MIN_MS = 500;
 export const RECONNECT_MAX_MS = 8_000;
 export const RATE_LIMIT_PER_S = 30;
@@ -50,8 +58,10 @@ export const CLOSE_CODE_DRIVER_EVICTED = 4_409;
 export const CLOSE_CODE_VERSION = 4_426;
 
 export type Lane = 'top' | 'mid' | 'bot';
-/** Which side a car is trying to pass on, from the driver's point of view. */
-export type Side = 'inside' | 'outside';
+/** How close a car behind is: 0 = none … 3 = on the bumper. */
+export type CarLevel = 0 | 1 | 2 | 3;
+/** Cars behind as `[left, mid, right]`. */
+export type Cars = [CarLevel, CarLevel, CarLevel];
 export type Role = 'spotter' | 'driver';
 export type ErrorCode =
   'version' | 'auth' | 'role_taken' | 'bad_frame' | 'rate';
@@ -68,16 +78,13 @@ export interface SetLane {
   lane: Lane | null;
 }
 
-/** Spotter-only: a car is trying to pass, or has cleared (`null`). */
-
-export interface SetSide {
-  t: 'side';
-  side: Side | null;
-}
-
-export interface SetGap {
-  t: 'gap';
-  value: number;
+/**
+ * Spotter-only: the full `[left, mid, right]` car-behind triple. Any finite
+ * numbers are accepted; the relay rounds and clamps each to 0..3.
+ */
+export interface SetCars {
+  t: 'cars';
+  cars: [number, number, number];
 }
 
 export interface SetMsg {
@@ -100,7 +107,7 @@ export interface Ping {
 }
 
 export type ClientMessage =
-  Hello | SetLane | SetSide | SetGap | SetMsg | Clear | Ack | Ping;
+  Hello | SetLane | SetCars | SetMsg | Clear | Ack | Ping;
 
 export interface RoomMessage {
   id: string;
@@ -113,9 +120,8 @@ export interface State {
   t: 'state';
   seq: number;
   lane: Lane | null;
-  /** Car alongside: `inside` / `outside`, `null` when nobody is there. */
-  side: Side | null;
-  gap: number;
+  /** Cars behind, `[left, mid, right]`, each 0..3. */
+  cars: Cars;
   msg: RoomMessage | null;
   spotterOnline: boolean;
   driverOnline: boolean;
@@ -159,8 +165,12 @@ export function isLane(value: unknown): value is Lane {
   return value === 'top' || value === 'mid' || value === 'bot';
 }
 
-export function isSide(value: unknown): value is Side {
-  return value === 'inside' || value === 'outside';
+export function isCarLevel(value: unknown): value is CarLevel {
+  return isInteger(value) && value >= 0 && value <= CAR_LEVEL_MAX;
+}
+
+export function isCars(value: unknown): value is Cars {
+  return Array.isArray(value) && value.length === 3 && value.every(isCarLevel);
 }
 
 export function isRole(value: unknown): value is Role {
@@ -198,21 +208,14 @@ export function isSetLane(value: unknown): value is SetLane {
   );
 }
 
-export function isSetSide(value: unknown): value is SetSide {
+export function isSetCars(value: unknown): value is SetCars {
   return (
     isRecord(value) &&
-    value.t === 'side' &&
-    hasOnlyKeys(value, ['t', 'side']) &&
-    (value.side === null || isSide(value.side))
-  );
-}
-
-export function isSetGap(value: unknown): value is SetGap {
-  return (
-    isRecord(value) &&
-    value.t === 'gap' &&
-    hasOnlyKeys(value, ['t', 'value']) &&
-    isFiniteNumber(value.value)
+    value.t === 'cars' &&
+    hasOnlyKeys(value, ['t', 'cars']) &&
+    Array.isArray(value.cars) &&
+    value.cars.length === 3 &&
+    value.cars.every(isFiniteNumber)
   );
 }
 
@@ -255,8 +258,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   return (
     isHello(value) ||
     isSetLane(value) ||
-    isSetSide(value) ||
-    isSetGap(value) ||
+    isSetCars(value) ||
     isSetMsg(value) ||
     isClear(value) ||
     isAck(value) ||
@@ -285,13 +287,7 @@ export function isState(value: unknown): value is State {
     isInteger(value.seq) &&
     value.seq >= 0 &&
     (value.lane === null || isLane(value.lane)) &&
-    // `side` was added within PROTOCOL_VERSION 1 (additive field, relay ships
-    // first): a frame from a relay that predates it is still a valid state
-    // with no side call, so absence is accepted and read as `null`.
-    (value.side === undefined || value.side === null || isSide(value.side)) &&
-    isFiniteNumber(value.gap) &&
-    value.gap >= 0 &&
-    value.gap <= 100 &&
+    isCars(value.cars) &&
     (value.msg === null || isRoomMessage(value.msg)) &&
     typeof value.spotterOnline === 'boolean' &&
     typeof value.driverOnline === 'boolean' &&
@@ -319,6 +315,21 @@ export function isErrorMessage(value: unknown): value is ErrorMessage {
 
 export function isServerMessage(value: unknown): value is ServerMessage {
   return isState(value) || isPong(value) || isErrorMessage(value);
+}
+
+/**
+ * True when the room carries nothing the driver's HUD would show: no lane,
+ * no car behind, no message. The relay's stale clear only applies to a room
+ * that is not already empty.
+ */
+export function isHudEmpty(
+  state: Pick<State, 'lane' | 'cars' | 'msg'>,
+): boolean {
+  return (
+    state.lane === null &&
+    state.cars.every((level) => level === 0) &&
+    state.msg === null
+  );
 }
 
 export function isWireMessage(value: unknown): value is WireMessage {

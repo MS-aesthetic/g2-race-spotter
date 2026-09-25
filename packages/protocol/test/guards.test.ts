@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import ackInvalid from './fixtures/ack.invalid.json';
 import ackValid from './fixtures/ack.valid.json';
+import carsInvalid from './fixtures/cars.invalid.json';
+import carsValid from './fixtures/cars.valid.json';
 import clearInvalid from './fixtures/clear.invalid.json';
 import clearValid from './fixtures/clear.valid.json';
 import errorInvalid from './fixtures/error.invalid.json';
 import errorValid from './fixtures/error.valid.json';
-import gapInvalid from './fixtures/gap.invalid.json';
-import gapValid from './fixtures/gap.valid.json';
 import helloInvalid from './fixtures/hello.invalid.json';
 import helloValid from './fixtures/hello.valid.json';
 import laneInvalid from './fixtures/lane.invalid.json';
@@ -18,20 +18,19 @@ import pingInvalid from './fixtures/ping.invalid.json';
 import pingValid from './fixtures/ping.valid.json';
 import pongInvalid from './fixtures/pong.invalid.json';
 import pongValid from './fixtures/pong.valid.json';
-import sideInvalid from './fixtures/side.invalid.json';
-import sideValid from './fixtures/side.valid.json';
 import stateInvalid from './fixtures/state.invalid.json';
 import stateValid from './fixtures/state.valid.json';
 
 import {
   isClientMessage,
   isErrorMessage,
+  isHudEmpty,
   isPong,
-  isSetGap,
+  isSetCars,
   isSetMsg,
-  isSetSide,
   isState,
   isWireMessage,
+  PROTOCOL_VERSION,
 } from '../src/index';
 
 type FixtureExpectation = {
@@ -55,12 +54,11 @@ const fixtures: readonly FixtureExpectation[] = [
     invalid: laneInvalid,
   },
   {
-    name: 'side',
-    guard: isSetSide,
-    valid: sideValid,
-    invalid: sideInvalid,
+    name: 'cars',
+    guard: isSetCars,
+    valid: carsValid,
+    invalid: carsInvalid,
   },
-  { name: 'gap', guard: isSetGap, valid: gapValid, invalid: gapInvalid },
   { name: 'msg', guard: isSetMsg, valid: msgValid, invalid: msgInvalid },
   {
     name: 'clear',
@@ -85,7 +83,7 @@ const fixtures: readonly FixtureExpectation[] = [
   },
 ];
 
-describe('protocol v1 guards', () => {
+describe('protocol v2 guards', () => {
   it.each(fixtures)(
     '$name valid fixture passes its guard and the wire guard',
     ({ guard, valid }) => {
@@ -102,22 +100,49 @@ describe('protocol v1 guards', () => {
     },
   );
 
-  it('accepts a cleared side call and rejects a malformed one', () => {
-    expect(isSetSide({ t: 'side', side: null })).toBe(true);
-    expect(isClientMessage({ t: 'side', side: 'outside' })).toBe(true);
-    expect(isSetSide({ t: 'side' })).toBe(false);
-    expect(isSetSide({ t: 'side', side: 'inside', extra: 1 })).toBe(false);
+  it('is protocol version 2 and the hello fixture speaks it', () => {
+    expect(PROTOCOL_VERSION).toBe(2);
+    expect(helloValid.v).toBe(PROTOCOL_VERSION);
   });
 
-  it('treats `side` as additive on state frames', () => {
-    const withoutSide: Record<string, unknown> = {
-      ...(stateValid as Record<string, unknown>),
-    };
-    delete withoutSide.side;
+  it('accepts any finite cars triple on the wire and rejects malformed ones', () => {
+    expect(isSetCars({ t: 'cars', cars: [0, 0, 0] })).toBe(true);
+    // The relay clamps and rounds; the guard only checks the shape.
+    expect(isClientMessage({ t: 'cars', cars: [-1, 9, 1.5] })).toBe(true);
+    expect(isSetCars({ t: 'cars', cars: [1, 2, 3, 0] })).toBe(false);
+    expect(isSetCars({ t: 'cars', cars: [1, '2', 3] })).toBe(false);
+    expect(isSetCars({ t: 'cars', cars: [1, Number.NaN, 3] })).toBe(false);
+    expect(isSetCars({ t: 'cars', cars: [1, 2, 3], extra: 1 })).toBe(false);
+    expect(isSetCars({ t: 'cars' })).toBe(false);
+  });
 
-    // A relay that predates the field still speaks PROTOCOL_VERSION 1.
-    expect(isState(withoutSide)).toBe(true);
-    expect(isState({ ...stateValid, side: null })).toBe(true);
-    expect(isState({ ...stateValid, side: 'left' })).toBe(false);
+  it('removes the v1 gap and side messages', () => {
+    expect(isClientMessage({ t: 'gap', value: 50 })).toBe(false);
+    expect(isClientMessage({ t: 'side', side: 'inside' })).toBe(false);
+  });
+
+  it('requires integer 0..3 cars on state frames', () => {
+    const base = stateValid as Record<string, unknown>;
+    const withoutCars: Record<string, unknown> = { ...base };
+    delete withoutCars.cars;
+
+    expect(isState(withoutCars)).toBe(false);
+    expect(isState({ ...base, cars: [3, 3, 3] })).toBe(true);
+    expect(isState({ ...base, cars: [0, 1.5, 0] })).toBe(false);
+    expect(isState({ ...base, cars: [0, -1, 0] })).toBe(false);
+    expect(isState({ ...base, cars: [0, 0] })).toBe(false);
+  });
+
+  it('calls a room with no lane, no car and no message empty', () => {
+    expect(isHudEmpty({ lane: null, cars: [0, 0, 0], msg: null })).toBe(true);
+    expect(isHudEmpty({ lane: 'top', cars: [0, 0, 0], msg: null })).toBe(false);
+    expect(isHudEmpty({ lane: null, cars: [0, 0, 1], msg: null })).toBe(false);
+    expect(
+      isHudEmpty({
+        lane: null,
+        cars: [0, 0, 0],
+        msg: { id: 'm', text: 'x', ts: 1, ackedAt: 2 },
+      }),
+    ).toBe(false);
   });
 });
