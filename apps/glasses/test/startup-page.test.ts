@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildPage, createStartupPage } from '../src/startup-page.ts';
+import { HALF_WIDTH, STRIP_HEIGHT, STRIP_Y } from '../src/render/hud-design.ts';
+import {
+  buildPage,
+  createStartupPage,
+  SDK_MAX_CONTAINERS,
+  SDK_MAX_IMAGE_CONTAINERS,
+  SDK_MAX_TEXT_CONTAINERS,
+  STRIP_CONTAINERS,
+} from '../src/startup-page.ts';
 
 const PAGE = buildPage({ mode: 'image', status: 'CONNECTING' });
 
 describe('startup page', () => {
-  it('creates the four-container page through one guarded call', async () => {
+  it('creates the seven-container page through one guarded call', async () => {
     const bridge = { createStartUpPageContainer: vi.fn(async () => 0) };
     const startPage = createStartupPage(bridge, PAGE, () => undefined);
 
@@ -15,7 +23,7 @@ describe('startup page', () => {
     expect(bridge.createStartUpPageContainer).toHaveBeenCalledOnce();
     expect(bridge.createStartUpPageContainer).toHaveBeenCalledWith(PAGE);
     expect(PAGE).toEqual({
-      containerTotalNum: 4,
+      containerTotalNum: 7,
       textObject: [
         expect.objectContaining({
           containerID: 1,
@@ -31,58 +39,120 @@ describe('startup page', () => {
         }),
       ],
       imageObject: [
-        expect.objectContaining({ containerID: 2, containerName: 'hud' }),
+        expect.objectContaining({ containerID: 2, containerName: 'stripTL' }),
+        expect.objectContaining({ containerID: 5, containerName: 'stripTR' }),
+        expect.objectContaining({ containerID: 6, containerName: 'stripBL' }),
+        expect.objectContaining({ containerID: 7, containerName: 'stripBR' }),
       ],
     });
   });
 
-  it('lays the page out HUD-top, message under it, status bottom-right', () => {
-    // The layout table in the g2-hud-display skill (Maxx design round 3,
-    // 2026-09-25): the one image container is the top of the screen.
+  it('stays within the SDK 0.0.12 caps: <= 4 images, <= 8 text, <= 12 total', () => {
+    for (const mode of ['image', 'text'] as const) {
+      const page = buildPage({ mode, status: 'L S' });
+      const images = page.imageObject ?? [];
+      const total = page.textObject.length + images.length;
+
+      expect(images.length).toBeLessThanOrEqual(SDK_MAX_IMAGE_CONTAINERS);
+      expect(page.textObject.length).toBeLessThanOrEqual(
+        SDK_MAX_TEXT_CONTAINERS,
+      );
+      expect(total).toBeLessThanOrEqual(SDK_MAX_CONTAINERS);
+      expect(page.containerTotalNum).toBe(total);
+    }
+    expect([
+      SDK_MAX_IMAGE_CONTAINERS,
+      SDK_MAX_TEXT_CONTAINERS,
+      SDK_MAX_CONTAINERS,
+    ]).toEqual([4, 8, 12]);
+  });
+
+  it('lays the HUD out as four edge strips, message in the centre, status on the right border', () => {
+    // The layout table in the g2-hud-display skill (Maxx design round 4,
+    // 2026-09-25).
     const page = buildPage({ mode: 'image', status: 'L S', message: 'BOX' });
-    const byId = new Map(
+    const byName = new Map(
       [...page.textObject, ...(page.imageObject ?? [])].map((container) => [
-        container.containerID,
+        container.containerName,
         container,
       ]),
     );
+    const rect = (name: string): number[] => {
+      const container = byName.get(name)!;
+      return [
+        container.xPosition,
+        container.yPosition,
+        container.width,
+        container.height,
+      ];
+    };
 
-    expect(byId.get(3)).toMatchObject({
-      containerName: 'msg',
-      xPosition: 16,
-      yPosition: 160,
-      width: 544,
-      height: 90,
-      content: 'BOX',
-    });
-    expect(byId.get(2)).toMatchObject({
-      containerName: 'hud',
-      xPosition: 144,
-      yPosition: 8,
-      width: 288,
-      height: 144,
-    });
-    expect(byId.get(4)).toMatchObject({
-      containerName: 'status',
-      xPosition: 480,
-      yPosition: 258,
-      width: 80,
-      height: 28,
-      content: 'L S',
-    });
+    expect(rect('bg')).toEqual([0, 0, 576, 288]);
+    expect(rect('stripTL')).toEqual([0, 0, 288, 48]);
+    expect(rect('stripTR')).toEqual([288, 0, 288, 48]);
+    expect(rect('stripBL')).toEqual([0, 240, 288, 48]);
+    expect(rect('stripBR')).toEqual([288, 240, 288, 48]);
+    expect(rect('msg')).toEqual([16, 112, 504, 64]);
+    expect(rect('status')).toEqual([528, 124, 40, 28]);
+    expect(byName.get('msg')).toMatchObject({ content: 'BOX' });
+    expect(byName.get('status')).toMatchObject({ content: 'L S' });
 
-    // Nothing overlaps, and everything stays on the 576x288 canvas.
-    for (const id of [2, 3, 4]) {
-      const container = byId.get(id)!;
-      expect(container.xPosition + container.width).toBeLessThanOrEqual(576);
-      expect(container.yPosition + container.height).toBeLessThanOrEqual(288);
+    // The strip halves match what the queue draws into them.
+    for (const strip of STRIP_CONTAINERS) {
+      expect(rect(strip.containerName)).toEqual([
+        strip.half * HALF_WIDTH,
+        STRIP_Y[strip.strip],
+        HALF_WIDTH,
+        STRIP_HEIGHT,
+      ]);
     }
-    expect(byId.get(2)!.yPosition + byId.get(2)!.height).toBeLessThanOrEqual(
-      byId.get(3)!.yPosition,
-    );
-    expect(byId.get(3)!.yPosition + byId.get(3)!.height).toBeLessThanOrEqual(
-      byId.get(4)!.yPosition,
-    );
+  });
+
+  it('keeps every container on the canvas, apart from bg overlapping nothing, with unique zOrder', () => {
+    for (const mode of ['image', 'text'] as const) {
+      const page = buildPage({ mode, status: 'L S' });
+      const all = [...page.textObject, ...(page.imageObject ?? [])];
+
+      for (const container of all) {
+        expect(container.xPosition).toBeGreaterThanOrEqual(0);
+        expect(container.yPosition).toBeGreaterThanOrEqual(0);
+        expect(container.xPosition + container.width).toBeLessThanOrEqual(576);
+        expect(container.yPosition + container.height).toBeLessThanOrEqual(288);
+      }
+      for (const image of page.imageObject ?? []) {
+        expect(image.width).toBeGreaterThanOrEqual(20);
+        expect(image.width).toBeLessThanOrEqual(288);
+        expect(image.height).toBeGreaterThanOrEqual(20);
+        expect(image.height).toBeLessThanOrEqual(144);
+      }
+
+      // `bg` is the full-canvas event-capture layer behind everything.
+      const foreground = all.filter(
+        (container) => container.containerName !== 'bg',
+      );
+      for (const [index, a] of foreground.entries()) {
+        for (const b of foreground.slice(index + 1)) {
+          const apart =
+            a.xPosition + a.width <= b.xPosition ||
+            b.xPosition + b.width <= a.xPosition ||
+            a.yPosition + a.height <= b.yPosition ||
+            b.yPosition + b.height <= a.yPosition;
+          expect(apart, `${a.containerName} overlaps ${b.containerName}`).toBe(
+            true,
+          );
+        }
+      }
+
+      const zOrders = all.map((container) => container.zOrderIndex);
+      expect(new Set(zOrders).size).toBe(zOrders.length);
+      const bg = all.find((container) => container.containerName === 'bg')!;
+      expect(Math.min(...zOrders)).toBe(bg.zOrderIndex);
+      const ids = all.map((container) => container.containerID);
+      expect(new Set(ids).size).toBe(ids.length);
+      expect([...ids].sort((x, y) => x - y)).toEqual(
+        Array.from({ length: all.length }, (_, index) => index + 1),
+      );
+    }
   });
 
   it('does not retry a failed startup-page call', async () => {

@@ -78,7 +78,7 @@ describe('startup page per render mode', () => {
       xPosition: 144,
       yPosition: 8,
       width: 288,
-      height: 144,
+      height: 96,
       content: 'o',
     });
     expect(bridge.callsNamed('createStartUpPageContainer')[0]?.payload).toBe(
@@ -86,19 +86,19 @@ describe('startup page per render mode', () => {
     );
   });
 
-  it('builds exactly one image container in image mode', () => {
+  it('builds the four strip image containers in image mode', () => {
     const page = buildPage({ mode: 'image', status: 'CONNECTING' });
 
-    expect(page.containerTotalNum).toBe(4);
-    expect(page.imageObject).toHaveLength(1);
+    expect(page.containerTotalNum).toBe(7);
+    expect(page.imageObject).toHaveLength(4);
     expect(page.imageObject?.[0]).toMatchObject({
       containerID: 2,
-      containerName: 'hud',
-      xPosition: 144,
-      yPosition: 8,
+      containerName: 'stripTL',
+      xPosition: 0,
+      yPosition: 0,
       width: 288,
-      height: 144,
-      zOrderIndex: 3,
+      height: 48,
+      zOrderIndex: 6,
     });
     expect(page.textObject.map((container) => container.containerID)).toEqual([
       1, 3, 4,

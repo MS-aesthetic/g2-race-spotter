@@ -258,6 +258,19 @@ export class FakeWebSocket {
   }
 }
 
+/**
+ * What each image container currently shows: the bytes of the last
+ * `updateImageRawData` sent to it, keyed by container id.
+ */
+export function shownImages(bridge: FakeBridge): Map<number, Uint8Array> {
+  const shown = new Map<number, Uint8Array>();
+  for (const entry of bridge.callsNamed('updateImageRawData')) {
+    const payload = entry.payload as ImageRawData;
+    shown.set(payload.containerID, payload.imageData);
+  }
+  return shown;
+}
+
 /** Lets every already-queued promise continuation run. */
 export async function flush(times = 5): Promise<void> {
   for (let index = 0; index < times; index += 1) {

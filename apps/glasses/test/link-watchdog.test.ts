@@ -8,15 +8,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ImageRawData, TextUpgrade } from '../src/bridge.ts';
 import { startDriver, type Driver } from '../src/driver.ts';
 import { statusStrip, STATUS_BLINK_MS, STATUS_NO_ROOM } from '../src/link.ts';
-import { drawHud } from '../src/render/draw-hud.ts';
-import { pack } from '../src/render/gray4.ts';
-import { RenderQueue } from '../src/render/queue.ts';
+import { packContainers, RenderQueue } from '../src/render/queue.ts';
 import { CONTAINER_STATUS } from '../src/startup-page.ts';
 import {
   FakeBridge,
   FakeClock,
   FakeSocket,
   FakeWebSocket,
+  shownImages,
   stateFrame,
 } from './helpers.ts';
 
@@ -100,22 +99,29 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
 
-  it('goes NO LINK after 5 s of silence and dims the next HUD frame', async () => {
+  it('goes NO LINK after 5 s of silence and dims all four image containers', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
     socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', cars: [1, 1, 1] }, { linkOk: true })),
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [1, 1, 1] }, true),
     );
+    const beforeNoLink = images(bridge).length;
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
     driver.checkLink();
     await queue.whenIdle();
 
     expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', cars: [1, 1, 1] }, { linkOk: false })),
+    // All four image containers are re-sent at half intensity, once each.
+    expect(
+      images(bridge)
+        .slice(beforeNoLink)
+        .map((payload) => payload.containerName),
+    ).toEqual(['stripTL', 'stripTR', 'stripBL', 'stripBR']);
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [1, 1, 1] }, false),
     );
 
     // NO LINK is a blinking `L`: one status job per phase, never an image send.
@@ -148,12 +154,12 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     await queue.whenIdle();
 
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, false));
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', cars: [0, 1, 0] }, { linkOk: true })),
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'mid', cars: [0, 1, 0] }, true),
     );
   });
 
-  it('spends exactly one image send on a recovery frame, with its values', async () => {
+  it('spends one send per image container on a recovery frame, with its values', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
     socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
@@ -168,10 +174,21 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     socket.receive(stateFrame({ seq: 2, lane: 'top', cars: [0, 2, 2] }));
     await queue.whenIdle();
 
-    const sent = images(bridge);
-    expect(sent.length - beforeRecovery).toBe(1);
-    expect(sent.at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', cars: [0, 2, 2] }, { linkOk: true })),
+    // Every container was dimmed, so every one is re-sent once — with the new
+    // values, never first with the old cars at full intensity.
+    const sent = images(bridge).slice(beforeRecovery);
+    const fresh = packContainers({ lane: 'top', cars: [0, 2, 2] }, true);
+    expect(sent.map((payload) => payload.containerName)).toEqual([
+      'stripTL',
+      'stripTR',
+      'stripBL',
+      'stripBR',
+    ]);
+    for (const payload of sent) {
+      expect(payload.imageData).toEqual(fresh.get(payload.containerID));
+    }
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [0, 2, 2] }, true),
     );
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
@@ -205,8 +222,8 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(client.lastFrameAt).toBeUndefined();
     expect(FakeWebSocket.sockets.length).toBeGreaterThan(1);
     expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', cars: [2, 1, 0] }, { linkOk: false })),
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [2, 1, 0] }, false),
     );
 
     const next = FakeWebSocket.last();
@@ -235,18 +252,20 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     socket.receive(stateFrame({ lane: 'mid', cars: [0, 2, 3] }));
     await queue.whenIdle();
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', cars: [0, 2, 3] }, { linkOk: true })),
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'mid', cars: [0, 2, 3] }, true),
     );
 
-    // The relay's stale clear is an ordinary `state`: one more frame, blank
-    // lanes and empty bars, still at full intensity (the link is fine).
+    // The relay's stale clear is an ordinary `state`: blank lanes and empty
+    // bars, still at full intensity (the link is fine) — one send for each
+    // container whose pixels it changes (here all four: the dash straddles the
+    // top seam, the middle bar the bottom one).
     const before = images(bridge).length;
     socket.receive(stateFrame({ seq: 2, lane: null, cars: [0, 0, 0] }));
     await queue.whenIdle();
-    expect(images(bridge).length).toBe(before + 1);
-    expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: null, cars: [0, 0, 0] }, { linkOk: true })),
+    expect(images(bridge).length).toBe(before + 4);
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: null, cars: [0, 0, 0] }, true),
     );
   });
 

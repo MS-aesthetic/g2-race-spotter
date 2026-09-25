@@ -76,11 +76,15 @@ export interface Bridge {
   onEvenHubEvent(listener: (event: unknown) => void): () => void;
 }
 
-/** Spec 030 R7: every bridge call is timed and logged as `{call, ms, result}`. */
+/**
+ * Spec 030 R7: every bridge call is timed and logged as `{call, ms, result}`,
+ * plus the target `container` name for calls that address one container.
+ */
 export interface BridgeCallLog {
   call: string;
   ms: number;
   result: unknown;
+  container?: string;
 }
 
 export type BridgeLogger = (entry: BridgeCallLog) => void;

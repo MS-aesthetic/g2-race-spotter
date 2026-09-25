@@ -240,7 +240,12 @@ describe('render queue', () => {
     await queue.whenIdle();
 
     expect(entries).toEqual([
-      { call: 'textContainerUpgrade', ms: 12, result: true },
+      {
+        call: 'textContainerUpgrade',
+        ms: 12,
+        result: true,
+        container: 'status',
+      },
     ]);
   });
 

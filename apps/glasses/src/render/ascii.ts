@@ -1,5 +1,5 @@
 /**
- * Renders a HUD bitmap as ASCII so the golden snapshots in
+ * Renders a HUD strip (576×48 by default) as ASCII so the golden snapshots in
  * `test/draw-hud.test.ts` are eyeballable in a diff: `#` for level >= 8,
  * `+` for 1..7, `.` for 0, one character per `SNAPSHOT_SCALE`-pixel block.
  *
@@ -8,7 +8,7 @@
  * reduction instead of falling between samples.
  */
 
-import { HUD_HEIGHT, HUD_WIDTH } from './hud-design.ts';
+import { STRIP_HEIGHT, STRIP_WIDTH } from './hud-design.ts';
 
 export const SNAPSHOT_SCALE = 4;
 
@@ -33,8 +33,8 @@ function cell(level: number): string {
 }
 
 export function toAscii(frame: Uint8Array, options: AsciiOptions = {}): string {
-  const width = options.width ?? HUD_WIDTH;
-  const height = options.height ?? HUD_HEIGHT;
+  const width = options.width ?? STRIP_WIDTH;
+  const height = options.height ?? STRIP_HEIGHT;
   const scale = options.scale ?? SNAPSHOT_SCALE;
   const takeMin = options.sample === 'min';
   const rows: string[] = [];

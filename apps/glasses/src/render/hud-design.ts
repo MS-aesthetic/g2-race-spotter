@@ -1,21 +1,33 @@
 /**
  * THE HUD LOOK LIVES HERE. This is the only file to edit when the display
- * should look different — `draw-hud.ts` just calls `drawDesign`, and
- * `primitives.ts` is a generic drawing library that knows nothing about racing.
+ * should look different — `draw-hud.ts` just calls the two
+ * `draw…StripDesign` functions below, and `primitives.ts` is a generic drawing
+ * library that knows nothing about racing.
  *
  * To change the look: adjust `DESIGN` (positions, sizes, levels) for a tweak,
  * or rewrite `drawLanes` / `drawCars` with other primitives for a new shape
  * language. The golden ASCII snapshots in `test/draw-hud.test.ts` pin whatever
  * design is current — a deliberate change updates them in the same commit.
  *
- * Layout (Maxx, 2026-09-25 design round 3): the image sits at the TOP of the
- * glasses canvas. Its top row holds the three lane icons at half the round-1
- * size, in track order (▼ left, ▬ middle, ▲ right) — the called one
- * dithered-filled, the other two thin outlines. Its bottom row holds three
- * hollow car-behind bars (left / middle / right), each split into three
- * segments that fill LEFT-TO-RIGHT with `cars[i]`; a bar at level 3 gets the
- * bright alert outline. Every filled area is dithered (`DESIGN.fill`) so the
- * driver is not staring at a solid bright panel.
+ * Layout (Maxx, 2026-09-25 design round 4 — "I want the icons to be close to
+ * the perimeter so it's not directly in line of sight. Separate the bars on
+ * the glasses. Use corners on the glasses, then the top border and bottom
+ * borders for the 'middle' icons."): the HUD is two 576×48 STRIPS, one
+ * along the top edge of the glasses canvas and one along the bottom edge, and
+ * the centre of the screen stays empty. The pinned SDK caps a page at four
+ * image containers of at most 288×144, so each strip is drawn once on a
+ * virtual 576-px-wide canvas and split down the middle (x 288) into two
+ * pixel-adjacent 288×48 image containers (`splitStrip` in `draw-hud.ts`).
+ *
+ * Top strip: the three lane icons in track order — ▼ in the top-left corner,
+ * ▬ centred on the seam, ▲ in the top-right corner — the called one
+ * dithered-filled, the other two thin outlines. Bottom strip: three hollow
+ * car-behind bars — LEFT in the bottom-left corner, MIDDLE centred on the
+ * seam, RIGHT in the bottom-right corner — each split into three segments that
+ * fill LEFT-TO-RIGHT with `cars[i]`; a bar at level 3 gets the bright alert
+ * outline. Every filled area is dithered (`DESIGN.fill`) so the driver is not
+ * staring at a solid bright panel. Coordinates below are strip coordinates
+ * (x 0..575, y 0..47); the strips' place on the canvas is `STRIP_Y`.
  */
 
 import { CAR_LEVEL_MAX, type Cars, type Lane } from '@g2-race-spotter/protocol';
@@ -29,8 +41,23 @@ import {
   type Paint,
 } from './primitives.ts';
 
-export const HUD_WIDTH = 288;
-export const HUD_HEIGHT = 144;
+/** The glasses canvas. */
+export const CANVAS_WIDTH = 576;
+export const CANVAS_HEIGHT = 288;
+
+/** One strip spans the whole canvas width; it is split into two images. */
+export const STRIP_WIDTH = CANVAS_WIDTH;
+export const STRIP_HEIGHT = 48;
+/** Each image container is one half of a strip: 288×48. */
+export const HALF_WIDTH = STRIP_WIDTH / 2;
+
+export type StripId = 'top' | 'bottom';
+
+/** Where each strip sits on the canvas (its image containers' `yPosition`). */
+export const STRIP_Y: Readonly<Record<StripId, number>> = {
+  top: 0,
+  bottom: CANVAS_HEIGHT - STRIP_HEIGHT,
+};
 
 export interface HudState {
   readonly lane: Lane | null;
@@ -45,18 +72,20 @@ export const DESIGN = {
    * what the eye catches. */
   alertFill: { on: 8, off: 3 },
   /**
-   * Lane call along the top edge: three fixed positions so the driver always
-   * sees where a call could be, left to right as ▼ ▬ ▲. Half the round-1 size:
-   * triangles 30 px tall and 34 px wide, the middle a 40×10 dash.
+   * Lane call along the TOP strip: three fixed positions so the driver always
+   * sees where a call could be, left to right as ▼ ▬ ▲. ▼ and ▲ sit in the
+   * corners, ▬ is centred on the seam at x 288 (half in each image). Same size
+   * as design round 3: triangles 30 px tall and 34 px wide, the middle a 40×10
+   * dash.
    */
   lanes: {
     slots: [
-      { lane: 'bot', centreX: 48 },
-      { lane: 'mid', centreX: 144 },
-      { lane: 'top', centreX: 240 },
+      { lane: 'bot', centreX: 51 },
+      { lane: 'mid', centreX: 288 },
+      { lane: 'top', centreX: 525 },
     ],
-    topY: 4,
-    bottomY: 34,
+    topY: 9,
+    bottomY: 39,
     /** Triangles: half the base width. */
     halfWidth: 17,
     /** `mid` is a dash, so it can never be mistaken for either arrow. */
@@ -67,14 +96,15 @@ export const DESIGN = {
     outlineLevel: 4,
   },
   /**
-   * Cars behind along the bottom edge: one hollow bar per `cars` slot, centred
-   * under the lane icon of the same side (x centres 48 / 144 / 240). Each bar
+   * Cars behind along the BOTTOM strip: one hollow bar per `cars` slot, each
+   * under the lane icon of the same side (x centres 51 / 288 / 525) — LEFT in
+   * the corner, MIDDLE straddling the seam, RIGHT in the other corner. Each bar
    * is three `segmentWidth` cells between 2 px dividers; `cars[i]` fills that
    * many cells LEFT-TO-RIGHT (the same direction as the spotter's segments).
    */
   cars: {
-    xs: [5, 101, 197],
-    y: 114,
+    xs: [8, 245, 482],
+    y: 10,
     /** 2 + 3 × 26 + 2 × 2 + 2: outline, three cells, two dividers. */
     width: 86,
     height: 28,
@@ -176,8 +206,15 @@ function drawCars(canvas: Canvas, cars: Readonly<Cars>): void {
   });
 }
 
-/** Composes the current look onto `canvas`. Pure apart from the canvas it fills. */
-export function drawDesign(canvas: Canvas, state: HudState): void {
-  drawLanes(canvas, state.lane);
-  drawCars(canvas, state.cars);
+/** Paints the lane icons onto a 576×48 top-strip canvas. Pure apart from it. */
+export function drawTopStripDesign(canvas: Canvas, lane: Lane | null): void {
+  drawLanes(canvas, lane);
+}
+
+/** Paints the three car bars onto a 576×48 bottom-strip canvas. */
+export function drawBottomStripDesign(
+  canvas: Canvas,
+  cars: Readonly<Cars>,
+): void {
+  drawCars(canvas, cars);
 }
