@@ -28,7 +28,11 @@ export {
   type WebSocketMessageEvent,
 } from './client.ts';
 
-/** v2 (2026-09-25): `gap`/`side` replaced by `cars`, `stale` clear. */
+/**
+ * v2 (2026-09-25): `gap`/`side` replaced by `cars`, `stale` clear. Room
+ * presets (`preset`, `State.presets`) were added to v2 later the same day as
+ * an additive change.
+ */
 export const PROTOCOL_VERSION = 2;
 
 export const PING_INTERVAL_MS = 2_000;
@@ -47,8 +51,14 @@ export const RECONNECT_MIN_MS = 500;
 export const RECONNECT_MAX_MS = 8_000;
 export const RATE_LIMIT_PER_S = 30;
 export const RATE_BURST = 60;
-export const ROOM_TTL_MS = 12 * 60 * 60 * 1_000;
+/**
+ * An idle room (no socket, no change since `updatedAt`) is deleted after this
+ * — the spotter's "session" (Maxx, 2026-09-25 design round 4: 24 h).
+ */
+export const ROOM_TTL_MS = 24 * 60 * 60 * 1_000;
 export const MSG_MAX_CHARS = 80;
+/** Most custom messages a room keeps in `State.presets`. */
+export const PRESETS_MAX = 12;
 export const FRAME_MAX_BYTES = 1_024;
 
 export const CLOSE_CODE_BAD_HELLO = 4_400;
@@ -106,8 +116,16 @@ export interface Ping {
   ts: number;
 }
 
+/**
+ * Spotter-only: save a custom message to the room (`add`) or forget one
+ * (`remove`). Exactly one of the two keys. Saving is not a call to the driver:
+ * it never touches the HUD or `calledAt`.
+ */
+export type SetPreset =
+  { t: 'preset'; add: string } | { t: 'preset'; remove: string };
+
 export type ClientMessage =
-  Hello | SetLane | SetCars | SetMsg | Clear | Ack | Ping;
+  Hello | SetLane | SetCars | SetMsg | Clear | Ack | Ping | SetPreset;
 
 export interface RoomMessage {
   id: string;
@@ -133,6 +151,13 @@ export interface State {
    * from this, so driver acks and presence flips never postpone it.
    */
   calledAt: number;
+  /**
+   * Custom messages saved to the room, oldest first: trimmed, unique, each
+   * 1..`MSG_MAX_CHARS`, at most `PRESETS_MAX`. Additive in v2: a relay that
+   * predates presets (or a room stored by one) omits it — read it as
+   * `state.presets ?? []`.
+   */
+  presets?: string[];
 }
 
 export interface Pong {
@@ -261,6 +286,27 @@ export function isPing(value: unknown): value is Ping {
   );
 }
 
+/** A message text as the wire carries it: trimmed, 1..`MSG_MAX_CHARS`. */
+function isMessageText(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value === value.trim() &&
+    value.length > 0 &&
+    value.length <= MSG_MAX_CHARS
+  );
+}
+
+export function isSetPreset(value: unknown): value is SetPreset {
+  if (!isRecord(value) || value.t !== 'preset') {
+    return false;
+  }
+
+  return (
+    (hasOnlyKeys(value, ['t', 'add']) && isMessageText(value.add)) ||
+    (hasOnlyKeys(value, ['t', 'remove']) && isMessageText(value.remove))
+  );
+}
+
 export function isClientMessage(value: unknown): value is ClientMessage {
   return (
     isHello(value) ||
@@ -269,7 +315,18 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     isSetMsg(value) ||
     isClear(value) ||
     isAck(value) ||
-    isPing(value)
+    isPing(value) ||
+    isSetPreset(value)
+  );
+}
+
+/** `State.presets` as the reducer keeps it: unique message texts, capped. */
+export function isPresets(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= PRESETS_MAX &&
+    value.every(isMessageText) &&
+    new Set(value).size === value.length
   );
 }
 
@@ -300,7 +357,8 @@ export function isState(value: unknown): value is State {
     typeof value.driverOnline === 'boolean' &&
     isFiniteNumber(value.updatedAt) &&
     isFiniteNumber(value.calledAt) &&
-    value.calledAt >= 0
+    value.calledAt >= 0 &&
+    (value.presets === undefined || isPresets(value.presets))
   );
 }
 

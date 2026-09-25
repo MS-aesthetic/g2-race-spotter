@@ -19,17 +19,19 @@ import {
   type SetCars,
   type SetLane,
   type SetMsg,
+  type SetPreset,
   type State,
 } from './index.ts';
 
 export type ConnectionState = 'connecting' | 'open' | 'closed';
 /**
  * User-originated frames accepted by the shared client.  Acknowledgements
- * are deliberately dropped while offline: unlike lane/cars/msg/clear they
- * are not a durable user intent and must not acknowledge a later message
+ * are deliberately dropped while offline: unlike lane/cars/msg/clear/preset
+ * they are not a durable user intent and must not acknowledge a later message
  * after the room replay establishes the current state.
  */
-export type RoomClientIntent = SetLane | SetCars | SetMsg | Clear | Ack;
+export type RoomClientIntent =
+  SetLane | SetCars | SetMsg | Clear | SetPreset | Ack;
 
 /**
  * Second argument to every `onConnection` callback. Only meaningful when
@@ -175,7 +177,8 @@ export class RoomClient {
   private replayed = false;
   private pendingLane: SetLane | undefined;
   private pendingCars: SetCars | undefined;
-  private readonly pendingMessages: Array<SetMsg | Clear> = [];
+  /** `msg`, `clear` and `preset` edits, in the order the user made them. */
+  private readonly pendingMessages: Array<SetMsg | Clear | SetPreset> = [];
 
   /** Most recent accepted state sequence for the current socket only. */
   lastSeen = 0;

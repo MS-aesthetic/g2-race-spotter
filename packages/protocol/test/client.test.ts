@@ -282,7 +282,9 @@ describe('RoomClient', () => {
     client.send({ t: 'cars', cars: [1, 2, 3] });
     client.send({ t: 'ack', msgId: 'old-message' });
     client.send({ t: 'msg', text: 'first offline' });
+    client.send({ t: 'preset', add: 'Fuel save' });
     client.send({ t: 'clear' });
+    client.send({ t: 'preset', remove: 'Box box' });
     client.send({ t: 'msg', text: 'hold line' });
 
     expect(sent(first)).toEqual([
@@ -306,8 +308,12 @@ describe('RoomClient', () => {
       { t: 'lane', lane: 'top' },
       // Only the latest full cars triple survives the outage, like lane.
       { t: 'cars', cars: [1, 2, 3] },
+      // Preset edits are ordinary queued intents, kept in order with
+      // msg/clear (none of them is collapsed to "the latest").
       { t: 'msg', text: 'first offline' },
+      { t: 'preset', add: 'Fuel save' },
       { t: 'clear' },
+      { t: 'preset', remove: 'Box box' },
       { t: 'msg', text: 'hold line' },
     ]);
   });
@@ -381,6 +387,25 @@ describe('RoomClient', () => {
       [0, 0, 0],
       [0, 2, 3],
     ]);
+  });
+
+  it('hands consumers the room presets, and a state from a relay without them', () => {
+    FakeWebSocket.reset();
+    const timers = new FakeTimers();
+    const client = createClient(timers);
+    const presets: unknown[] = [];
+    client.onState((value) => presets.push(value.presets ?? []));
+
+    client.connect('ws://relay.test/room/CAR42?role=spotter');
+    const socket = FakeWebSocket.sockets[0];
+    socket.open();
+    // An older relay omits `presets`: still a v2 state (additive field).
+    socket.receive(state(1));
+    socket.receive({ ...state(2), presets: ['Fuel save'] });
+    // A malformed presets list makes the frame invalid, so it is dropped.
+    socket.receive({ ...state(3), presets: ['dup', 'dup'] });
+
+    expect(presets).toEqual([[], ['Fuel save']]);
   });
 
   it('uses one ping timer for the current socket and ignores stale replacement events', () => {

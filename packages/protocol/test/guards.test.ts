@@ -18,6 +18,8 @@ import pingInvalid from './fixtures/ping.invalid.json';
 import pingValid from './fixtures/ping.valid.json';
 import pongInvalid from './fixtures/pong.invalid.json';
 import pongValid from './fixtures/pong.valid.json';
+import presetInvalid from './fixtures/preset.invalid.json';
+import presetValid from './fixtures/preset.valid.json';
 import stateInvalid from './fixtures/state.invalid.json';
 import stateValid from './fixtures/state.valid.json';
 
@@ -28,9 +30,13 @@ import {
   isPong,
   isSetCars,
   isSetMsg,
+  isSetPreset,
   isState,
   isWireMessage,
+  MSG_MAX_CHARS,
+  PRESETS_MAX,
   PROTOCOL_VERSION,
+  ROOM_TTL_MS,
 } from '../src/index';
 
 type FixtureExpectation = {
@@ -72,6 +78,12 @@ const fixtures: readonly FixtureExpectation[] = [
     guard: isClientMessage,
     valid: pingValid,
     invalid: pingInvalid,
+  },
+  {
+    name: 'preset',
+    guard: isSetPreset,
+    valid: presetValid,
+    invalid: presetInvalid,
   },
   { name: 'state', guard: isState, valid: stateValid, invalid: stateInvalid },
   { name: 'pong', guard: isPong, valid: pongValid, invalid: pongInvalid },
@@ -142,6 +154,53 @@ describe('protocol v2 guards', () => {
     expect(isState({ ...base, calledAt: 0 })).toBe(true);
     expect(isState({ ...base, calledAt: -1 })).toBe(false);
     expect(isState({ ...base, calledAt: '1' })).toBe(false);
+  });
+
+  it('accepts preset add/remove with one trimmed 1..80-char text', () => {
+    expect(isSetPreset({ t: 'preset', add: 'Fuel save' })).toBe(true);
+    expect(isClientMessage({ t: 'preset', remove: 'Fuel save' })).toBe(true);
+    expect(isSetPreset({ t: 'preset', add: 'a'.repeat(MSG_MAX_CHARS) })).toBe(
+      true,
+    );
+    expect(
+      isSetPreset({ t: 'preset', add: 'a'.repeat(MSG_MAX_CHARS + 1) }),
+    ).toBe(false);
+    expect(isSetPreset({ t: 'preset', add: ' padded ' })).toBe(false);
+    expect(isSetPreset({ t: 'preset', add: '' })).toBe(false);
+    expect(isSetPreset({ t: 'preset' })).toBe(false);
+    expect(isSetPreset({ t: 'preset', add: 7 })).toBe(false);
+    expect(isSetPreset({ t: 'preset', remove: 'x', extra: 1 })).toBe(false);
+  });
+
+  it('accepts a state with or without presets (additive), validating them when present', () => {
+    const base = stateValid as Record<string, unknown>;
+    const withoutPresets: Record<string, unknown> = { ...base };
+    delete withoutPresets.presets;
+
+    // A relay that predates presets omits the field; that frame is still v2.
+    expect(isState(withoutPresets)).toBe(true);
+    expect(isState({ ...base, presets: [] })).toBe(true);
+    expect(
+      isState({
+        ...base,
+        presets: Array.from({ length: PRESETS_MAX }, (_, i) => `p${i}`),
+      }),
+    ).toBe(true);
+    expect(
+      isState({
+        ...base,
+        presets: Array.from({ length: PRESETS_MAX + 1 }, (_, i) => `p${i}`),
+      }),
+    ).toBe(false);
+    expect(isState({ ...base, presets: ['dup', 'dup'] })).toBe(false);
+    expect(isState({ ...base, presets: [' untrimmed'] })).toBe(false);
+    expect(isState({ ...base, presets: 'Fuel save' })).toBe(false);
+    expect(isState({ ...base, presets: [1] })).toBe(false);
+  });
+
+  it('keeps an idle room for 24 hours (Maxx, design round 4)', () => {
+    expect(ROOM_TTL_MS).toBe(24 * 60 * 60 * 1_000);
+    expect(PRESETS_MAX).toBe(12);
   });
 
   it('calls a room with no lane, no car and no message empty', () => {

@@ -12,5 +12,6 @@
   "spotterOnline": true,
   "driverOnline": false,
   "updatedAt": 1725408000100,
-  "calledAt": 1725408000000
+  "calledAt": 1725408000000,
+  "presets": ["Watch the kerb T4", "Fuel save"]
 }

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   createInitialState,
   INITIAL_STATE,
+  MSG_MAX_CHARS,
+  PRESETS_MAX,
   reduce,
   type ReducerContext,
   type ReducerEvent,
@@ -38,9 +40,11 @@ describe('reduce', () => {
       driverOnline: false,
       updatedAt: 0,
       calledAt: 0,
+      presets: [],
     });
     expect(createInitialState()).not.toBe(createInitialState());
     expect(createInitialState().cars).not.toBe(createInitialState().cars);
+    expect(createInitialState().presets).not.toBe(createInitialState().presets);
   });
 
   it('sets lane only for the spotter and leaves same lanes alone', () => {
@@ -309,6 +313,177 @@ describe('reduce', () => {
     expect(later).toMatchObject({ lane: 'mid', seq: 2, updatedAt: 1_000 });
     expect(expired).toEqual(INITIAL_STATE);
     expect(expired).not.toBe(INITIAL_STATE);
+  });
+
+  it('saves and forgets presets for the spotter only, deduped and capped, without a call', () => {
+    const initial = reduce(
+      createInitialState(),
+      event({ t: 'lane', role: 'spotter', lane: 'top' }),
+      context(1_000),
+    );
+    const saved = reduce(
+      initial,
+      event({ t: 'preset', role: 'spotter', add: 'Fuel save' }),
+      context(2_000),
+    );
+    expect(saved).toMatchObject({
+      presets: ['Fuel save'],
+      seq: initial.seq + 1,
+      updatedAt: 2_000,
+      // Saving a message is not a call: the stale-clear clock does not move.
+      calledAt: 1_000,
+      lane: 'top',
+    });
+
+    // Same text again (after trimming) is a no-op: no seq bump, same object.
+    expect(
+      reduce(
+        saved,
+        event({ t: 'preset', role: 'spotter', add: '  Fuel save ' }),
+        context(3_000),
+      ),
+    ).toBe(saved);
+    // Only the spotter edits presets.
+    expect(
+      reduce(
+        saved,
+        event({ t: 'preset', role: 'driver', add: 'Driver note' }),
+        context(3_000),
+      ),
+    ).toBe(saved);
+    expect(
+      reduce(
+        saved,
+        event({ t: 'preset', role: 'driver', remove: 'Fuel save' }),
+        context(3_000),
+      ),
+    ).toBe(saved);
+    // Empty and over-long texts never land in the room.
+    expect(
+      reduce(
+        saved,
+        event({ t: 'preset', role: 'spotter', add: '   ' }),
+        context(3_000),
+      ),
+    ).toBe(saved);
+    expect(
+      reduce(
+        saved,
+        event({
+          t: 'preset',
+          role: 'spotter',
+          add: 'x'.repeat(MSG_MAX_CHARS + 1),
+        }),
+        context(3_000),
+      ),
+    ).toBe(saved);
+
+    const second = reduce(
+      saved,
+      event({ t: 'preset', role: 'spotter', add: 'Box box' }),
+      context(3_000),
+    );
+    expect(second.presets).toEqual(['Fuel save', 'Box box']);
+    expect(saved.presets).toEqual(['Fuel save']);
+
+    const removed = reduce(
+      second,
+      event({ t: 'preset', role: 'spotter', remove: 'Fuel save' }),
+      context(4_000),
+    );
+    expect(removed).toMatchObject({
+      presets: ['Box box'],
+      seq: second.seq + 1,
+      calledAt: 1_000,
+    });
+    // Removing what is not there is a no-op.
+    expect(
+      reduce(
+        removed,
+        event({ t: 'preset', role: 'spotter', remove: 'Fuel save' }),
+        context(5_000),
+      ),
+    ).toBe(removed);
+  });
+
+  it('stops at PRESETS_MAX presets', () => {
+    let state = createInitialState();
+    for (let index = 0; index < PRESETS_MAX; index += 1) {
+      state = reduce(
+        state,
+        event({ t: 'preset', role: 'spotter', add: `preset ${index}` }),
+        context(1_000 + index),
+      );
+    }
+    expect(state.presets).toHaveLength(PRESETS_MAX);
+
+    const full = reduce(
+      state,
+      event({ t: 'preset', role: 'spotter', add: 'one too many' }),
+      context(9_000),
+    );
+    expect(full).toBe(state);
+
+    // Removing one makes room again.
+    const freed = reduce(
+      reduce(
+        state,
+        event({ t: 'preset', role: 'spotter', remove: 'preset 0' }),
+        context(9_000),
+      ),
+      event({ t: 'preset', role: 'spotter', add: 'one too many' }),
+      context(9_001),
+    );
+    expect(freed.presets).toHaveLength(PRESETS_MAX);
+    expect(freed.presets?.at(-1)).toBe('one too many');
+  });
+
+  it('keeps presets through a stale clear and drops them on expiry', () => {
+    let state = reduce(
+      createInitialState(),
+      event({ t: 'preset', role: 'spotter', add: 'Fuel save' }),
+      context(500),
+    );
+    state = reduce(
+      state,
+      event({ t: 'cars', role: 'spotter', cars: [0, 2, 0] }),
+      context(1_000),
+    );
+
+    const cleared = reduce(state, event({ t: 'stale' }), context(7_000));
+    expect(cleared).toMatchObject({
+      cars: [0, 0, 0],
+      presets: ['Fuel save'],
+      calledAt: 0,
+    });
+    // A room holding only presets shows nothing, so it is not stale-cleared
+    // again (and the relay never arms for it).
+    expect(reduce(cleared, event({ t: 'stale' }), context(14_000))).toBe(
+      cleared,
+    );
+
+    expect(reduce(cleared, event({ t: 'expire' }), context(9_000))).toEqual(
+      INITIAL_STATE,
+    );
+  });
+
+  it('treats a stored state without presets as having none', () => {
+    const legacy = createInitialState();
+    delete legacy.presets;
+
+    const saved = reduce(
+      legacy,
+      event({ t: 'preset', role: 'spotter', add: 'Fuel save' }),
+      context(1_000),
+    );
+    expect(saved.presets).toEqual(['Fuel save']);
+    expect(
+      reduce(
+        legacy,
+        event({ t: 'preset', role: 'spotter', remove: 'Fuel save' }),
+        context(1_000),
+      ),
+    ).toBe(legacy);
   });
 
   it('ignores client messages that cannot change room state', () => {

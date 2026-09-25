@@ -1,5 +1,7 @@
 import {
   CAR_LEVEL_MAX,
+  MSG_MAX_CHARS,
+  PRESETS_MAX,
   isHudEmpty,
   type Ack,
   type CarLevel,
@@ -11,6 +13,7 @@ import {
   type SetCars,
   type SetLane,
   type SetMsg,
+  type SetPreset,
   type State,
 } from './index.ts';
 
@@ -55,10 +58,11 @@ export const INITIAL_STATE: Readonly<State> = {
   driverOnline: false,
   updatedAt: 0,
   calledAt: 0,
+  presets: Object.freeze([]) as unknown as string[],
 };
 
 export function createInitialState(): State {
-  return { ...INITIAL_STATE, cars: [0, 0, 0] };
+  return { ...INITIAL_STATE, cars: [0, 0, 0], presets: [] };
 }
 
 function changed(
@@ -66,7 +70,13 @@ function changed(
   changes: Partial<
     Pick<
       State,
-      'lane' | 'cars' | 'msg' | 'spotterOnline' | 'driverOnline' | 'calledAt'
+      | 'lane'
+      | 'cars'
+      | 'msg'
+      | 'spotterOnline'
+      | 'driverOnline'
+      | 'calledAt'
+      | 'presets'
     >
   >,
   now: number,
@@ -180,6 +190,46 @@ function reduceAck(
 }
 
 /**
+ * Save or forget a custom message. Not a spotter *call*: the HUD does not
+ * change, so `calledAt` (the stale-clear clock) is left alone. Adding a text
+ * the room already holds, adding past `PRESETS_MAX`, or removing one it does
+ * not hold is a no-op.
+ */
+function reducePreset(
+  state: State,
+  event: SetPreset & { readonly role: Role },
+  ctx: ReducerContext,
+): State {
+  if (event.role !== 'spotter') {
+    return state;
+  }
+
+  const presets = state.presets ?? [];
+  if ('add' in event) {
+    const text = event.add.trim();
+    if (
+      text.length === 0 ||
+      text.length > MSG_MAX_CHARS ||
+      presets.includes(text) ||
+      presets.length >= PRESETS_MAX
+    ) {
+      return state;
+    }
+
+    return changed(state, { presets: [...presets, text] }, ctx.now);
+  }
+
+  const text = event.remove.trim();
+  return presets.includes(text)
+    ? changed(
+        state,
+        { presets: presets.filter((entry) => entry !== text) },
+        ctx.now,
+      )
+    : state;
+}
+
+/**
  * Apply a validated room event without side effects. Events that cannot affect
  * room state (hello, ping, wrong-role and unknown event variants) are no-ops.
  */
@@ -199,6 +249,8 @@ export function reduce(
       return reduceClear(state, event, ctx);
     case 'ack':
       return reduceAck(state, event, ctx);
+    case 'preset':
+      return reducePreset(state, event, ctx);
     case 'peer':
       if (event.role === 'spotter') {
         return event.online === state.spotterOnline
@@ -212,8 +264,10 @@ export function reduce(
       }
       return state;
     case 'expire':
+      // A fresh room lifetime: presets go with everything else.
       return createInitialState();
     case 'stale':
+      // Clears only what the HUD shows; the room's saved presets stay.
       return isHudEmpty(state)
         ? state
         : changed(
