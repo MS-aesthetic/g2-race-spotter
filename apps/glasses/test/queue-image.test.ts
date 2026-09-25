@@ -16,6 +16,7 @@ import {
   FakeBridge,
   FakeClock,
   flush,
+  shownImages,
 } from './helpers.ts';
 
 function imageQueue(): {
@@ -352,6 +353,51 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
         CONTAINER_STRIP_TL,
       ),
     );
+  });
+
+  it('re-sends a same-bytes job that arrived while its container was failing', async () => {
+    // hud-qa T057 block: lane top on the glasses; the spotter calls mid;
+    // stripTL lands, stripTR (mid) is in flight when a cars frame with the
+    // same lane arrives — and that stripTR send fails.
+    const { bridge, queue } = await primed({ lane: 'top', cars: [0, 0, 0] });
+    bridge.imageResult = (index) => (index === 5 ? 'sendFailed' : 'success');
+
+    bridge.paused = true;
+    queue.push(hud({ lane: 'mid', cars: [0, 0, 0] }));
+    await flush();
+    bridge.release(); // stripTL (call 4) succeeds…
+    await flush();
+    expect(names(images(bridge).slice(4))).toEqual(['stripTL', 'stripTR']);
+
+    // …and stripTR (call 5) is in flight when the cars frame arrives.
+    queue.push(hud({ lane: 'mid', cars: [2, 0, 0] }));
+    bridge.paused = false;
+    bridge.release();
+    await queue.whenIdle();
+
+    const stripTR = images(bridge).filter(
+      (payload) => payload.containerID === CONTAINER_STRIP_TR,
+    );
+    const mid = packContainers({ lane: 'mid', cars: [2, 0, 0] }, true);
+    expect(stripTR).toHaveLength(3);
+    expect(stripTR[2]?.imageData).toEqual(mid.get(CONTAINER_STRIP_TR));
+    expect(shownImages(bridge)).toEqual(mid);
+  });
+
+  it('sends nothing extra for a same-bytes job when the flight succeeds', async () => {
+    const { bridge, queue } = await primed({ lane: 'top', cars: [0, 0, 0] });
+
+    bridge.paused = true;
+    queue.push(hud({ lane: 'mid', cars: [0, 0, 0] }));
+    await flush();
+    bridge.release();
+    await flush();
+    queue.push(hud({ lane: 'mid', cars: [0, 0, 0] }));
+    bridge.paused = false;
+    bridge.release();
+    await queue.whenIdle();
+
+    expect(names(images(bridge).slice(4))).toEqual(['stripTL', 'stripTR']);
   });
 
   it('does not count a failed send as on the glasses', async () => {

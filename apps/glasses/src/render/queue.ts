@@ -155,11 +155,6 @@ interface Outcome<T> {
   readonly failed: boolean;
 }
 
-interface InFlightImage {
-  readonly containerID: number;
-  readonly bytes: Uint8Array;
-}
-
 const STRIP_BY_ID = new Map<number, StripContainer>(
   STRIP_CONTAINERS.map((container) => [container.containerID, container]),
 );
@@ -189,7 +184,6 @@ export class RenderQueue {
   private readonly dirty = new Set<number>();
   /** Bytes the host last accepted (`success`) per container. */
   private readonly lastSent = new Map<number, Uint8Array>();
-  private inFlight: InFlightImage | undefined;
   /** Bottom-strip containers taken into the flush that is going out now. */
   private readonly bottomFlush = new Set<number>();
   private bottomImmediate = false;
@@ -249,18 +243,17 @@ export class RenderQueue {
 
   /**
    * Replaces each container's pending job with the new bytes, or drops it
-   * when the glasses already show (or are being sent) exactly those bytes.
+   * when they equal the last bytes the host ACCEPTED for that container. A
+   * send still in flight is deliberately not compared against: if it fails,
+   * the job pushed meanwhile must still go out (a same-bytes push after a
+   * success is skipped at send time instead).
    */
   private pushImages(job: HudJob): void {
     const packed = packContainers(job.state, job.linkOk);
 
     for (const [containerID, bytes] of packed) {
       this.desired.set(containerID, bytes);
-      const shown =
-        this.inFlight?.containerID === containerID
-          ? this.inFlight.bytes
-          : this.lastSent.get(containerID);
-      if (sameBytes(shown, bytes)) {
+      if (sameBytes(this.lastSent.get(containerID), bytes)) {
         this.dirty.delete(containerID);
       } else {
         this.dirty.add(containerID);
@@ -436,20 +429,20 @@ export class RenderQueue {
       imageHeight: STRIP_HEIGHT,
     });
 
-    this.inFlight = { containerID, bytes };
-    let outcome: Outcome<unknown>;
-    try {
-      outcome = await this.timed(
-        'updateImageRawData',
-        () => this.bridge.updateImageRawData(payload),
-        container.containerName,
-      );
-    } finally {
-      this.inFlight = undefined;
-    }
+    const outcome = await this.timed(
+      'updateImageRawData',
+      () => this.bridge.updateImageRawData(payload),
+      container.containerName,
+    );
 
     if (outcome.value === 'success') {
       this.lastSent.set(containerID, bytes);
+      // A push during the flight that went back to the OLD bytes was dropped
+      // as "already shown"; now that these bytes landed, it is not.
+      const wanted = this.desired.get(containerID);
+      if (wanted !== undefined && !sameBytes(wanted, bytes)) {
+        this.dirty.add(containerID);
+      }
     }
 
     // Only `sendFailed` counts toward the fallback: an oversize or malformed

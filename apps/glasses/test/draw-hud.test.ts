@@ -329,12 +329,16 @@ describe('HUD strips (050 AC-1)', () => {
 });
 
 describe('splitStrip (the seam at x 288)', () => {
-  it('cuts a strip into two 288x48 halves that re-join byte for byte', () => {
+  it('cuts every golden strip into two 288x48 halves that re-join byte for byte', () => {
     const strips = [
       ...(['top', 'mid', 'bot', null] as const).map((lane) =>
         drawTopStrip(lane, ON),
       ),
       drawBottomStrip([1, 2, 3], ON),
+      drawBottomStrip([0, 0, 0], ON),
+      drawBottomStrip([3, 0, 0], ON),
+      drawTopStrip('top', OFF),
+      drawBottomStrip([1, 2, 3], OFF),
       drawBottomStrip([3, 3, 3], OFF),
     ];
 
