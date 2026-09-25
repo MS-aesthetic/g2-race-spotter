@@ -442,6 +442,11 @@ export class RenderQueue {
       const wanted = this.desired.get(containerID);
       if (wanted !== undefined && !sameBytes(wanted, bytes)) {
         this.dirty.add(containerID);
+      } else {
+        // A same-bytes push during the flight left a dirty flag behind; it
+        // would cost no call but would open an empty flush that resets the
+        // cars debounce. Drop it.
+        this.dirty.delete(containerID);
       }
     }
 
