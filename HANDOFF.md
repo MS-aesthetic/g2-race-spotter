@@ -9,7 +9,7 @@ Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside 
 
 ## Current status
 
-- Branch `master`; plan status `BUILDING` (consolidated plan since 2026-09-04); no active lease; no Git remote.
+- Branch `master`; plan status `BUILDING` (consolidated plan since 2026-09-04); no active lease; remote `origin` = https://github.com/MS-aesthetic/g2-race-spotter (public, `master`). Push after every integration; the OneDrive bundle hand-off is retired.
 - **Both apps exist now.** Glasses app (`apps/glasses`, image-first HUD drawn from primitives; edit `src/render/hud-design.ts` to change the look) and spotter PWA (`apps/spotter`, 6 KB gz) are integrated with the relay and the shared `RoomClient`. Automated criteria met: 010 AC-1/2/6/7; 020 AC-1–6, 8; 030 AC-1–6; 040 AC-1–5; 050 AC-1–5.
 - Main passes on Node 22: typecheck, **205/205** tests (33 files, live `wrangler dev`), lint (0 errors, 2 pre-existing generated-d.ts warnings) + prettier, `check:pins`, `sync:agents:check`, both app builds, `wrangler deploy --dry-run` with the real spotter assets. Read gate exit codes, never grep their output.
 - Reviews for every application commit live under `docs/reviews/` (`2026-09-04-repair-iteration.md`, `-round-2-T009-T017.md`, `-round-3-T030-T040.md`; `ralph/last-review.md` is git-ignored scratch). HUD preview: `docs/reviews/hud-design-preview.png`.
