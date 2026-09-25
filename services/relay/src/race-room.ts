@@ -74,7 +74,10 @@ export class RaceRoom extends DurableObject<Env> {
         );
       }
       if (isState(stored)) {
-        this.state = stored;
+        // A v2 room stored before presets existed (additive field) keeps its
+        // lane/cars/msg and simply has none saved yet.
+        this.state =
+          stored.presets === undefined ? { ...stored, presets: [] } : stored;
       } else {
         // Keep the old room's clock so a v1 room nobody rejoins still gets
         // its full TTL instead of expiring (and dropping its PIN) at once.

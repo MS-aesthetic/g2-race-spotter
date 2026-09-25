@@ -186,6 +186,7 @@ describe('relay HTTP routes', () => {
       t: 'state',
       updatedAt: 0,
       calledAt: 0,
+      presets: [],
     });
     expectCors(debug);
   }, 20_000);
