@@ -116,109 +116,191 @@ button {
   font-size: 22px;
 }
 
+.join__section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.join__section > p {
+  margin: 0;
+}
+
+/* The generated room code, shown large (design round 4). */
+.join__code {
+  color: var(--accent);
+  font:
+    800 56px/1.1 ui-monospace,
+    'SFMono-Regular',
+    Menlo,
+    monospace;
+  letter-spacing: 0.1em;
+}
+
+.link {
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: #9fb2bf;
+  font-size: 16px;
+  text-decoration: underline;
+}
+
 /* ---------- Console ----------
 
-   One screen, never a scroll (Maxx, 2026-09-04 design round 2; rows updated
-   in design round 3, 2026-09-25): the console is
-   a full-viewport grid whose lane stack takes whatever is left after the fixed
-   rows, and the whole thing clips rather than scrolls. Every row below is
-   sized so the stack still clears 64 px at 360x640. */
+   One screen, never a scroll (Maxx, 2026-09-04 design round 2). Design round
+   4 (2026-09-25): a one-row header of small icons, then the TOP half — lane
+   row (▼ BOTTOM · ▬ MIDDLE · ▲ TOP, left to right) and three vertical car
+   sliders — and the BOTTOM half: five built-in messages, the room's saved
+   messages, and the message row. The top half is fixed height; the saved
+   messages take what is left. */
 
 .console {
   display: grid;
-  /* header / banner / body / update toast */
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  /* header / body / update toast */
+  grid-template-rows: auto minmax(0, 1fr) auto;
   height: 100vh; /* fallback for browsers without dvh */
   height: 100dvh;
   overflow: hidden;
 }
 
-.header {
+/* ---------- Header: one 36 px row of small icons ---------- */
+
+.hdr {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
   align-items: center;
-  padding: max(6px, env(safe-area-inset-top)) var(--pad) 6px;
+  gap: 8px;
+  height: calc(36px + env(safe-area-inset-top));
+  padding: env(safe-area-inset-top) var(--pad) 0;
   background: var(--surface);
-  border-bottom: 2px solid var(--border);
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  white-space: nowrap;
 }
 
-.header--offline {
-  background: var(--amber);
-  color: #17110a;
+/* The chip looks small, but its hit box is the full 44 px: the extra height
+   hangs transparently over the header's edges. */
+.hdr__code {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -4px 0 -4px -6px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
 }
 
-.header--down {
+.hdr__chip {
+  padding: 2px 8px;
+  border: 1.5px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font:
+    700 15px/1.2 ui-monospace,
+    'SFMono-Regular',
+    Menlo,
+    monospace;
+  letter-spacing: 0.08em;
+}
+
+.dot {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #5b6874;
+}
+
+.dot.is-ok,
+.dot.is-on {
+  background: var(--accent);
+}
+
+.dot.is-down {
+  background: var(--alert);
+}
+
+.pill {
+  padding: 2px 8px;
+  border-radius: 10px;
   background: var(--alert);
   color: #1a0707;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
-.header__sep {
-  opacity: 0.5;
-}
-
-.header__latency.is-stale {
-  opacity: 0.5;
-}
-
-.header__ack {
-  margin-left: auto;
-  font-weight: 700;
-}
-
-.banner {
-  padding: 5px var(--pad);
-  background: var(--alert);
-  color: #1a0707;
-  font-weight: 700;
+.hdr__ack {
   font-size: 15px;
-  letter-spacing: 0.12em;
-  text-align: center;
+  color: var(--amber);
+}
+
+.hdr__ack.is-acked {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.hdr__latency {
+  margin-left: auto;
+  color: #9fb2bf;
+}
+
+.hdr__latency.is-stale {
+  opacity: 0.5;
 }
 
 .console__body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
   overflow: hidden;
   padding: 8px var(--pad) max(8px, env(safe-area-inset-bottom));
 }
 
-.console__right {
+.half {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  min-width: 0;
 }
 
-/* ---------- Lanes ---------- */
+.half--top {
+  flex: 0 0 auto;
+}
+
+.half--bottom {
+  flex: 1 1 auto;
+}
+
+/* ---------- Lanes: ▼ BOTTOM · ▬ MIDDLE · ▲ TOP, left to right ---------- */
 
 .lanes {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
-.lane {
+.lane,
+.lane-clear {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 16px;
-  /* Stretch into the space the fixed rows leave, but never below the 64 px
-     floor the skill sets for a gloved thumb. */
-  flex: 1 1 0;
+  justify-content: center;
+  gap: 2px;
   min-height: 64px;
-  padding: 0 20px;
+  padding: 0 4px;
   border: 2px solid var(--accent);
   border-radius: 12px;
   background: var(--bg);
   color: var(--accent);
   transition: background 120ms linear;
+}
+
+.lane {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .lane.is-selected {
@@ -227,54 +309,46 @@ button {
 }
 
 .lane__glyph {
-  font-size: 30px;
+  font-size: 24px;
   line-height: 1;
 }
 
 .lane__label {
-  font-size: 22px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
 }
 
 .lane-clear {
-  flex: 0 0 auto;
-  align-self: stretch;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 0;
-  background: none;
+  flex: 0 0 52px;
+  border-color: var(--border);
   color: #9fb2bf;
-  text-decoration: underline;
-  font-size: 16px;
 }
 
-/* ---------- Cars behind ----------
+.lane-clear__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
 
-   Three rows, LEFT / MIDDLE / RIGHT, each a 3-segment tappable bar (Maxx,
-   2026-09-25 design round 3). Lit segments fill left to right like the
-   glasses' bars; a row at level 3 goes red like the glasses' alert outline. */
+/* ---------- Cars behind: three vertical 3-segment sliders ----------
 
-.cars {
+   Segments stack bottom-up like a level meter (1 at the bottom, 3 on top),
+   label underneath. `touch-action: none` so a drag across the segments is a
+   slide, not a scroll or a cancelled pointer. */
+
+.sliders {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.slider {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.carrow {
-  display: grid;
-  grid-template-columns: 5.2em repeat(3, minmax(0, 1fr));
-  align-items: stretch;
   gap: 4px;
-}
-
-.carrow__label {
-  align-self: center;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #9fb2bf;
+  touch-action: none;
 }
 
 .seg {
@@ -286,6 +360,7 @@ button {
   color: var(--accent);
   font-size: 15px;
   font-weight: 700;
+  touch-action: none;
   transition: background 120ms linear;
 }
 
@@ -294,43 +369,104 @@ button {
   color: #06120a;
 }
 
-.carrow--hot .seg {
+.slider--hot .seg {
   border-color: var(--alert);
   color: var(--alert);
 }
 
-.carrow--hot .seg.is-lit {
+.slider--hot .seg.is-lit {
   background: var(--alert);
   color: #1a0707;
 }
 
-.chip {
-  min-height: 44px;
-  padding: 0 14px;
+.slider__label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: #9fb2bf;
+}
+
+/* ---------- Messages ---------- */
+
+.says {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.say {
+  min-height: 48px;
+  padding: 0 8px;
+  border: 2px solid var(--amber);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--amber);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* SPIN is the odd fifth: it gets the full width, and the alert colour. */
+.say:last-child {
+  grid-column: 1 / -1;
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+/* The room's saved messages take whatever height is left; a long list
+   scrolls inside this box, never the console. */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pchip {
+  display: flex;
+  max-width: 100%;
   border: 2px solid var(--border);
   border-radius: 22px;
   background: var(--surface);
-  font-size: 15px;
 }
 
-.chip--msg {
+.pchip__text {
   min-width: 0;
+  min-height: 44px;
+  padding: 0 4px 0 14px;
+  border: 0;
+  background: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 15px;
 }
 
-/* ---------- Message ---------- */
+.pchip__x {
+  flex: 0 0 40px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: #9fb2bf;
+  font-size: 20px;
+}
 
 .msg {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 6px;
   flex: 0 0 auto;
+  margin-top: auto;
 }
 
 .msg__input {
-  min-height: 52px;
+  min-height: 48px;
   min-width: 0;
   padding: 0 12px;
   background: var(--surface);
@@ -338,15 +474,8 @@ button {
   border-radius: 10px;
 }
 
-.msg__chips {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 6px;
-  overflow: hidden;
-}
-
 .btn {
-  min-height: 52px;
+  min-height: 48px;
   padding: 0 14px;
   border: 2px solid var(--border);
   border-radius: 10px;
@@ -361,6 +490,10 @@ button {
   color: #06120a;
 }
 
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+}
+
 .toast {
   min-height: 44px;
   margin: 0 var(--pad) max(8px, env(safe-area-inset-bottom));
@@ -371,32 +504,76 @@ button {
   font-size: 16px;
 }
 
-/* Landscape: lanes on the left third, everything else on the right. */
+/* ---------- Room code, large, for the driver ---------- */
+
+.codeview {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: var(--pad);
+  background: rgb(11 15 20 / 97%);
+  text-align: center;
+}
+
+.codeview p {
+  margin: 0;
+}
+
+.codeview__label {
+  font-size: 16px;
+  letter-spacing: 0.2em;
+  color: #9fb2bf;
+}
+
+.codeview__code {
+  color: var(--accent);
+  font:
+    800 min(20vw, 120px) / 1 ui-monospace,
+    'SFMono-Regular',
+    Menlo,
+    monospace;
+  letter-spacing: 0.08em;
+}
+
+.codeview__pin {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.codeview__hint {
+  max-width: 28em;
+  font-size: 15px;
+  color: #9fb2bf;
+}
+
+/* Landscape: the top half on the left, the messages on the right. */
 @media (orientation: landscape) and (max-height: 560px) {
   .console__body {
     flex-direction: row;
     align-items: stretch;
   }
 
-  .lanes {
-    flex: 0 0 33%;
+  .half--top {
+    flex: 0 0 48%;
   }
 
-  .console__right {
-    flex: 1 1 auto;
-    justify-content: flex-start;
+  .half--bottom {
+    flex: 1 1 0;
   }
 
-  .lane {
-    min-height: 64px;
+  /* Three columns so the built-ins take two rows, not three. */
+  .says {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .lane__glyph {
-    font-size: 24px;
-  }
-
-  .lane__label {
-    font-size: 18px;
+  .say:last-child {
+    grid-column: span 2;
   }
 }
 

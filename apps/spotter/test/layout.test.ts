@@ -4,10 +4,12 @@
  * Chromium, because "does it need scrolling?" is a question only a layout
  * engine can answer (jsdom reports every box as 0×0).
  *
- * The relay is not running, so the socket never opens and the console renders
- * with its RECONNECTING banner up. That is the *tallest* console — the banner
- * costs a row that a healthy room does not — so it is the right case to
- * measure.
+ * Two consoles per viewport (design round 4, 2026-09-25): `down` — no relay,
+ * the socket never opens, the header shows its RECONNECTING pill — and `live`
+ * — the page's WebSocket is replaced by an in-page fake that replays a room
+ * holding three saved messages and an unacknowledged message, which is the
+ * fullest console (preset chips, ack icon). Saved messages are room state, so
+ * only a replayed room can show them.
  */
 
 import { createReadStream, existsSync, readdirSync, rmSync } from 'node:fs';
@@ -29,8 +31,14 @@ const VIEWPORTS = [
   { name: 'landscape', width: 740, height: 360 },
 ] as const;
 
+/** Every button, slider segments included (the round-4 brief allowed 40 px
+ * segments; 44 px still fits the top half, so the floor did not move). */
 const MIN_TOUCH_PX = 44;
 const MIN_LANE_PX = 64;
+/** "This can all fit on the top half of the app ui" (Maxx, round 4). */
+const TOP_HALF = 0.5;
+
+const LIVE_PRESETS = ['BOX THIS LAP', 'PIT NOW', 'DEBRIS TURN 4 STAY LEFT'];
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -116,8 +124,55 @@ interface Measured {
   consoleScroll: number;
   consoleClient: number;
   minButton: number;
+  minSegment: number;
   minLane: number;
   buttons: number;
+  slidersBottom: number;
+  presetChips: number;
+  presetsScroll: number;
+  presetsClient: number;
+}
+
+/**
+ * Runs in the page before `main.ts`: a WebSocket that opens at once and
+ * answers `hello` with a replayed room. `RoomClient` only needs
+ * `addEventListener`/`send`/`close`, which an `EventTarget` provides.
+ */
+function installFakeRelay(presets: readonly string[]): void {
+  class FakeRelaySocket extends EventTarget {
+    constructor(readonly url: string) {
+      super();
+      setTimeout(() => this.dispatchEvent(new Event('open')), 0);
+    }
+
+    send(data: string): void {
+      if ((JSON.parse(data) as { t?: string }).t !== 'hello') {
+        return;
+      }
+
+      const state = {
+        t: 'state',
+        seq: 5,
+        lane: 'mid',
+        cars: [1, 2, 3],
+        msg: { id: 'm1', text: 'PIT NOW', ts: 1, ackedAt: null },
+        spotterOnline: true,
+        driverOnline: true,
+        updatedAt: 2,
+        calledAt: 1,
+        presets,
+      };
+      setTimeout(() => {
+        this.dispatchEvent(
+          new MessageEvent('message', { data: JSON.stringify(state) }),
+        );
+      }, 0);
+    }
+
+    close(): void {}
+  }
+
+  Object.assign(window, { WebSocket: FakeRelaySocket });
 }
 
 const executablePath = findChromium();
@@ -164,7 +219,11 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
     rmSync(DIST, { recursive: true, force: true });
   });
 
-  async function measure(width: number, height: number): Promise<Measured> {
+  async function measure(
+    width: number,
+    height: number,
+    live: boolean,
+  ): Promise<Measured> {
     const context = await browser.newContext({
       viewport: { width, height },
       deviceScaleFactor: 2,
@@ -172,47 +231,60 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
       hasTouch: true,
     });
     const page = await context.newPage();
+    if (live) {
+      await page.addInitScript(installFakeRelay, LIVE_PRESETS);
+    }
 
-    // A stored room sends `main.ts` straight to the console, which is the only
-    // screen this criterion is about.
+    // A stored, current room sends `main.ts` straight to the console, which
+    // is the only screen this criterion is about.
     await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       localStorage.setItem('g2rs:v1:room', 'CAR42');
+      localStorage.setItem('g2rs:v1:pin', '1234');
       localStorage.setItem('g2rs:v1:name', 'Sam');
-      // A console with recent chips is the fullest one; measuring the empty
-      // one would let the chip row grow the page unnoticed.
-      localStorage.setItem(
-        'g2rs:v1:recentMsgs',
-        JSON.stringify(['BOX THIS LAP', 'PIT NOW', 'DEBRIS TURN 4']),
-      );
+      localStorage.setItem('g2rs:v1:seenAt', String(Date.now()));
     });
     await page.goto(`${origin}/`, { waitUntil: 'load' });
     await page.waitForSelector('.console .lane');
-    // The banner is what makes the console tallest; wait for it to be up.
     await page.waitForSelector(
-      '[data-testid="reconnect-banner"]:not([hidden])',
+      live
+        ? '[data-testid="preset-chips"]:not([hidden])'
+        : '[data-testid="reconnect-pill"]:not([hidden])',
     );
 
     try {
       return await page.evaluate(() => {
         const consoleEl = document.querySelector('.console')!;
+        const presetsEl = document.querySelector('.presets')!;
+        const visible = (el: Element): boolean =>
+          el.getBoundingClientRect().height > 0;
+        const height = (el: Element): number =>
+          el.getBoundingClientRect().height;
         // A hidden slot (the update toast) is 0 px by design; only what the
         // spotter can actually hit has to clear the touch floor.
-        const heights = [...consoleEl.querySelectorAll('button')]
-          .filter((el) => !el.hasAttribute('hidden'))
-          .map((el) => el.getBoundingClientRect().height);
-        const lanes = [...consoleEl.querySelectorAll('.lane')].map(
-          (el) => el.getBoundingClientRect().height,
+        const buttons = [...consoleEl.querySelectorAll('button')].filter(
+          visible,
         );
+        const segments = buttons.filter((el) => el.matches('.seg'));
+        const others = buttons.filter((el) => !el.matches('.seg'));
 
         return {
           documentScroll: document.documentElement.scrollHeight,
           innerHeight: window.innerHeight,
           consoleScroll: consoleEl.scrollHeight,
           consoleClient: consoleEl.clientHeight,
-          minButton: Math.min(...heights),
-          minLane: Math.min(...lanes),
-          buttons: heights.length,
+          minButton: Math.min(...others.map(height)),
+          minSegment: Math.min(...segments.map(height)),
+          minLane: Math.min(
+            ...[...consoleEl.querySelectorAll('.lane')].map(height),
+          ),
+          buttons: buttons.length,
+          slidersBottom: document
+            .querySelector('.sliders')!
+            .getBoundingClientRect().bottom,
+          presetChips: presetsEl.querySelectorAll('.pchip').length,
+          presetsScroll: presetsEl.scrollHeight,
+          presetsClient: presetsEl.clientHeight,
         };
       });
     } finally {
@@ -221,21 +293,45 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
   }
 
   for (const viewport of VIEWPORTS) {
-    it(`fits ${viewport.name} (${viewport.width}x${viewport.height})`, async () => {
-      const measured = await measure(viewport.width, viewport.height);
+    for (const live of [false, true]) {
+      const label = live ? 'live room with presets' : 'relay down';
+      it(`fits ${viewport.name} (${viewport.width}x${viewport.height}), ${label}`, async () => {
+        const measured = await measure(viewport.width, viewport.height, live);
+        const portrait = viewport.height > viewport.width;
 
-      // Reported so a regression says by how much, not just that it failed.
-      console.info(
-        `layout ${viewport.width}x${viewport.height}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes min ${measured.minLane}px`,
-      );
+        // Reported so a regression says by how much, not just that it failed.
+        console.info(
+          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, segments min ${measured.minSegment}px, lanes min ${measured.minLane}px, sliders end y=${measured.slidersBottom}, preset chips ${measured.presetChips} (${measured.presetsScroll} <= ${measured.presetsClient})`,
+        );
 
-      expect(measured.documentScroll).toBeLessThanOrEqual(measured.innerHeight);
-      expect(measured.consoleScroll).toBeLessThanOrEqual(
-        measured.consoleClient,
-      );
-      expect(measured.buttons).toBeGreaterThanOrEqual(11);
-      expect(measured.minButton).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
-      expect(measured.minLane).toBeGreaterThanOrEqual(MIN_LANE_PX);
-    }, 60_000);
+        expect(measured.documentScroll).toBeLessThanOrEqual(
+          measured.innerHeight,
+        );
+        expect(measured.consoleScroll).toBeLessThanOrEqual(
+          measured.consoleClient,
+        );
+        // code chip + 3 lanes + clear + 9 segments + 5 built-ins + Send/Save,
+        // and in the live room a text + × button per saved message.
+        expect(measured.buttons).toBe(
+          21 + (live ? 2 * LIVE_PRESETS.length : 0),
+        );
+        expect(measured.minButton).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
+        expect(measured.minSegment).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
+        expect(measured.minLane).toBeGreaterThanOrEqual(MIN_LANE_PX);
+        if (portrait) {
+          // Lanes and sliders all sit in the top half of a portrait phone.
+          expect(measured.slidersBottom).toBeLessThanOrEqual(
+            measured.innerHeight * TOP_HALF,
+          );
+        }
+        if (live) {
+          // Three saved messages are all visible without scrolling their box.
+          expect(measured.presetChips).toBe(LIVE_PRESETS.length);
+          expect(measured.presetsScroll).toBeLessThanOrEqual(
+            measured.presetsClient,
+          );
+        }
+      }, 60_000);
+    }
   }
 });

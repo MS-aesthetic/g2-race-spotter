@@ -32,6 +32,11 @@ export interface OptimisticCars {
 
 export interface Model {
   screen: 'join' | 'console';
+  /**
+   * Join screen: `new` = the generated room code + "Set a PIN" (first visit),
+   * `existing` = the classic room/PIN/name form for a second phone.
+   */
+  joinMode: 'new' | 'existing';
   form: JoinForm;
   /** Join-screen message, e.g. the "wrong PIN" bounce from close 4401. */
   notice: string | null;
@@ -41,11 +46,14 @@ export interface Model {
   /** Last replayed room state; `null` until the first `state` frame. */
   state: State | null;
   draft: string;
-  recent: readonly string[];
+  /** The room-code overlay the spotter shows the driver (header chip tap). */
+  showCode: boolean;
   latencyMs: number | null;
   latencyAt: number | null;
   optimisticLane: OptimisticLane | null;
   optimisticCars: OptimisticCars | null;
+  /** The sliders while a finger is down on one (nothing sent yet). */
+  dragCars: Cars | null;
   now: number;
   updateReady: boolean;
   showInstallHint: boolean;
@@ -54,17 +62,19 @@ export interface Model {
 export function createModel(overrides: Partial<Model> = {}): Model {
   return {
     screen: 'join',
+    joinMode: 'existing',
     form: { room: '', pin: '', name: '' },
     notice: null,
     relayHost: '',
     conn: 'closed',
     state: null,
     draft: '',
-    recent: [],
+    showCode: false,
     latencyMs: null,
     latencyAt: null,
     optimisticLane: null,
     optimisticCars: null,
+    dragCars: null,
     now: 0,
     updateReady: false,
     showInstallHint: false,
@@ -88,19 +98,30 @@ export function selectedLane(model: Model): Lane | null {
 const NO_CARS: Readonly<Cars> = [0, 0, 0];
 
 /**
- * The room's cars triple as best this client knows it, and what the car rows
- * light: the triple the spotter just sent while its optimistic window is
- * open, otherwise whatever the relay last said. A tap is computed against
- * this, so two quick taps on different rows compose instead of the second
- * undoing the first.
+ * The room's cars triple as best this client knows it, and what the sliders
+ * light: the finger's level while a slider is held, then the triple the
+ * spotter just sent while its optimistic window is open, otherwise whatever
+ * the relay last said. A tap is computed against this, so two quick taps on
+ * different sliders compose instead of the second undoing the first.
  */
 export function selectedCars(model: Model): Readonly<Cars> {
+  if (model.dragCars !== null) {
+    return model.dragCars;
+  }
+
   const optimistic = model.optimisticCars;
   if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
     return optimistic.cars;
   }
 
   return model.state?.cars ?? NO_CARS;
+}
+
+const NO_PRESETS: readonly string[] = [];
+
+/** The room's saved messages — room state only, never local storage. */
+export function roomPresets(model: Model): readonly string[] {
+  return model.state?.presets ?? NO_PRESETS;
 }
 
 /** The console is trustworthy only when the socket is open *and* the room has

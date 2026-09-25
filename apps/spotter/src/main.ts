@@ -1,5 +1,6 @@
 import type {
   CarLevel,
+  Cars,
   ConnectionCloseDetail,
   ConnectionState,
   Lane,
@@ -10,17 +11,24 @@ import {
   CLOSE_CODE_AUTH,
   MSG_MAX_CHARS,
   PING_INTERVAL_MS,
+  PRESETS_MAX,
 } from '@g2-race-spotter/protocol';
 
 import {
-  nextCars,
+  dragCars,
+  endCarDrag,
+  moveCarDrag,
   normaliseMessage,
   rebaseCars,
+  startCarDrag,
+  type CarDrag,
   type PendingCarRows,
 } from './intents.ts';
+import { generateRoomCode, isSessionCurrent, isStartPin } from './join.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
+  roomPresets,
   selectedCars,
   selectedLane,
   type Model,
@@ -32,18 +40,15 @@ import {
   roomUrl,
 } from './net/room-client.ts';
 import {
-  addRecentMessage,
-  loadRecentMessages,
-  saveRecentMessages,
-} from './recent-messages.ts';
-import {
   isValidPin,
   isValidRoom,
   loadJoinForm,
+  loadSeenAt,
   normaliseName,
   normalisePin,
   normaliseRoom,
   saveJoinForm,
+  saveSeenAt,
 } from './storage.ts';
 import { createRenderer } from './ui/vdom.ts';
 import { view } from './ui/view.ts';
@@ -61,9 +66,21 @@ const origin = relayOrigin(
   import.meta.env.VITE_RELAY_URL as string | undefined,
 );
 
+/**
+ * A stored room is the spotter's session for as long as the relay keeps it
+ * (24 h idle); a first visit, or one after that, gets a fresh random code and
+ * is asked for a PIN (Maxx, 2026-09-25 design round 4).
+ */
+const storedForm = loadJoinForm(window.localStorage);
+const resume =
+  isValidRoom(storedForm.room) &&
+  isSessionCurrent(loadSeenAt(window.localStorage), Date.now());
+
 let model: Model = createModel({
-  form: loadJoinForm(window.localStorage),
-  recent: loadRecentMessages(window.localStorage),
+  joinMode: resume ? 'existing' : 'new',
+  form: resume
+    ? storedForm
+    : { room: generateRoomCode(), pin: '', name: storedForm.name },
   relayHost: origin,
   now: Date.now(),
   showInstallHint: !window.matchMedia('(display-mode: standalone)').matches,
@@ -94,11 +111,32 @@ const client: RoomClient = createSpotterClient({
 let replayed = false;
 let pendingCarRows: PendingCarRows = {};
 
+/**
+ * Armed by Start on a freshly generated code: if the relay answers `auth`,
+ * the random code collided with someone else's PIN'd room, so one new code is
+ * tried before the spotter is told anything (design round 4, (e)).
+ */
+let collisionRetry = false;
+
+/** `seenAt` is written at most this often: it only has to be hours-accurate. */
+const SEEN_AT_WRITE_MS = 60_000;
+let seenAtWritten = 0;
+
+function touchSession(): void {
+  const now = Date.now();
+  if (now - seenAtWritten >= SEEN_AT_WRITE_MS) {
+    seenAtWritten = now;
+    saveSeenAt(window.localStorage, now);
+  }
+}
+
 client.onState((state: State) => {
-  // Room state is the truth (R6); the car rows reconcile to `state.cars` as
+  // Room state is the truth (R6); the sliders reconcile to `state.cars` as
   // soon as the optimistic window closes, exactly like the lanes.
   const firstOfSession = !replayed;
   replayed = true;
+  collisionRetry = false;
+  touchSession();
   update({ state });
 
   if (firstOfSession) {
@@ -121,13 +159,19 @@ client.onConnection((conn: ConnectionState, detail: ConnectionCloseDetail) => {
   if (detail.terminal) {
     pendingCarRows = {};
     client.disconnect();
+    if (detail.code === CLOSE_CODE_AUTH && collisionRetry) {
+      collisionRetry = false;
+      connectTo({ ...model.form, room: generateRoomCode() });
+      return;
+    }
+
     update({
       screen: 'join',
       conn: 'closed',
       state: null,
       notice:
         detail.code === CLOSE_CODE_AUTH
-          ? 'Wrong PIN — check the code with the driver.'
+          ? 'Wrong PIN — check the room code and PIN.'
           : `The relay rejected this app (close ${detail.code ?? 'unknown'}). Reload the page to pick up the current version.`,
     });
     return;
@@ -137,8 +181,8 @@ client.onConnection((conn: ConnectionState, detail: ConnectionCloseDetail) => {
 });
 
 client.onError((error) => {
-  if (error.code === 'auth') {
-    update({ notice: 'Wrong PIN — check the code with the driver.' });
+  if (error.code === 'auth' && !collisionRetry) {
+    update({ notice: 'Wrong PIN — check the room code and PIN.' });
   }
 });
 
@@ -146,25 +190,48 @@ function vibrate(): void {
   navigator.vibrate?.(10);
 }
 
-function join(): void {
-  const form = {
+function connectTo(form: Model['form']): void {
+  pendingCarRows = {};
+  saveJoinForm(window.localStorage, form);
+  seenAtWritten = 0;
+  touchSession();
+  update({ form, notice: null, screen: 'console', state: null });
+  client.connect(roomUrl(origin, form));
+}
+
+function currentForm(): Model['form'] {
+  return {
     room: normaliseRoom(model.form.room),
     pin: normalisePin(model.form.pin),
     name: normaliseName(model.form.name).trim(),
   };
+}
 
+/** "Join an existing room": any valid code, PIN optional. */
+function join(): void {
+  const form = currentForm();
   if (!isValidRoom(form.room) || !isValidPin(form.pin)) {
     update({ form, notice: 'Room code must be 4–6 letters or digits.' });
     return;
   }
 
-  pendingCarRows = {};
-  saveJoinForm(window.localStorage, form);
-  update({ form, notice: null, screen: 'console', state: null });
-  client.connect(roomUrl(origin, form));
+  collisionRetry = false;
+  connectTo(form);
 }
 
-function sendMessage(text: string): void {
+/** New room: the generated code, and a PIN is required. */
+function start(): void {
+  const form = currentForm();
+  if (!isStartPin(form.pin)) {
+    update({ form, notice: 'Set a 4-digit PIN first.' });
+    return;
+  }
+
+  collisionRetry = true;
+  connectTo(form);
+}
+
+function sendMessage(text: string, fromDraft: boolean): void {
   const message = normaliseMessage(text);
   if (message === '') {
     return;
@@ -172,9 +239,26 @@ function sendMessage(text: string): void {
 
   vibrate();
   client.send({ t: 'msg', text: message });
-  const recent = addRecentMessage(model.recent, message);
-  saveRecentMessages(window.localStorage, recent);
-  update({ draft: '', recent });
+  if (fromDraft) {
+    update({ draft: '' });
+  }
+}
+
+/** Save the typed message to the room for later (`preset add`). */
+function savePreset(): void {
+  const message = normaliseMessage(model.draft);
+  if (message === '') {
+    return;
+  }
+
+  const presets = roomPresets(model);
+  if (!presets.includes(message) && presets.length >= PRESETS_MAX) {
+    return;
+  }
+
+  vibrate();
+  client.send({ t: 'preset', add: message });
+  update({ draft: '' });
 }
 
 function setLane(lane: Lane | null): void {
@@ -190,17 +274,8 @@ function setLane(lane: Lane | null): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/**
- * One `cars` frame per change, always the full triple (040 AC-2): tapping
- * segment n of a row calls level n, tapping the lit top segment clears it.
- */
-function setCar(row: 0 | 1 | 2, segment: CarLevel): void {
-  const next = nextCars(selectedCars(model), row, segment);
-  if (next === null) {
-    return;
-  }
-
-  vibrate();
+/** Send one `cars` triple (or hold it for the replay, T055a) and pre-light it. */
+function sendCars(next: Cars, row: 0 | 1 | 2): void {
   if (replayed) {
     client.send({ t: 'cars', cars: next });
   } else {
@@ -210,9 +285,9 @@ function setCar(row: 0 | 1 | 2, segment: CarLevel): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/** `data-arg="<row>:<segment>"` on a car segment button. */
+/** `data-arg="<row>:<segment>"` on a slider segment (0 = its label). */
 function carArg(arg: string): { row: 0 | 1 | 2; segment: CarLevel } | null {
-  const match = /^([0-2]):([1-3])$/.exec(arg);
+  const match = /^([0-2]):([0-3])$/.exec(arg);
   if (match === null) {
     return null;
   }
@@ -221,6 +296,69 @@ function carArg(arg: string): { row: 0 | 1 | 2; segment: CarLevel } | null {
     row: Number(match[1]) as 0 | 1 | 2,
     segment: Number(match[2]) as CarLevel,
   };
+}
+
+/**
+ * The finger on a slider: `pointerdown` picks the level (a tap on the lit top
+ * segment picks 0), `pointermove` across segments of the same slider changes
+ * it, `pointerup` sends one `cars` frame if the level changed (040 AC-2).
+ */
+let drag: (CarDrag & { readonly pointerId: number }) | null = null;
+/** A pointer gesture also fires `click`; that click must not send again. */
+let gestureEndedAt = Number.NEGATIVE_INFINITY;
+
+function slideTo(next: CarDrag): void {
+  if (drag === null || next === drag) {
+    return;
+  }
+
+  drag = { ...next, pointerId: drag.pointerId };
+  vibrate();
+  update({ dragCars: dragCars(drag) });
+}
+
+function carUnder(
+  event: PointerEvent,
+): { row: 0 | 1 | 2; segment: CarLevel } | null {
+  // A touch pointer stays captured by the element it went down on, so the
+  // event target never changes: ask the layout what is under the finger.
+  const under =
+    typeof document.elementFromPoint === 'function'
+      ? document.elementFromPoint(event.clientX, event.clientY)
+      : null;
+  const el = under?.closest('[data-act="car"], [data-act="car-zero"]');
+  return el === null || el === undefined
+    ? null
+    : carArg(el.getAttribute('data-arg') ?? '');
+}
+
+function endDrag(event: PointerEvent, commit: boolean): void {
+  if (drag === null || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  const ended = drag;
+  drag = null;
+  gestureEndedAt = Date.now();
+  const next = commit ? endCarDrag(ended) : null;
+  if (next === null) {
+    update({ dragCars: null });
+    return;
+  }
+
+  model = { ...model, dragCars: null };
+  sendCars(next, ended.row);
+}
+
+/** Keyboard (or a synthetic click): a plain tap, sent straight away. */
+function tapCar(row: 0 | 1 | 2, segment: CarLevel): void {
+  const next = endCarDrag(startCarDrag(selectedCars(model), row, segment));
+  if (next === null) {
+    return;
+  }
+
+  vibrate();
+  sendCars(next, row);
 }
 
 function actionOf(
@@ -257,6 +395,22 @@ root.addEventListener('click', (event) => {
     case 'join':
       join();
       break;
+    case 'start':
+      start();
+      break;
+    case 'join-existing':
+      update({ joinMode: 'existing', notice: null });
+      break;
+    case 'join-new':
+      update({
+        joinMode: 'new',
+        notice: null,
+        form: { ...model.form, room: generateRoomCode(), pin: '' },
+      });
+      break;
+    case 'code':
+      update({ showCode: !model.showCode });
+      break;
     case 'lane':
       setLane(action.arg as Lane);
       break;
@@ -264,21 +418,31 @@ root.addEventListener('click', (event) => {
       setLane(null);
       break;
     case 'car': {
+      // A pointer gesture already sent (or deliberately did not); only a
+      // keyboard or synthetic click is a tap of its own.
       const car = carArg(action.arg);
-      if (car !== null) {
-        setCar(car.row, car.segment);
+      if (
+        car !== null &&
+        car.segment !== 0 &&
+        Date.now() - gestureEndedAt > 500
+      ) {
+        tapCar(car.row, car.segment);
       }
       break;
     }
     case 'send':
-      sendMessage(model.draft);
+      sendMessage(model.draft, true);
       break;
-    case 'clear':
-      client.send({ t: 'clear' });
-      update({ draft: '' });
+    case 'save':
+      savePreset();
       break;
-    case 'recent':
-      sendMessage(action.arg);
+    case 'say':
+    case 'preset-send':
+      sendMessage(action.arg, false);
+      break;
+    case 'preset-remove':
+      vibrate();
+      client.send({ t: 'preset', remove: action.arg });
       break;
     case 'reload':
       window.location.reload();
@@ -287,6 +451,40 @@ root.addEventListener('click', (event) => {
       break;
   }
 });
+
+root.addEventListener('pointerdown', (event) => {
+  const action = actionOf(event);
+  if (action === null || action.act !== 'car' || drag !== null) {
+    return;
+  }
+
+  const car = carArg(action.arg);
+  if (car === null || car.segment === 0) {
+    return;
+  }
+
+  drag = {
+    ...startCarDrag(selectedCars(model), car.row, car.segment),
+    pointerId: event.pointerId,
+  };
+  vibrate();
+  update({ dragCars: dragCars(drag) });
+});
+
+root.addEventListener('pointermove', (event) => {
+  if (drag === null || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  const car = carUnder(event);
+  if (car !== null) {
+    slideTo(moveCarDrag(drag, car.row, car.segment));
+  }
+});
+
+// On `window`, not `root`: the finger may lift anywhere.
+window.addEventListener('pointerup', (event) => endDrag(event, true));
+window.addEventListener('pointercancel', (event) => endDrag(event, false));
 
 root.addEventListener('input', (event) => {
   const action = actionOf(event);
@@ -324,9 +522,13 @@ root.addEventListener('keydown', (event) => {
   }
 
   if (action.act === 'draft') {
-    sendMessage(model.draft);
+    sendMessage(model.draft, true);
   } else if (model.screen === 'join') {
-    join();
+    if (model.joinMode === 'new') {
+      start();
+    } else {
+      join();
+    }
   }
 });
 
@@ -355,7 +557,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-if (isValidRoom(model.form.room)) {
+if (resume) {
   join();
 } else {
   render(view(model));

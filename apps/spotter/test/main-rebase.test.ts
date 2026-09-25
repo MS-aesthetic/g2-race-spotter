@@ -69,6 +69,18 @@ function tap(arg: string): void {
   button!.click();
 }
 
+function pointer(type: string, target: Element | Window, pointerId = 1): void {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'pointerId', { value: pointerId });
+  target.dispatchEvent(event);
+}
+
+function segment(arg: string): HTMLButtonElement {
+  return document.querySelector<HTMLButtonElement>(
+    `[data-act="car"][data-arg="${arg}"]`,
+  )!;
+}
+
 describe('spotter reconnect: offline car taps (main.ts)', () => {
   beforeAll(async () => {
     vi.useFakeTimers();
@@ -113,5 +125,47 @@ describe('spotter reconnect: offline car taps (main.ts)', () => {
       { t: 'cars', cars: [0, 0, 3] },
       { t: 'cars', cars: [1, 0, 3] },
     ]);
+  });
+
+  it('a slider drag sends ONE cars frame on pointerup, and its click does not send again', async () => {
+    await vi.advanceTimersByTimeAsync(1_000);
+    const socket = FakeSocket.sockets[1]!;
+    // The relay has applied the earlier taps.
+    socket.receive(state(2, [1, 0, 3]));
+    const carsSent = (): unknown[] =>
+      socket.frames().filter((frame) => frame.t === 'cars');
+    const before = carsSent().length;
+
+    // The finger goes down on MIDDLE 1 and slides up to 3; jsdom has no
+    // layout, so the element under the finger is stubbed.
+    let under: Element = segment('1:1');
+    Object.assign(document, { elementFromPoint: () => under });
+    pointer('pointerdown', segment('1:1'));
+    expect(carsSent()).toHaveLength(before);
+    under = segment('1:2');
+    pointer('pointermove', segment('1:1'));
+    under = segment('1:3');
+    pointer('pointermove', segment('1:1'));
+    // Nothing is sent while the finger is down; the slider shows the finger.
+    expect(carsSent()).toHaveLength(before);
+    expect(
+      document.querySelector('[data-row="1"]')!.getAttribute('data-level'),
+    ).toBe('3');
+
+    pointer('pointerup', window);
+    segment('1:3').click();
+    expect(carsSent().slice(before)).toEqual([{ t: 'cars', cars: [1, 3, 3] }]);
+
+    // A drag that ends where it began sends nothing.
+    await vi.advanceTimersByTimeAsync(1_000);
+    under = segment('0:2');
+    pointer('pointerdown', segment('0:2'));
+    under = segment('0:1');
+    pointer('pointermove', segment('0:2'));
+    pointer('pointercancel', window);
+    expect(carsSent()).toHaveLength(before + 1);
+    expect(
+      document.querySelector('[data-row="0"]')!.getAttribute('data-level'),
+    ).toBe('1');
   });
 });

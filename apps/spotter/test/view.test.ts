@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
-import { MSG_MAX_CHARS, type State } from '@g2-race-spotter/protocol';
+import {
+  MSG_MAX_CHARS,
+  PRESETS_MAX,
+  type State,
+} from '@g2-race-spotter/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createModel, type Model } from '../src/model.ts';
@@ -17,6 +21,7 @@ function stateWith(overrides: Partial<State> = {}): State {
     driverOnline: true,
     updatedAt: 1_000,
     calledAt: 1_000,
+    presets: [],
     ...overrides,
   };
 }
@@ -48,14 +53,39 @@ function text(selector: string): string {
   return root.querySelector(selector)?.textContent ?? '';
 }
 
-/** The banner slot is always in the DOM (so the positional diff never shifts
- * siblings); "present" means present *and* not hidden. */
+/** The RECONNECTING pill slot is always in the DOM (so the positional diff
+ * never shifts siblings); "present" means present *and* not hidden. */
 function banner(): Element | null {
-  const el = root.querySelector('[data-testid="reconnect-banner"]');
+  const el = root.querySelector('[data-testid="reconnect-pill"]');
   return el === null || el.hasAttribute('hidden') ? null : el;
 }
 
-describe('AC-1 lane selection and driver status', () => {
+function shown(selector: string): boolean {
+  const el = root.querySelector(selector);
+  return el !== null && !el.hasAttribute('hidden');
+}
+
+describe('AC-1 lane row and driver status (design round 4)', () => {
+  it('lays the lanes out left to right as ▼ BOTTOM · ▬ MIDDLE · ▲ TOP', () => {
+    render(consoleModel());
+
+    const lanes = [...root.querySelectorAll('.lane')];
+    expect(lanes.map((el) => el.getAttribute('data-lane'))).toEqual([
+      'bot',
+      'mid',
+      'top',
+    ]);
+    expect(lanes.map((el) => el.textContent)).toEqual([
+      '▼BOTTOM',
+      '▬MIDDLE',
+      '▲TOP',
+    ]);
+    // The clear control closes the row and sends lane:null.
+    expect(
+      root.querySelector('.lanes')!.lastElementChild!.getAttribute('data-act'),
+    ).toBe('lane-clear');
+  });
+
   it('highlights only the middle lane for lane:"mid"', () => {
     render(consoleModel({ state: stateWith({ lane: 'mid' }) }));
 
@@ -63,12 +93,6 @@ describe('AC-1 lane selection and driver status', () => {
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('mid');
     expect(selected[0]!.getAttribute('aria-pressed')).toBe('true');
-    // All three lanes are still rendered, in glasses order.
-    expect(
-      [...root.querySelectorAll('.lane')].map((el) =>
-        el.getAttribute('data-lane'),
-      ),
-    ).toEqual(['top', 'mid', 'bot']);
   });
 
   it('highlights nothing when the room has no lane', () => {
@@ -77,29 +101,27 @@ describe('AC-1 lane selection and driver status', () => {
     expect(root.querySelectorAll('.lane.is-selected')).toHaveLength(0);
   });
 
-  it('shows DRIVER ONLINE / DRIVER OFFLINE per driverOnline', () => {
+  it('shows the driver dot green when online and grey when offline', () => {
     render(consoleModel({ state: stateWith({ driverOnline: true }) }));
-    expect(text('[data-testid="header-driver"]')).toBe('DRIVER ONLINE');
-    expect(root.querySelector('.header')!.className).not.toContain(
-      'header--offline',
-    );
+    const dot = root.querySelector('[data-testid="header-driver"]')!;
+    expect(dot.className).toContain('is-on');
+    expect(dot.getAttribute('aria-label')).toBe('driver online');
 
     render(consoleModel({ state: stateWith({ driverOnline: false }) }));
-    expect(text('[data-testid="header-driver"]')).toBe('DRIVER OFFLINE');
-    // Amber header is the "driver is not receiving you" signal.
-    expect(root.querySelector('.header')!.className).toContain(
-      'header--offline',
-    );
+    expect(dot.className).toContain('is-off');
+    expect(dot.getAttribute('aria-label')).toBe('driver offline');
   });
 
-  it('shows the room code and the EWMA latency in the header', () => {
+  it('shows the room code as a chip and the EWMA latency in one header row', () => {
     render(consoleModel({ latencyMs: 180, latencyAt: 5_000, now: 5_000 }));
 
-    expect(text('[data-testid="header-room"]')).toBe('ROOM CAR42');
+    expect(text('[data-testid="header-room"]')).toBe('CAR42');
     expect(text('[data-testid="header-latency"]')).toBe('180 ms');
     expect(
       root.querySelector('[data-testid="header-latency"]')!.className,
     ).not.toContain('is-stale');
+    // Header, room chip, link dot, pill, driver dot, ack, latency: one row.
+    expect(root.querySelector('.hdr')!.children).toHaveLength(6);
   });
 
   it('greys a latency sample older than 10 s', () => {
@@ -109,48 +131,74 @@ describe('AC-1 lane selection and driver status', () => {
       root.querySelector('[data-testid="header-latency"]')!.className,
     ).toContain('is-stale');
   });
+
+  it('shows the room code large (with the PIN) for the driver when the chip is tapped', () => {
+    const form = { room: 'QA01', pin: '4821', name: '' };
+    render(consoleModel({ form }));
+    expect(shown('[data-testid="code-overlay"]')).toBe(false);
+    const overlay = root.querySelector('[data-testid="code-overlay"]');
+
+    render(consoleModel({ form, showCode: true }));
+    expect(shown('[data-testid="code-overlay"]')).toBe(true);
+    expect(root.querySelector('[data-testid="code-overlay"]')).toBe(overlay);
+    expect(text('.codeview__code')).toBe('QA01');
+    expect(text('.codeview__pin')).toBe('PIN 4821');
+    // The chip and the overlay both toggle it.
+    expect(
+      root
+        .querySelector('[data-testid="header-room"]')!
+        .getAttribute('data-act'),
+    ).toBe('code');
+    expect(overlay!.getAttribute('data-act')).toBe('code');
+  });
 });
 
-/** `[row][segment]` → is that segment lit? Read straight off the DOM. */
+/** `[slider][segment 1..3]` → is that segment lit? Read straight off the DOM. */
 function litSegments(): boolean[][] {
-  return [...root.querySelectorAll('.carrow')].map((row) =>
-    [...row.querySelectorAll('.seg')].map((seg) =>
-      seg.classList.contains('is-lit'),
+  return [...root.querySelectorAll('.slider')].map((slider) =>
+    [1, 2, 3].map((segment) =>
+      slider
+        .querySelector(`.seg[data-seg="${segment}"]`)!
+        .classList.contains('is-lit'),
     ),
   );
 }
 
-describe('AC-2 car rows (Maxx design round 3)', () => {
-  it('offers LEFT / MIDDLE / RIGHT rows of three segments each, above the message box', () => {
+describe('AC-2 vertical car sliders (design round 4)', () => {
+  it('offers LEFT / MIDDLE / RIGHT sliders side by side, segments stacked bottom-up, under the lanes', () => {
     render(consoleModel());
 
     expect(
-      [...root.querySelectorAll('.carrow__label')].map((el) => el.textContent),
+      [...root.querySelectorAll('.slider__label')].map((el) => el.textContent),
     ).toEqual(['LEFT', 'MIDDLE', 'RIGHT']);
-    const segments = [...root.querySelectorAll('[data-act="car"]')];
-    expect(segments.map((el) => el.getAttribute('data-arg'))).toEqual([
-      '0:1',
-      '0:2',
-      '0:3',
-      '1:1',
-      '1:2',
-      '1:3',
-      '2:1',
-      '2:2',
-      '2:3',
+    // DOM order is top to bottom: 3 on top, 1 at the bottom, label under it.
+    expect(
+      [...root.querySelectorAll('.slider')].map((slider) =>
+        [...slider.children].map(
+          (el) => el.getAttribute('data-arg') ?? el.className,
+        ),
+      ),
+    ).toEqual([
+      ['0:3', '0:2', '0:1', '0:0'],
+      ['1:3', '1:2', '1:1', '1:0'],
+      ['2:3', '2:2', '2:1', '2:0'],
     ]);
-    // The old gap buttons and inside/outside toggles are gone.
-    expect(root.querySelectorAll('[data-act="gap"]')).toHaveLength(0);
-    expect(root.querySelectorAll('[data-act="side"]')).toHaveLength(0);
-    // Nothing lit for an empty room.
+    expect(root.querySelectorAll('[data-act="car"]')).toHaveLength(9);
     expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(0);
-    const order = [...root.querySelectorAll('.lanes, .cars, .msg')].map(
-      (el) => el.className.split(' ')[0],
-    );
-    expect(order).toEqual(['lanes', 'cars', 'msg']);
+    // Top half: lanes then sliders; bottom half: messages.
+    expect(
+      [...root.querySelectorAll('.half--top > section')].map(
+        (el) => el.className,
+      ),
+    ).toEqual(['lanes', 'sliders']);
+    expect(
+      [...root.querySelector('.half--bottom')!.children].map(
+        (el) => el.className,
+      ),
+    ).toEqual(['says', 'presets', 'msg']);
   });
 
-  it('lights segments 1..level of each row from the room state, left to right', () => {
+  it('lights segments 1..level of each slider from the room state, bottom up', () => {
     render(consoleModel({ state: stateWith({ cars: [1, 2, 3] }) }));
 
     expect(litSegments()).toEqual([
@@ -158,27 +206,37 @@ describe('AC-2 car rows (Maxx design round 3)', () => {
       [true, true, false],
       [true, true, true],
     ]);
-    // The lit top segment is marked: tapping it clears the row.
+    // The lit top segment is marked: tapping it clears the slider.
     expect(
       [...root.querySelectorAll('.seg.is-top')].map((el) =>
         el.getAttribute('data-arg'),
       ),
     ).toEqual(['0:1', '1:2', '2:3']);
     expect(
-      [...root.querySelectorAll('.carrow')].map((el) =>
+      [...root.querySelectorAll('.slider')].map((el) =>
         el.getAttribute('data-level'),
       ),
     ).toEqual(['1', '2', '3']);
   });
 
-  it('marks a level-3 row hot, mirroring the glasses alert outline', () => {
+  it('marks a level-3 slider hot, mirroring the glasses alert outline', () => {
     render(consoleModel({ state: stateWith({ cars: [3, 2, 0] }) }));
 
-    const hot = [...root.querySelectorAll('.carrow--hot')];
+    const hot = [...root.querySelectorAll('.slider--hot')];
     expect(hot.map((el) => el.getAttribute('data-row'))).toEqual(['0']);
   });
 
-  it('shows the optimistic tap first, then reconciles to the room', () => {
+  it('shows the finger while a slider is held, then the optimistic send, then the room', () => {
+    // Held: the drag level wins over the room and over an old send.
+    render(
+      consoleModel({
+        now: 5_100,
+        state: stateWith({ cars: [0, 0, 0] }),
+        dragCars: [0, 3, 0],
+      }),
+    );
+    expect(litSegments()[1]).toEqual([true, true, true]);
+
     render(
       consoleModel({
         now: 5_100,
@@ -208,38 +266,50 @@ describe('AC-2 car rows (Maxx design round 3)', () => {
   });
 });
 
-describe('AC-3 reconnect banner', () => {
-  it('shows the banner with controls still enabled when the socket is closed', () => {
+describe('AC-3 reconnect pill', () => {
+  it('shows a small RECONNECTING pill and a red link dot, with controls still enabled, when the socket is closed', () => {
     render(consoleModel({ conn: 'closed', state: null }));
 
-    const shown = banner();
-    expect(shown).not.toBeNull();
-    expect(shown!.textContent).toBe('RECONNECTING');
+    const pill = banner();
+    expect(pill).not.toBeNull();
+    expect(pill!.textContent).toBe('RECONNECTING');
+    // In the header row, not a full-width bar of its own.
+    expect(pill!.parentElement!.className).toBe('hdr');
+    expect(
+      root.querySelector('[data-testid="header-link"]')!.className,
+    ).toContain('is-down');
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
     expect(root.querySelectorAll('input[disabled]')).toHaveLength(0);
     expect(root.querySelectorAll('.lane')).toHaveLength(3);
-    expect(root.querySelector('.header')!.className).toContain('header--down');
   });
 
-  it('keeps the banner while open but not yet replayed', () => {
+  it('keeps the pill while open but not yet replayed', () => {
     render(consoleModel({ conn: 'open', state: null }));
 
     expect(banner()).not.toBeNull();
     expect(banner()!.textContent).toBe('SYNCING…');
   });
 
-  it('drops the banner and reconciles to the replayed state on reopen', () => {
+  it('drops the pill and reconciles to the replayed state on reopen', () => {
     // Same renderer across both frames: this is the real patch path, not a
     // fresh mount, so a stale highlight would survive if reconciliation broke.
     render(consoleModel({ conn: 'closed', state: null }));
     render(
       consoleModel({
         conn: 'open',
-        state: stateWith({ seq: 9, lane: 'bot', cars: [0, 0, 3] }),
+        state: stateWith({
+          seq: 9,
+          lane: 'bot',
+          cars: [0, 0, 3],
+          presets: ['Fuel save'],
+        }),
       }),
     );
 
     expect(banner()).toBeNull();
+    expect(
+      root.querySelector('[data-testid="header-link"]')!.className,
+    ).toContain('is-ok');
     const selected = root.querySelectorAll('.lane.is-selected');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
@@ -248,18 +318,23 @@ describe('AC-3 reconnect banner', () => {
       [false, false, false],
       [true, true, true],
     ]);
+    expect(
+      [...root.querySelectorAll('[data-act="preset-send"]')].map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(['Fuel save']);
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
   });
 });
 
-describe('banner toggling never re-creates the controls', () => {
+describe('pill toggling never re-creates the controls', () => {
   it('keeps the same car segments and message input across hide and show', () => {
     render(consoleModel({ conn: 'closed', state: null }));
     const segmentsWhileDown = [...root.querySelectorAll('.seg')];
     const inputWhileDown = root.querySelector('[data-testid="msg-input"]');
     expect(segmentsWhileDown).toHaveLength(9);
 
-    // Socket recovers and the room replays: the banner hides, but a
+    // Socket recovers and the room replays: the pill hides, but a
     // half-typed message in flight must survive it.
     render(consoleModel({ conn: 'open', state: stateWith({ seq: 4 }) }));
     expect(banner()).toBeNull();
@@ -277,6 +352,18 @@ describe('banner toggling never re-creates the controls', () => {
     );
   });
 
+  it('keeps the input and the buttons below the chips when presets come and go', () => {
+    render(consoleModel());
+    const input = root.querySelector('[data-testid="msg-input"]');
+    const save = root.querySelector('[data-testid="save"]');
+
+    render(consoleModel({ state: stateWith({ seq: 2, presets: ['a', 'b'] }) }));
+    render(consoleModel({ state: stateWith({ seq: 3, presets: [] }) }));
+
+    expect(root.querySelector('[data-testid="msg-input"]')).toBe(input);
+    expect(root.querySelector('[data-testid="save"]')).toBe(save);
+  });
+
   it('keeps the lane buttons and the update toast slot stable', () => {
     render(consoleModel());
     const lanes = [...root.querySelectorAll('.lane')];
@@ -291,7 +378,7 @@ describe('banner toggling never re-creates the controls', () => {
   });
 });
 
-describe('AC-4 ack tick', () => {
+describe('AC-4 ack icon', () => {
   const message = {
     id: '01J',
     text: 'box this lap',
@@ -299,10 +386,16 @@ describe('AC-4 ack tick', () => {
     ackedAt: null as number | null,
   };
 
-  it('shows "… waiting" while the message is unacknowledged', () => {
+  it('shows the hourglass while the message is unacknowledged', () => {
     render(consoleModel({ state: stateWith({ msg: { ...message } }) }));
 
-    expect(text('[data-testid="header-ack"]')).toBe('… waiting');
+    expect(shown('[data-testid="header-ack"]')).toBe(true);
+    expect(text('[data-testid="header-ack"]')).toBe('⌛');
+    expect(
+      root
+        .querySelector('[data-testid="header-ack"]')!
+        .getAttribute('aria-label'),
+    ).toBe('message waiting');
   });
 
   it('shows the ack tick once ackedAt is non-null', () => {
@@ -313,51 +406,153 @@ describe('AC-4 ack tick', () => {
       }),
     );
 
-    expect(text('[data-testid="header-ack"]')).toBe('✓ acked');
+    expect(text('[data-testid="header-ack"]')).toBe('✓');
+    expect(
+      root.querySelector('[data-testid="header-ack"]')!.className,
+    ).toContain('is-acked');
   });
 
-  it('shows no ack element when the room holds no message', () => {
+  it('hides the ack icon when the room holds no message', () => {
     render(consoleModel({ state: stateWith({ msg: null }) }));
 
-    expect(root.querySelector('[data-testid="header-ack"]')).toBeNull();
+    expect(shown('[data-testid="header-ack"]')).toBe(false);
   });
 });
 
-describe('console controls', () => {
-  it('caps the message input at MSG_MAX_CHARS and offers Send/Clear', () => {
+describe('messages (design round 4)', () => {
+  it('offers the five built-in messages as one-tap buttons', () => {
+    render(consoleModel());
+
+    expect(
+      [...root.querySelectorAll('[data-act="say"]')].map((el) => [
+        el.textContent,
+        el.getAttribute('data-arg'),
+      ]),
+    ).toEqual([
+      ['PULL OFF', 'PULL OFF'],
+      ['LEADERS BEHIND', 'LEADERS BEHIND'],
+      ['BACK UP ENTRY', 'BACK UP ENTRY'],
+      ['DRIVE IN FURTHER', 'DRIVE IN FURTHER'],
+      ['SPIN', 'SPIN'],
+    ]);
+  });
+
+  it('renders the room presets as chips with a remove button each, from room state only', () => {
+    render(consoleModel({ state: stateWith({ presets: [] }) }));
+    expect(shown('[data-testid="preset-chips"]')).toBe(false);
+
+    render(
+      consoleModel({
+        state: stateWith({ presets: ['Fuel save', 'Box box'] }),
+      }),
+    );
+    expect(shown('[data-testid="preset-chips"]')).toBe(true);
+    expect(
+      [...root.querySelectorAll('.pchip')].map((chip) =>
+        [...chip.children].map((el) => [
+          el.getAttribute('data-act'),
+          el.getAttribute('data-arg'),
+        ]),
+      ),
+    ).toEqual([
+      [
+        ['preset-send', 'Fuel save'],
+        ['preset-remove', 'Fuel save'],
+      ],
+      [
+        ['preset-send', 'Box box'],
+        ['preset-remove', 'Box box'],
+      ],
+    ]);
+
+    // A room from a relay that predates presets simply has none.
+    const legacy = stateWith();
+    delete legacy.presets;
+    render(consoleModel({ state: legacy }));
+    expect(root.querySelectorAll('.pchip')).toHaveLength(0);
+  });
+
+  it('caps the message input at MSG_MAX_CHARS and offers Send and Save', () => {
     render(consoleModel());
 
     const input = root.querySelector(
       '[data-testid="msg-input"]',
     ) as HTMLInputElement;
     expect(input.getAttribute('maxlength')).toBe(String(MSG_MAX_CHARS));
-    expect(root.querySelector('[data-act="send"]')).not.toBeNull();
-    expect(root.querySelector('[data-act="clear"]')).not.toBeNull();
+    expect(text('[data-testid="send"]')).toBe('Send');
+    expect(text('[data-testid="save"]')).toBe('Save');
     expect(root.querySelector('[data-testid="lane-clear"]')).not.toBeNull();
+    // Recent-message chips from localStorage are gone (presets replace them).
+    expect(root.querySelectorAll('[data-act="recent"]')).toHaveLength(0);
   });
 
-  it('renders at most three recent-message chips', () => {
-    render(consoleModel({ recent: ['a', 'b', 'c', 'd', 'e'] }));
+  it('marks Save unavailable once the room holds PRESETS_MAX messages', () => {
+    const presets = Array.from({ length: PRESETS_MAX }, (_, i) => `p${i}`);
+    render(consoleModel({ state: stateWith({ presets }) }));
 
-    const chips = root.querySelectorAll('[data-act="recent"]');
-    expect(chips).toHaveLength(3);
-    expect(chips[0]!.getAttribute('data-arg')).toBe('a');
+    const save = root.querySelector('[data-testid="save"]')!;
+    expect(save.textContent).toBe('Full');
+    expect(save.getAttribute('aria-disabled')).toBe('true');
   });
 });
 
-describe('join screen', () => {
-  it('shows the relay host and the stored form values', () => {
+describe('join screen (design round 4)', () => {
+  it('shows a generated room code large and asks for a PIN on a new visit', () => {
     render(
       createModel({
         screen: 'join',
-        form: { room: 'CAR42', pin: '1234', name: 'Sam' },
+        joinMode: 'new',
+        form: { room: 'K3Q9ZA', pin: '', name: '' },
         relayHost: 'wss://relay.example.com',
       }),
     );
 
+    expect(shown('[data-testid="join-new"]')).toBe(true);
+    expect(shown('[data-testid="join-form"]')).toBe(false);
+    expect(text('[data-testid="join-code"]')).toBe('K3Q9ZA');
+    expect(
+      root
+        .querySelector('[data-testid="start-pin"]')!
+        .getAttribute('inputmode'),
+    ).toBe('numeric');
+    expect(
+      root
+        .querySelector('[data-testid="start"]')!
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
+    expect(text('[data-testid="join-existing"]')).toBe('Join an existing room');
     expect(text('[data-testid="join-host"]')).toBe(
       'relay wss://relay.example.com',
     );
+  });
+
+  it('enables Start once four digits are in', () => {
+    render(
+      createModel({
+        screen: 'join',
+        joinMode: 'new',
+        form: { room: 'K3Q9ZA', pin: '4821', name: '' },
+      }),
+    );
+
+    expect(
+      root
+        .querySelector('[data-testid="start"]')!
+        .getAttribute('aria-disabled'),
+    ).toBe('false');
+  });
+
+  it('keeps the classic form behind "Join an existing room"', () => {
+    render(
+      createModel({
+        screen: 'join',
+        joinMode: 'existing',
+        form: { room: 'CAR42', pin: '1234', name: 'Sam' },
+      }),
+    );
+
+    expect(shown('[data-testid="join-new"]')).toBe(false);
+    expect(shown('[data-testid="join-form"]')).toBe(true);
     expect(
       (root.querySelector('[data-testid="join-room"]') as HTMLInputElement)
         .value,
@@ -370,7 +565,7 @@ describe('join screen', () => {
     render(
       createModel({
         screen: 'join',
-        notice: 'Wrong PIN — check the code with the driver.',
+        notice: 'Wrong PIN — check the room code and PIN.',
       }),
     );
 
@@ -379,13 +574,16 @@ describe('join screen', () => {
     expect(notice.textContent).toContain('Wrong PIN');
   });
 
-  it('keeps the room field stable when a notice appears', () => {
+  it('keeps the fields stable when a notice appears or the mode flips', () => {
     const form = { room: 'CAR42', pin: '', name: '' };
     render(createModel({ screen: 'join', form }));
     const roomField = root.querySelector('[data-testid="join-room"]');
+    const startPin = root.querySelector('[data-testid="start-pin"]');
 
     render(createModel({ screen: 'join', form, notice: 'Wrong PIN.' }));
+    render(createModel({ screen: 'join', form, joinMode: 'new' }));
 
     expect(root.querySelector('[data-testid="join-room"]')).toBe(roomField);
+    expect(root.querySelector('[data-testid="start-pin"]')).toBe(startPin);
   });
 });
