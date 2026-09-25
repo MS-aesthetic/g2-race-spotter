@@ -57,7 +57,7 @@ function stateFrame(seq: number) {
     t: 'state',
     seq,
     lane: null,
-    gap: 0,
+    cars: [0, 0, 0],
     msg: null,
     spotterOnline: true,
     driverOnline: false,

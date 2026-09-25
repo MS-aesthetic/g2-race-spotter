@@ -6,7 +6,7 @@ Design reference: docs/BUILD_PLAN.md §3, §7 Phase 2; skill `g2-hud-display`
 
 ## Purpose
 
-The driver-side Even Hub app end to end: join a room, hold the socket, render lane + gap + message + status in text mode, acknowledge messages, and never show stale data as live.
+The driver-side Even Hub app end to end: join a room, hold the socket, render lane + cars + message + status in text mode, acknowledge messages, and never show stale data as live.
 
 ## Scope
 
@@ -30,9 +30,9 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 
 | ID | Given / When / Then | Verification |
 |---|---|---|
-| AC-1 | Given a state with `lane:"top", gap:62`, when `renderText` runs, then output is `▲\n████████████░░░░░░░░  62` (12 filled of 20) | `apps/glasses/test/render-text.test.ts` |
-| AC-2 | Given `gap ≥ 90`, then the bar line is prefixed `!!`; given `lane:null`, then the first line is blank | `apps/glasses/test/render-text.test.ts` |
-| AC-3 | Given a mocked bridge, when 10 `gap` states arrive within 250 ms, then at most one `textContainerUpgrade` for the HUD container is issued per 250 ms window and the last value wins | `apps/glasses/test/queue.test.ts` |
+| AC-1 | Given a state with `lane:"top", cars:[1,2,3]`, when `renderText` runs, then output is `. . ^\n[#  ] [## ] [###]` | `apps/glasses/test/render-text.test.ts` |
+| AC-2 | Given `lane:null`, then the first line is `. . .`; given any state, then both lines keep a fixed width (5 and 17 characters) and are ASCII only | `apps/glasses/test/render-text.test.ts` |
+| AC-3 | Given a mocked bridge, when 10 `cars` states arrive within 250 ms, then at most one `textContainerUpgrade` for the HUD container is issued per 250 ms window and the last value wins | `apps/glasses/test/queue.test.ts` |
 | AC-4 | Given a mocked bridge and no frames for 5 s, then status becomes `NO LINK` and the next HUD render is the dimmed variant; when a frame arrives, status returns to `LINK OK · …` | `apps/glasses/test/link-watchdog.test.ts` |
 | AC-5 | Given `msg` with `ackedAt:null`, when `CLICK_EVENT` fires, then `ack{msgId}` is sent and the text remains until a `state` with `ackedAt` arrives | `apps/glasses/test/ack.test.ts` |
 | AC-6 | Given `?render=text` or the stored `g2rs:v1:render=text` override, then startup builds the page with a text container in slot 2 and never creates an image container; given neither (including under `--mode simulator`), then startup creates the image container — the simulator is never detected to change rendering | `apps/glasses/test/render-mode.test.ts` |
@@ -52,6 +52,8 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 - 2026-09-04 (Maxx) **Design round 1 — page layout and the status strip.** The message text container moves to the TOP of the canvas (16, 8, 544×96), the HUD image sits under it (144, 108, 288×144) and the status strip moves to the BOTTOM RIGHT (480, 258, 80×28). The strip is no longer a sentence: it is `L` for the link — solid when up, **blinking every 700 ms when down** — plus `S` only while `spotterOnline` (`L S` / `L` / `  S` / empty). The blink is a `status` job driven by a timer that exists only while the strip blinks; it must never cost an image send. `ROOM ?`, `CONNECTING…` and the terminal-close strings are unchanged. The text-mode HUD gains a third line, `<` or `>`, for the side call.
 
 - 2026-09-04 (Maxx) **Design round 2 — messages auto-clear after 5 s.** This resolves the open question below in favour of *both*: a message is hidden `MSG_AUTO_ACK_MS` (5 s) after it first renders and, if it is still unacked at that moment, the app sends `ack{msgId}` itself, so the relay state and the spotter's ack tick agree with what the driver can see. A tap still acks earlier (and the text still stays up until the relay's `state` carries `ackedAt`, so R4/AC-5 are unchanged); a new `msg.id` restarts the window; the window is measured from first render, so an unrelated `state` frame cannot extend it. The timer is injected like the blink timer and `stop()` clears it. `MSG_AUTO_ACK_MS` is exported from `apps/glasses/src/app.ts` — it is a driver-side display rule, not a wire timing, so it does not belong in `packages/protocol`. Constitution §2 still holds for lane/gap/side: hiding a message is the only thing the glasses decide without a `state` frame. Verified by `apps/glasses/test/ack.test.ts` (auto-ack at 5 s exactly once, a tap at 2 s cancels it, a new message restarts it, a stopped driver sends nothing).
+
+- 2026-09-25 (Maxx) **Design round 3 — page layout and text fallback.** The HUD image moves to the TOP of the canvas (144, 8, 288×144) and the message text sits under it (16, 160, 544×90); the status strip stays bottom-right (480, 258, 80×28). The text-mode HUD is two lines: `v - ^` lane markers in track order (the called lane shows its marker, the others `.`), then three bracketed 3-cell car bars `[#  ] [## ] [###]` filled left to right. AC-1/AC-2/AC-3 are reworded to `cars` (human-authorized); the side line and the `!!` prefix are gone with `gap`/`side`. The relay's 6 s stale clear arrives as an ordinary `state`; the glasses draw it like any other (constitution §2), and the 5 s message auto-clear is unchanged.
 
 ## Open questions
 

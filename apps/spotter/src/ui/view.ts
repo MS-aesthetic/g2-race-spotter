@@ -1,12 +1,15 @@
-import { MSG_MAX_CHARS, type Lane, type Side } from '@g2-race-spotter/protocol';
+import {
+  CAR_LEVEL_MAX,
+  MSG_MAX_CHARS,
+  type Lane,
+} from '@g2-race-spotter/protocol';
 
-import { GAP_LABELS, GAP_VALUES } from '../intents.ts';
+import { CAR_ROWS, CAR_SEGMENTS } from '../intents.ts';
 import {
   isLatencyStale,
   isLive,
-  selectedGap,
+  selectedCars,
   selectedLane,
-  selectedSide,
   type Model,
 } from '../model.ts';
 import { isValidRoom } from '../storage.ts';
@@ -22,24 +25,12 @@ interface LaneButton {
  * sees, not to a list sorted some other way. */
 const LANES: readonly LaneButton[] = [
   { lane: 'top', glyph: '▲', label: 'TOP' },
-  { lane: 'mid', glyph: '●', label: 'MIDDLE' },
+  { lane: 'mid', glyph: '▬', label: 'MIDDLE' },
   { lane: 'bot', glyph: '▼', label: 'BOTTOM' },
 ];
 
-interface SideButton {
-  side: Side;
-  glyph: string;
-  label: string;
-}
-
-/** Same order as the glasses' bottom band: ◀ on the left, ▶ on the right. */
-const SIDES: readonly SideButton[] = [
-  { side: 'inside', glyph: '◀', label: 'CAR INSIDE' },
-  { side: 'outside', glyph: '▶', label: 'CAR OUTSIDE' },
-];
-
-/** Above this the button turns red, mirroring the glasses' inverted bar. */
-export const GAP_HOT = 75;
+/** A row at this level turns red, mirroring the glasses' bright-outline bar. */
+export const CAR_HOT = CAR_LEVEL_MAX;
 
 /** Only the last three fit the one-row strip; the console never scrolls. */
 export const RECENT_CHIPS_SHOWN = 3;
@@ -167,76 +158,66 @@ function laneStack(model: Model): VNode {
 }
 
 /**
- * Five buttons instead of a slider: one tap, one `gap`, and a value the driver
- * and the spotter can both name out loud.
+ * Three rows, LEFT / MIDDLE / RIGHT, each a 3-segment bar (Maxx, 2026-09-25
+ * design round 3). Segment n calls level n; the lit top segment clears the
+ * row. Segments `1..level` are lit, filled left to right like the glasses.
  */
-function gapSection(model: Model): VNode {
-  const selected = selectedGap(model);
+function carsSection(model: Model): VNode {
+  const cars = selectedCars(model);
 
   return h(
     'section',
     {
-      class: 'gaps',
+      class: 'cars',
       role: 'group',
-      'aria-label': 'Car behind',
-      'data-testid': 'gap-buttons',
+      'aria-label': 'Cars behind',
+      'data-testid': 'car-rows',
     },
-    GAP_VALUES.map((value, index) => {
-      const isSelected = value === selected;
-      const classes = ['gapbtn'];
-      if (value > GAP_HOT) {
-        classes.push('gapbtn--hot');
-      }
-      if (isSelected) {
-        classes.push('is-selected');
+    CAR_ROWS.map((row) => {
+      const level = cars[row.index];
+      const rowClasses = ['carrow'];
+      if (level >= CAR_HOT) {
+        rowClasses.push('carrow--hot');
       }
 
       return h(
-        'button',
+        'div',
         {
-          type: 'button',
-          class: classes.join(' '),
-          'data-act': 'gap',
-          'data-arg': value,
-          'data-gap': value,
-          'aria-pressed': isSelected ? 'true' : 'false',
-        },
-        [GAP_LABELS[index] ?? String(value)],
-      );
-    }),
-  );
-}
-
-/**
- * Two toggles under the gap row: a car alongside on the inside or the outside.
- * Tapping the lit one clears the call (`side: null`), which is why these are
- * `aria-pressed` toggles and not a radio group.
- */
-function sideSection(model: Model): VNode {
-  const selected = selectedSide(model);
-
-  return h(
-    'section',
-    { class: 'sides' },
-    SIDES.map((button) =>
-      h(
-        'button',
-        {
-          type: 'button',
-          class: button.side === selected ? 'side is-selected' : 'side',
-          'data-act': 'side',
-          'data-arg': button.side,
-          'data-side': button.side,
-          'aria-pressed': button.side === selected ? 'true' : 'false',
+          class: rowClasses.join(' '),
+          role: 'group',
+          'aria-label': `${row.label} car behind`,
+          'data-row': row.index,
+          'data-level': level,
         },
         [
-          h('span', { class: 'side__glyph', 'aria-hidden': 'true' }, [
-            button.glyph,
-          ]),
-          h('span', { class: 'side__label' }, [button.label]),
+          h('span', { class: 'carrow__label' }, [row.label]),
+          ...CAR_SEGMENTS.map((segment) => {
+            const lit = segment <= level;
+            const classes = ['seg'];
+            if (lit) {
+              classes.push('is-lit');
+            }
+            if (segment === level) {
+              classes.push('is-top');
+            }
+
+            return h(
+              'button',
+              {
+                type: 'button',
+                class: classes.join(' '),
+                'data-act': 'car',
+                'data-arg': `${row.index}:${segment}`,
+                'data-seg': segment,
+                'aria-pressed': lit ? 'true' : 'false',
+                'aria-label': `${row.label} ${segment}`,
+              },
+              [String(segment)],
+            );
+          }),
         ],
-      ),
-    ),
+      );
+    }),
   );
 }
 
@@ -298,8 +279,7 @@ function consoleView(model: Model): VNode {
     h('main', { class: 'console__body' }, [
       laneStack(model),
       h('div', { class: 'console__right' }, [
-        gapSection(model),
-        sideSection(model),
+        carsSection(model),
         messageSection(model),
       ]),
     ]),

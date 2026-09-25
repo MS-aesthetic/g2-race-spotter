@@ -11,8 +11,7 @@ function stateWith(overrides: Partial<State> = {}): State {
     t: 'state',
     seq: 1,
     lane: null,
-    side: null,
-    gap: 0,
+    cars: [0, 0, 0],
     msg: null,
     spotterOnline: true,
     driverOnline: true,
@@ -111,149 +110,100 @@ describe('AC-1 lane selection and driver status', () => {
   });
 });
 
-describe('car inside / car outside (T052)', () => {
-  it('offers both side toggles under the gap row, unlit by default', () => {
+/** `[row][segment]` → is that segment lit? Read straight off the DOM. */
+function litSegments(): boolean[][] {
+  return [...root.querySelectorAll('.carrow')].map((row) =>
+    [...row.querySelectorAll('.seg')].map((seg) =>
+      seg.classList.contains('is-lit'),
+    ),
+  );
+}
+
+describe('AC-2 car rows (Maxx design round 3)', () => {
+  it('offers LEFT / MIDDLE / RIGHT rows of three segments each, above the message box', () => {
     render(consoleModel());
 
-    const buttons = [...root.querySelectorAll('[data-act="side"]')];
-    expect(buttons.map((el) => el.getAttribute('data-side'))).toEqual([
-      'inside',
-      'outside',
+    expect(
+      [...root.querySelectorAll('.carrow__label')].map((el) => el.textContent),
+    ).toEqual(['LEFT', 'MIDDLE', 'RIGHT']);
+    const segments = [...root.querySelectorAll('[data-act="car"]')];
+    expect(segments.map((el) => el.getAttribute('data-arg'))).toEqual([
+      '0:1',
+      '0:2',
+      '0:3',
+      '1:1',
+      '1:2',
+      '1:3',
+      '2:1',
+      '2:2',
+      '2:3',
     ]);
-    expect(
-      [...root.querySelectorAll('.side__label')].map((el) => el.textContent),
-    ).toEqual(['CAR INSIDE', 'CAR OUTSIDE']);
-    expect(
-      [...root.querySelectorAll('.side__glyph')].map((el) => el.textContent),
-    ).toEqual(['◀', '▶']);
-    expect(root.querySelectorAll('.side.is-selected')).toHaveLength(0);
-    // Under the gap row, above the message box — the console order the
-    // spotter reads top to bottom.
-    const order = [...root.querySelectorAll('.gaps, .sides, .msg')].map(
+    // The old gap buttons and inside/outside toggles are gone.
+    expect(root.querySelectorAll('[data-act="gap"]')).toHaveLength(0);
+    expect(root.querySelectorAll('[data-act="side"]')).toHaveLength(0);
+    // Nothing lit for an empty room.
+    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(0);
+    const order = [...root.querySelectorAll('.lanes, .cars, .msg')].map(
       (el) => el.className.split(' ')[0],
     );
-    expect(order).toEqual(['gaps', 'sides', 'msg']);
+    expect(order).toEqual(['lanes', 'cars', 'msg']);
   });
 
-  it('lights the side the room state carries, and only that one', () => {
-    render(consoleModel({ state: stateWith({ side: 'outside' }) }));
+  it('lights segments 1..level of each row from the room state, left to right', () => {
+    render(consoleModel({ state: stateWith({ cars: [1, 2, 3] }) }));
 
-    const selected = root.querySelectorAll('.side.is-selected');
-    expect(selected).toHaveLength(1);
-    expect(selected[0]!.getAttribute('data-side')).toBe('outside');
-    expect(selected[0]!.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('shows the optimistic tap first, then reconciles to the room', () => {
-    // Tap: lit immediately even though the relay has not answered yet.
-    render(
-      consoleModel({
-        state: stateWith({ side: null }),
-        optimisticSide: { side: 'inside', at: 5_000 },
-        now: 5_100,
-      }),
-    );
-    expect(
-      root.querySelector('.side.is-selected')!.getAttribute('data-side'),
-    ).toBe('inside');
-
-    // The window closes and the room still says nothing: the highlight drops.
-    render(
-      consoleModel({
-        state: stateWith({ side: null }),
-        optimisticSide: { side: 'inside', at: 5_000 },
-        now: 5_400,
-      }),
-    );
-    expect(root.querySelectorAll('.side.is-selected')).toHaveLength(0);
-  });
-
-  it('keeps the side buttons stable across a reconnect', () => {
-    render(consoleModel());
-    const sides = [...root.querySelectorAll('.side')];
-
-    render(consoleModel({ conn: 'closed', state: null }));
-
-    expect([...root.querySelectorAll('.side')]).toEqual(sides);
-    expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
-  });
-});
-
-describe('AC-2 gap buttons (Maxx design round 2)', () => {
-  it('offers exactly five buttons CLEAR · 25 · 50 · 75 · BUMPER in one row', () => {
-    render(consoleModel());
-
-    const buttons = [...root.querySelectorAll('[data-act="gap"]')];
-    expect(buttons.map((el) => el.getAttribute('data-arg'))).toEqual([
-      '0',
-      '25',
-      '50',
-      '75',
-      '100',
+    expect(litSegments()).toEqual([
+      [true, false, false],
+      [true, true, false],
+      [true, true, true],
     ]);
-    expect(buttons.map((el) => el.textContent)).toEqual([
-      'CLEAR',
-      '25',
-      '50',
-      '75',
-      'BUMPER',
-    ]);
-    // No slider survives anywhere in the console.
-    expect(root.querySelectorAll('input[type="range"]')).toHaveLength(0);
+    // The lit top segment is marked: tapping it clears the row.
+    expect(
+      [...root.querySelectorAll('.seg.is-top')].map((el) =>
+        el.getAttribute('data-arg'),
+      ),
+    ).toEqual(['0:1', '1:2', '2:3']);
+    expect(
+      [...root.querySelectorAll('.carrow')].map((el) =>
+        el.getAttribute('data-level'),
+      ),
+    ).toEqual(['1', '2', '3']);
   });
 
-  it('lights the button the room state carries, and only that one', () => {
-    render(consoleModel({ state: stateWith({ gap: 50 }) }));
+  it('marks a level-3 row hot, mirroring the glasses alert outline', () => {
+    render(consoleModel({ state: stateWith({ cars: [3, 2, 0] }) }));
 
-    const selected = root.querySelectorAll('.gapbtn.is-selected');
-    expect(selected).toHaveLength(1);
-    expect(selected[0]!.getAttribute('data-gap')).toBe('50');
-    expect(selected[0]!.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('snaps a value from outside the five to the nearest button', () => {
-    // The relay carries 0–100 and another client may set anything; the console
-    // must still show the spotter which call is closest to the truth.
-    render(consoleModel({ state: stateWith({ gap: 63 }) }));
-    expect(
-      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
-    ).toBe('75');
-
-    render(consoleModel({ state: stateWith({ seq: 2, gap: 12 }) }));
-    expect(
-      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
-    ).toBe('0');
+    const hot = [...root.querySelectorAll('.carrow--hot')];
+    expect(hot.map((el) => el.getAttribute('data-row'))).toEqual(['0']);
   });
 
   it('shows the optimistic tap first, then reconciles to the room', () => {
     render(
       consoleModel({
-        state: stateWith({ gap: 0 }),
-        optimisticGap: { value: 100, at: 5_000 },
         now: 5_100,
+        state: stateWith({ cars: [0, 0, 0] }),
+        optimisticCars: { cars: [0, 2, 0], at: 5_000 },
       }),
     );
-    expect(
-      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
-    ).toBe('100');
+    expect(litSegments()[1]).toEqual([true, true, false]);
 
     render(
       consoleModel({
-        state: stateWith({ gap: 0 }),
-        optimisticGap: { value: 100, at: 5_000 },
         now: 5_400,
+        state: stateWith({ cars: [0, 0, 0] }),
+        optimisticCars: { cars: [0, 2, 0], at: 5_000 },
       }),
     );
-    expect(
-      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
-    ).toBe('0');
+    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(0);
   });
 
-  it('marks the bumper call hot, mirroring the glasses inverted bar', () => {
-    render(consoleModel({ state: stateWith({ gap: 100 }) }));
+  it('keeps the segment buttons stable when the room state changes', () => {
+    render(consoleModel());
+    const segments = [...root.querySelectorAll('.seg')];
 
-    const hot = [...root.querySelectorAll('.gapbtn--hot')];
-    expect(hot.map((el) => el.getAttribute('data-gap'))).toEqual(['100']);
+    render(consoleModel({ state: stateWith({ seq: 2, cars: [3, 3, 3] }) }));
+    expect([...root.querySelectorAll('.seg')]).toEqual(segments);
+    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(9);
   });
 });
 
@@ -284,7 +234,7 @@ describe('AC-3 reconnect banner', () => {
     render(
       consoleModel({
         conn: 'open',
-        state: stateWith({ seq: 9, lane: 'bot', gap: 100 }),
+        state: stateWith({ seq: 9, lane: 'bot', cars: [0, 0, 3] }),
       }),
     );
 
@@ -292,25 +242,27 @@ describe('AC-3 reconnect banner', () => {
     const selected = root.querySelectorAll('.lane.is-selected');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
-    expect(
-      root.querySelector('.gapbtn.is-selected')!.getAttribute('data-gap'),
-    ).toBe('100');
+    expect(litSegments()).toEqual([
+      [false, false, false],
+      [false, false, false],
+      [true, true, true],
+    ]);
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
   });
 });
 
 describe('banner toggling never re-creates the controls', () => {
-  it('keeps the same gap buttons and message input across hide and show', () => {
+  it('keeps the same car segments and message input across hide and show', () => {
     render(consoleModel({ conn: 'closed', state: null }));
-    const gapsWhileDown = [...root.querySelectorAll('.gapbtn')];
+    const segmentsWhileDown = [...root.querySelectorAll('.seg')];
     const inputWhileDown = root.querySelector('[data-testid="msg-input"]');
-    expect(gapsWhileDown).toHaveLength(5);
+    expect(segmentsWhileDown).toHaveLength(9);
 
     // Socket recovers and the room replays: the banner hides, but a
     // half-typed message in flight must survive it.
     render(consoleModel({ conn: 'open', state: stateWith({ seq: 4 }) }));
     expect(banner()).toBeNull();
-    expect([...root.querySelectorAll('.gapbtn')]).toEqual(gapsWhileDown);
+    expect([...root.querySelectorAll('.seg')]).toEqual(segmentsWhileDown);
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );
@@ -318,7 +270,7 @@ describe('banner toggling never re-creates the controls', () => {
     // And back again when it drops.
     render(consoleModel({ conn: 'closed', state: null }));
     expect(banner()).not.toBeNull();
-    expect([...root.querySelectorAll('.gapbtn')]).toEqual(gapsWhileDown);
+    expect([...root.querySelectorAll('.seg')]).toEqual(segmentsWhileDown);
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );

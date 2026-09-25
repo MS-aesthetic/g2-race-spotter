@@ -1,13 +1,11 @@
 import type {
+  Cars,
   ConnectionState,
   Lane,
-  Side,
   State,
 } from '@g2-race-spotter/protocol';
 
-import { nearestGapValue } from './intents.ts';
-
-/** How long an optimistic lane or side highlight survives before the server's
+/** How long an optimistic lane or cars highlight survives before the server's
  * `state` frame is the only truth again (constitution §2 keeps the *glasses*
  * free of optimism; the spotter may pre-light its own button for one beat). */
 export const OPTIMISTIC_LANE_MS = 300;
@@ -27,13 +25,8 @@ export interface OptimisticLane {
   at: number;
 }
 
-export interface OptimisticSide {
-  side: Side | null;
-  at: number;
-}
-
-export interface OptimisticGap {
-  value: number;
+export interface OptimisticCars {
+  cars: Cars;
   at: number;
 }
 
@@ -52,8 +45,7 @@ export interface Model {
   latencyMs: number | null;
   latencyAt: number | null;
   optimisticLane: OptimisticLane | null;
-  optimisticSide: OptimisticSide | null;
-  optimisticGap: OptimisticGap | null;
+  optimisticCars: OptimisticCars | null;
   now: number;
   updateReady: boolean;
   showInstallHint: boolean;
@@ -72,8 +64,7 @@ export function createModel(overrides: Partial<Model> = {}): Model {
     latencyMs: null,
     latencyAt: null,
     optimisticLane: null,
-    optimisticSide: null,
-    optimisticGap: null,
+    optimisticCars: null,
     now: 0,
     updateReady: false,
     showInstallHint: false,
@@ -94,39 +85,22 @@ export function selectedLane(model: Model): Lane | null {
   return model.state?.lane ?? null;
 }
 
+const NO_CARS: Readonly<Cars> = [0, 0, 0];
+
 /**
- * Which side button the console highlights, on the same rule as the lane: the
- * optimistic tap first, then whatever the relay last said.
+ * The room's cars triple as best this client knows it, and what the car rows
+ * light: the triple the spotter just sent while its optimistic window is
+ * open, otherwise whatever the relay last said. A tap is computed against
+ * this, so two quick taps on different rows compose instead of the second
+ * undoing the first.
  */
-export function selectedSide(model: Model): Side | null {
-  const optimistic = model.optimisticSide;
+export function selectedCars(model: Model): Readonly<Cars> {
+  const optimistic = model.optimisticCars;
   if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
-    return optimistic.side;
+    return optimistic.cars;
   }
 
-  return model.state?.side ?? null;
-}
-
-/**
- * The room's gap as best this client knows it: the value the spotter just sent
- * while its optimistic window is open, otherwise what the relay last said.
- * Exact, never snapped — it is what a tap is compared against.
- */
-export function currentGap(model: Model): number {
-  const optimistic = model.optimisticGap;
-  if (optimistic !== null && model.now - optimistic.at < OPTIMISTIC_LANE_MS) {
-    return optimistic.value;
-  }
-
-  return model.state?.gap ?? 0;
-}
-
-/**
- * Which gap button is lit: the optimistic tap for its first
- * `OPTIMISTIC_LANE_MS`, then the nearest button to whatever the relay said.
- */
-export function selectedGap(model: Model): number {
-  return nearestGapValue(currentGap(model));
+  return model.state?.cars ?? NO_CARS;
 }
 
 /** The console is trustworthy only when the socket is open *and* the room has

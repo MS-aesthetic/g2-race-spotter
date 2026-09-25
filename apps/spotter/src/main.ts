@@ -1,9 +1,9 @@
 import type {
+  CarLevel,
   ConnectionCloseDetail,
   ConnectionState,
   Lane,
   RoomClient,
-  Side,
   State,
 } from '@g2-race-spotter/protocol';
 import {
@@ -12,13 +12,12 @@ import {
   PING_INTERVAL_MS,
 } from '@g2-race-spotter/protocol';
 
-import { nextGap, nextSide, normaliseMessage } from './intents.ts';
+import { nextCars, normaliseMessage } from './intents.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
-  currentGap,
+  selectedCars,
   selectedLane,
-  selectedSide,
   type Model,
 } from './model.ts';
 import {
@@ -82,7 +81,7 @@ const client: RoomClient = createSpotterClient({
 });
 
 client.onState((state: State) => {
-  // Room state is the truth (R6); the gap buttons reconcile to `state.gap` as
+  // Room state is the truth (R6); the car rows reconcile to `state.cars` as
   // soon as the optimistic window closes, exactly like the lanes.
   update({ state });
 });
@@ -161,27 +160,33 @@ function setLane(lane: Lane | null): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/** One `gap` per tap; the button already lit is a no-op (040 AC-2). */
-function setGap(value: number): void {
-  const next = nextGap(currentGap(model), value);
+/**
+ * One `cars` frame per change, always the full triple (040 AC-2): tapping
+ * segment n of a row calls level n, tapping the lit top segment clears it.
+ */
+function setCar(row: 0 | 1 | 2, segment: CarLevel): void {
+  const next = nextCars(selectedCars(model), row, segment);
   if (next === null) {
     return;
   }
 
   vibrate();
-  client.send({ t: 'gap', value: next });
-  update({ optimisticGap: { value: next, at: Date.now() } });
+  client.send({ t: 'cars', cars: next });
+  update({ optimisticCars: { cars: next, at: Date.now() } });
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/** Tapping the lit side clears the call; tapping the other switches to it. */
-function setSide(side: Side): void {
-  const next = nextSide(selectedSide(model), side);
+/** `data-arg="<row>:<segment>"` on a car segment button. */
+function carArg(arg: string): { row: 0 | 1 | 2; segment: CarLevel } | null {
+  const match = /^([0-2]):([1-3])$/.exec(arg);
+  if (match === null) {
+    return null;
+  }
 
-  vibrate();
-  client.send({ t: 'side', side: next });
-  update({ optimisticSide: { side: next, at: Date.now() } });
-  window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
+  return {
+    row: Number(match[1]) as 0 | 1 | 2,
+    segment: Number(match[2]) as CarLevel,
+  };
 }
 
 function actionOf(
@@ -224,12 +229,13 @@ root.addEventListener('click', (event) => {
     case 'lane-clear':
       setLane(null);
       break;
-    case 'side':
-      setSide(action.arg as Side);
+    case 'car': {
+      const car = carArg(action.arg);
+      if (car !== null) {
+        setCar(car.row, car.segment);
+      }
       break;
-    case 'gap':
-      setGap(Number(action.arg));
-      break;
+    }
     case 'send':
       sendMessage(model.draft);
       break;

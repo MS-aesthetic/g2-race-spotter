@@ -118,7 +118,8 @@ button {
 
 /* ---------- Console ----------
 
-   One screen, never a scroll (Maxx, 2026-09-04 design round 2): the console is
+   One screen, never a scroll (Maxx, 2026-09-04 design round 2; rows updated
+   in design round 3, 2026-09-25): the console is
    a full-viewport grid whose lane stack takes whatever is left after the fixed
    rows, and the whole thing clips rather than scrolls. Every row below is
    sized so the stack still clears 64 px at 360x640. */
@@ -248,80 +249,59 @@ button {
   font-size: 16px;
 }
 
-/* ---------- Car behind ---------- */
+/* ---------- Cars behind ----------
 
-.gaps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+   Three rows, LEFT / MIDDLE / RIGHT, each a 3-segment tappable bar (Maxx,
+   2026-09-25 design round 3). Lit segments fill left to right like the
+   glasses' bars; a row at level 3 goes red like the glasses' alert outline. */
+
+.cars {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   flex: 0 0 auto;
 }
 
-.gapbtn {
-  min-height: 56px;
-  padding: 0 2px;
+.carrow {
+  display: grid;
+  grid-template-columns: 5.2em repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 4px;
+}
+
+.carrow__label {
+  align-self: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #9fb2bf;
+}
+
+.seg {
+  min-height: 44px;
+  padding: 0;
   border: 2px solid var(--accent);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--bg);
   color: var(--accent);
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.04em;
   transition: background 120ms linear;
 }
 
-.gapbtn--hot {
-  border-color: var(--alert);
-  color: var(--alert);
-}
-
-.gapbtn.is-selected {
+.seg.is-lit {
   background: var(--accent);
   color: #06120a;
 }
 
-.gapbtn--hot.is-selected {
+.carrow--hot .seg {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+.carrow--hot .seg.is-lit {
   background: var(--alert);
   color: #1a0707;
-}
-
-/* ---------- Car alongside ---------- */
-
-.sides {
-  display: flex;
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.side {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 52px;
-  padding: 0 8px;
-  border: 2px solid var(--amber);
-  border-radius: 12px;
-  background: var(--bg);
-  color: var(--amber);
-  transition: background 120ms linear;
-}
-
-.side.is-selected {
-  background: var(--amber);
-  color: #1a1200;
-}
-
-.side__glyph {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.side__label {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
 }
 
 .chip {
@@ -417,10 +397,6 @@ button {
 
   .lane__label {
     font-size: 18px;
-  }
-
-  .side__label {
-    font-size: 15px;
   }
 }
 

@@ -1,61 +1,54 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  GAP_LABELS,
-  GAP_VALUES,
-  nearestGapValue,
-  nextGap,
-  nextSide,
+  CAR_ROWS,
+  CAR_SEGMENTS,
+  nextCarLevel,
+  nextCars,
+  normaliseMessage,
 } from '../src/intents.ts';
 
-describe('AC-2 gap buttons', () => {
-  it('offers the five values Maxx named, in order, with their labels', () => {
-    expect([...GAP_VALUES]).toEqual([0, 25, 50, 75, 100]);
-    expect([...GAP_LABELS]).toEqual(['CLEAR', '25', '50', '75', 'BUMPER']);
+describe('AC-2 car rows (Maxx design round 3)', () => {
+  it('offers LEFT / MIDDLE / RIGHT in the glasses order, three segments each', () => {
+    expect(CAR_ROWS.map((row) => [row.index, row.label])).toEqual([
+      [0, 'LEFT'],
+      [1, 'MIDDLE'],
+      [2, 'RIGHT'],
+    ]);
+    expect([...CAR_SEGMENTS]).toEqual([1, 2, 3]);
   });
 
-  it('sends the tapped value once, and nothing at all for the current one', () => {
-    // One tap, one send.
-    expect(nextGap(0, 50)).toBe(50);
-    expect(nextGap(100, 0)).toBe(0);
-    // The room already holds exactly this: a second tap is not news.
-    expect(nextGap(50, 50)).toBeNull();
-    expect(nextGap(0, 0)).toBeNull();
+  it('sets the tapped segment as the level and clears on the lit top segment', () => {
+    // Tap segment n -> level n, from anywhere.
+    expect(nextCarLevel(0, 1)).toBe(1);
+    expect(nextCarLevel(0, 3)).toBe(3);
+    expect(nextCarLevel(3, 1)).toBe(1);
+    expect(nextCarLevel(1, 2)).toBe(2);
+    // Tapping the lit top segment is how the spotter says the car has gone.
+    expect(nextCarLevel(1, 1)).toBe(0);
+    expect(nextCarLevel(2, 2)).toBe(0);
+    expect(nextCarLevel(3, 3)).toBe(0);
   });
 
-  it('compares against the room gap, not the button that is lit', () => {
-    // At gap 40 the console lights `50` (the nearest button). Tapping `50` is
-    // still a real change — the room is at 40 — and comparing the tap against
-    // the lit button instead of the room would swallow it.
-    expect(nearestGapValue(40)).toBe(50);
-    expect(nextGap(40, 50)).toBe(50);
-    expect(nextGap(40, 25)).toBe(25);
-    // Only an exact match is a no-op.
-    expect(nextGap(50, 50)).toBeNull();
+  it('sends the full triple with only the tapped row changed', () => {
+    expect(nextCars([0, 0, 0], 0, 2)).toEqual([2, 0, 0]);
+    expect(nextCars([1, 2, 3], 1, 3)).toEqual([1, 3, 3]);
+    expect(nextCars([1, 2, 3], 2, 3)).toEqual([1, 2, 0]);
   });
 
-  it('snaps any server value to the nearest button', () => {
-    expect(nearestGapValue(0)).toBe(0);
-    expect(nearestGapValue(12)).toBe(0);
-    expect(nearestGapValue(13)).toBe(25);
-    expect(nearestGapValue(63)).toBe(75);
-    expect(nearestGapValue(100)).toBe(100);
-    // A value the relay should never send still lights a button.
-    expect(nearestGapValue(Number.NaN)).toBe(0);
-    expect(nearestGapValue(-10)).toBe(0);
-    expect(nearestGapValue(400)).toBe(100);
+  it('never mutates the triple it was given', () => {
+    const current = [1, 2, 3] as const;
+    const next = nextCars(current, 0, 3);
+
+    expect(next).toEqual([3, 2, 3]);
+    expect(next).not.toBe(current);
+    expect(current).toEqual([1, 2, 3]);
   });
 });
 
-describe('side toggle (T052)', () => {
-  it('sets the tapped side and clears it on a second tap', () => {
-    expect(nextSide(null, 'inside')).toBe('inside');
-    expect(nextSide(null, 'outside')).toBe('outside');
-    // Tapping the lit button is how the spotter says the car has gone.
-    expect(nextSide('inside', 'inside')).toBeNull();
-    expect(nextSide('outside', 'outside')).toBeNull();
-    // Tapping the other one switches sides without a clear in between.
-    expect(nextSide('inside', 'outside')).toBe('outside');
-    expect(nextSide('outside', 'inside')).toBe('inside');
+describe('message normalising', () => {
+  it('trims, caps and re-trims', () => {
+    expect(normaliseMessage('  box box  ')).toBe('box box');
+    expect(normaliseMessage(`${'a'.repeat(79)} tail`)).toBe('a'.repeat(79));
   });
 });
