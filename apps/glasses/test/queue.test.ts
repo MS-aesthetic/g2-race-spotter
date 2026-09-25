@@ -9,7 +9,13 @@ import {
 import { RenderQueue } from '../src/render/queue.ts';
 import { renderText } from '../src/render/text.ts';
 import type { TextUpgrade } from '../src/bridge.ts';
-import { collectLogs, FakeBridge, FakeClock, flush } from './helpers.ts';
+import {
+  burstCars,
+  collectLogs,
+  FakeBridge,
+  FakeClock,
+  flush,
+} from './helpers.ts';
 
 function textQueue(): {
   bridge: FakeBridge;
@@ -39,13 +45,13 @@ function hudUpgrades(bridge: FakeBridge): TextUpgrade[] {
 }
 
 describe('render queue', () => {
-  it('coalesces 10 gap states in 250 ms into one HUD send, last wins (030 AC-3)', async () => {
+  it('coalesces 10 cars states in 250 ms into one HUD send, last wins (030 AC-3)', async () => {
     const { bridge, clock, queue } = textQueue();
 
-    // Prime with a lane call so the burst below is a pure gap burst.
+    // Prime with a lane call so the burst below is a pure cars burst.
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 0 },
+      state: { lane: 'top', cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -54,7 +60,7 @@ describe('render queue', () => {
     for (let index = 1; index <= 10; index += 1) {
       queue.push({
         kind: 'hud',
-        state: { lane: 'top', side: null, gap: index * 4 },
+        state: { lane: 'top', cars: burstCars(index) },
         linkOk: true,
       });
       await clock.advance(25);
@@ -66,7 +72,7 @@ describe('render queue', () => {
     const sends = hudUpgrades(bridge).slice(1);
     expect(sends).toHaveLength(1);
     expect(sends[0]?.content).toBe(
-      renderText({ lane: 'top', side: null, gap: 40 }),
+      renderText({ lane: 'top', cars: burstCars(10) }),
     );
   });
 
@@ -75,7 +81,7 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: null, side: null, gap: 10 },
+      state: { lane: null, cars: [0, 1, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -83,7 +89,7 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: null, side: null, gap: 20 },
+      state: { lane: null, cars: [0, 2, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -91,7 +97,7 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'bot', side: null, gap: 20 },
+      state: { lane: 'bot', cars: [0, 2, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -99,7 +105,7 @@ describe('render queue', () => {
     const sends = hudUpgrades(bridge);
     expect(sends).toHaveLength(2);
     expect(sends[1]?.content).toBe(
-      renderText({ lane: 'bot', side: null, gap: 20 }),
+      renderText({ lane: 'bot', cars: [0, 2, 0] }),
     );
     expect(clock.ms).toBeLessThan(HUD_GAP_FLUSH_MS);
   });
@@ -109,7 +115,7 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 30 },
+      state: { lane: 'mid', cars: [1, 1, 1] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -117,7 +123,7 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 30 },
+      state: { lane: 'mid', cars: [1, 1, 1] },
       linkOk: false,
     });
     await queue.whenIdle();
@@ -130,15 +136,19 @@ describe('render queue', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 0 },
+      state: { lane: 'top', cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
 
-    for (const gap of [10, 20, 30]) {
+    for (const cars of [
+      [0, 1, 0],
+      [0, 2, 0],
+      [1, 1, 1],
+    ] as const) {
       queue.push({
         kind: 'hud',
-        state: { lane: 'top', side: null, gap },
+        state: { lane: 'top', cars },
         linkOk: true,
       });
     }
@@ -148,7 +158,7 @@ describe('render queue', () => {
     const sends = hudUpgrades(bridge);
     expect(sends).toHaveLength(2);
     expect(sends[1]?.content).toBe(
-      renderText({ lane: 'top', side: null, gap: 30 }),
+      renderText({ lane: 'top', cars: [1, 1, 1] }),
     );
   });
 
@@ -184,7 +194,7 @@ describe('render queue', () => {
     bridge.paused = true;
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 0 },
+      state: { lane: 'top', cars: [0, 0, 0] },
       linkOk: true,
     });
     await flush();
@@ -193,12 +203,12 @@ describe('render queue', () => {
     // Three more HUD states and a message while the first call is unresolved.
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 1 },
+      state: { lane: 'mid', cars: [1, 0, 0] },
       linkOk: true,
     });
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 2 },
+      state: { lane: 'mid', cars: [2, 0, 0] },
       linkOk: true,
     });
     queue.push({ kind: 'msg', text: 'PIT' });
@@ -213,7 +223,7 @@ describe('render queue', () => {
     const sends = hudUpgrades(bridge);
     expect(sends).toHaveLength(2);
     expect(sends[1]?.content).toBe(
-      renderText({ lane: 'mid', side: null, gap: 2 }),
+      renderText({ lane: 'mid', cars: [2, 0, 0] }),
     );
     expect(bridge.callsNamed('textContainerUpgrade')).toHaveLength(3);
   });

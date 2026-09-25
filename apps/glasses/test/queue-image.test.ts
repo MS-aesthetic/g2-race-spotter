@@ -5,7 +5,7 @@ import { drawHud } from '../src/render/draw-hud.ts';
 import { pack } from '../src/render/gray4.ts';
 import { RenderQueue } from '../src/render/queue.ts';
 import { CONTAINER_HUD } from '../src/startup-page.ts';
-import { FakeBridge, FakeClock } from './helpers.ts';
+import { burstCars, FakeBridge, FakeClock } from './helpers.ts';
 
 function imageQueue(): {
   bridge: FakeBridge;
@@ -32,12 +32,12 @@ function images(bridge: FakeBridge): ImageRawData[] {
 }
 
 describe('render queue, image mode (050 AC-4)', () => {
-  it('sends at most 5 images for 20 gap states in 1 s and lands on the last one', async () => {
+  it('sends at most 5 images for 20 cars states in 1 s and lands on the last one', async () => {
     const { bridge, clock, queue } = imageQueue();
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 0 },
+      state: { lane: 'top', cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -45,7 +45,7 @@ describe('render queue, image mode (050 AC-4)', () => {
     for (let index = 1; index <= 20; index += 1) {
       queue.push({
         kind: 'hud',
-        state: { lane: 'top', side: null, gap: index * 5 },
+        state: { lane: 'top', cars: burstCars(index) },
         linkOk: true,
       });
       await clock.advance(50);
@@ -57,7 +57,7 @@ describe('render queue, image mode (050 AC-4)', () => {
     // The priming send plus one flush per 250 ms window.
     expect(sent.length).toBeLessThanOrEqual(5);
     expect(sent.at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', side: null, gap: 100 }, { linkOk: true })),
+      pack(drawHud({ lane: 'top', cars: burstCars(20) }, { linkOk: true })),
     );
     expect(sent[0]).toMatchObject({
       containerID: CONTAINER_HUD,
@@ -72,20 +72,20 @@ describe('render queue, image mode (050 AC-4)', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 0 },
+      state: { lane: 'top', cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 10 },
+      state: { lane: 'top', cars: [0, 1, 0] },
       linkOk: true,
     });
     await clock.advance(50);
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 20 },
+      state: { lane: 'top', cars: [0, 2, 0] },
       linkOk: true,
     });
     await clock.advance(50);
@@ -94,7 +94,7 @@ describe('render queue, image mode (050 AC-4)', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'bot', side: null, gap: 20 },
+      state: { lane: 'bot', cars: [0, 2, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -103,33 +103,34 @@ describe('render queue, image mode (050 AC-4)', () => {
     expect(clock.ms).toBe(100);
     expect(sent).toHaveLength(2);
     expect(sent[1]?.imageData).toEqual(
-      pack(drawHud({ lane: 'bot', side: null, gap: 20 }, { linkOk: true })),
+      pack(drawHud({ lane: 'bot', cars: [0, 2, 0] }, { linkOk: true })),
     );
   });
 
-  it('sends a side call mid-burst immediately', async () => {
+  it('sends the relay stale clear mid-burst immediately', async () => {
     const { bridge, clock, queue } = imageQueue();
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 0 },
+      state: { lane: 'mid', cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 10 },
+      state: { lane: 'mid', cars: [0, 1, 0] },
       linkOk: true,
     });
     await clock.advance(50);
     await queue.whenIdle();
     expect(images(bridge)).toHaveLength(1);
 
-    // A car alongside is a safety call: it must not wait out the gap debounce.
+    // The relay's stale clear drops the lane: that is a lane change, so the
+    // blank HUD does not wait out the cars debounce.
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: 'outside', gap: 10 },
+      state: { lane: null, cars: [0, 0, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -138,9 +139,7 @@ describe('render queue, image mode (050 AC-4)', () => {
     expect(clock.ms).toBe(50);
     expect(sent).toHaveLength(2);
     expect(sent[1]?.imageData).toEqual(
-      pack(
-        drawHud({ lane: 'mid', side: 'outside', gap: 10 }, { linkOk: true }),
-      ),
+      pack(drawHud({ lane: null, cars: [0, 0, 0] }, { linkOk: true })),
     );
   });
 
@@ -149,7 +148,7 @@ describe('render queue, image mode (050 AC-4)', () => {
 
     queue.push({
       kind: 'hud',
-      state: { lane: 'mid', side: null, gap: 20 },
+      state: { lane: 'mid', cars: [0, 2, 0] },
       linkOk: true,
     });
     queue.push({ kind: 'msg', text: 'GO' });

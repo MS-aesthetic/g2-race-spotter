@@ -35,16 +35,17 @@ export const CONTAINER_NAMES = {
 } as const;
 
 /**
- * Message on top, HUD bitmap under it, status strip in the bottom-right corner
- * (Maxx, 2026-09-04). The bitmap is centred: 144 = (576 - 288) / 2.
+ * HUD bitmap at the top, message under it, status strip in the bottom-right
+ * corner (Maxx, 2026-09-25 design round 3). The bitmap is centred:
+ * 144 = (576 - 288) / 2; it ends at y 152 and the message starts at 160.
  */
 const HUD_X = 144;
-const HUD_Y = 108;
+const HUD_Y = 8;
 
 const MSG_X = 16;
-const MSG_Y = 8;
+const MSG_Y = 160;
 const MSG_WIDTH = 544;
-const MSG_HEIGHT = 96;
+const MSG_HEIGHT = 90;
 
 const STATUS_X = 480;
 const STATUS_Y = 258;

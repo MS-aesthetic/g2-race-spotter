@@ -83,8 +83,8 @@ export function startDriver(options: DriverOptions): Driver {
   });
 
   // True only while a `state` frame is being applied: the link check that runs
-  // first would otherwise render the PREVIOUS lane/gap un-dimmed, costing a
-  // second image send per recovery and flashing a stale gap at full intensity.
+  // first would otherwise render the PREVIOUS lane/cars un-dimmed, costing a
+  // second image send per recovery and flashing stale cars at full intensity.
   let applyingState = false;
 
   // The `L` blinks only while the link is down, and the timer exists only for
@@ -200,7 +200,7 @@ export function startDriver(options: DriverOptions): Driver {
     clearMsgTimer();
     msgTimerFor = msgId;
     // Measured from first render, not from this frame: an unrelated `state`
-    // (a gap change, say) must not buy the message another five seconds.
+    // (a cars change, say) must not buy the message another five seconds.
     const remaining = Math.max(0, MSG_AUTO_ACK_MS - (options.now() - shownAt));
     msgTimer = timers.setTimeout(() => {
       msgTimer = undefined;

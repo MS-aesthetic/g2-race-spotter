@@ -86,7 +86,7 @@ describe('message ack (030 AC-5)', () => {
   it('sends ack once on a tap and keeps the text until the relay says acked', async () => {
     const { bridge, queue, socket } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', gap: 20, msg: MESSAGE }));
+    socket.receive(stateFrame({ lane: 'top', cars: [0, 2, 0], msg: MESSAGE }));
     await queue.whenIdle();
     expect(messages(bridge)).toEqual(['BOX THIS LAP']);
 
@@ -105,7 +105,7 @@ describe('message ack (030 AC-5)', () => {
       stateFrame({
         seq: 2,
         lane: 'top',
-        gap: 20,
+        cars: [0, 2, 0],
         msg: { ...MESSAGE, ackedAt: 99 },
       }),
     );
@@ -166,7 +166,7 @@ describe('message ack (030 AC-5)', () => {
   it('does not ack when there is no unacked message', async () => {
     const { bridge, queue, socket } = await harness();
 
-    socket.receive(stateFrame({ lane: 'mid', gap: 5 }));
+    socket.receive(stateFrame({ lane: 'mid', cars: [0, 0, 1] }));
     await queue.whenIdle();
 
     bridge.emit({ textEvent: { eventType: 0 } });
@@ -244,7 +244,7 @@ describe('message ack (030 AC-5)', () => {
     replacement.receive(
       stateFrame({ seq: 3, msg: { ...MESSAGE, ackedAt: 99 } }),
     );
-    replacement.receive(stateFrame({ seq: 4, gap: 40 }));
+    replacement.receive(stateFrame({ seq: 4, cars: [1, 2, 0] }));
     await clock.advance(1_000);
     await queue.whenIdle();
 

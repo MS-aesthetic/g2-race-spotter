@@ -3,28 +3,28 @@
  * should look different — `draw-hud.ts` just calls `drawDesign`, and
  * `primitives.ts` is a generic drawing library that knows nothing about racing.
  *
- * To change the look: adjust `DESIGN` (positions, levels, thresholds) for a
- * tweak, or rewrite `drawLanes` / `drawBar` / `drawSide` with other primitives
- * for a new shape language. The golden ASCII snapshots in
- * `test/draw-hud.test.ts` pin whatever design is current — a deliberate change
- * updates them in the same commit.
+ * To change the look: adjust `DESIGN` (positions, sizes, levels) for a tweak,
+ * or rewrite `drawLanes` / `drawCars` with other primitives for a new shape
+ * language. The golden ASCII snapshots in `test/draw-hud.test.ts` pin whatever
+ * design is current — a deliberate change updates them in the same commit.
  *
- * Layout (Maxx, 2026-09-04): three lane slots across the top in track order
- * (▼ left, ● middle, ▲ right) with the called one filled and the other two
- * left as faint outlines; the car-behind bar across the middle; a ◀ or ▶ in
- * the bottom band when a car is trying to pass. Every filled area is dithered
- * (`DESIGN.fill`) so the driver is not staring at a solid bright panel.
+ * Layout (Maxx, 2026-09-25 design round 3): the image sits at the TOP of the
+ * glasses canvas. Its top row holds the three lane icons at half the round-1
+ * size, in track order (▼ left, ▬ middle, ▲ right) — the called one
+ * dithered-filled, the other two thin outlines. Its bottom row holds three
+ * hollow car-behind bars (left / middle / right), each split into three
+ * segments that fill LEFT-TO-RIGHT with `cars[i]`; a bar at level 3 gets the
+ * bright alert outline. Every filled area is dithered (`DESIGN.fill`) so the
+ * driver is not staring at a solid bright panel.
  */
 
-import type { Lane, Side } from '@g2-race-spotter/protocol';
+import { CAR_LEVEL_MAX, type Cars, type Lane } from '@g2-race-spotter/protocol';
 
 import {
-  fillCircle,
   fillRect,
   fillTriangle,
-  strokeCircle,
+  strokeRect,
   strokeTriangle,
-  vline,
   type Canvas,
   type Paint,
 } from './primitives.ts';
@@ -34,20 +34,20 @@ export const HUD_HEIGHT = 144;
 
 export interface HudState {
   readonly lane: Lane | null;
-  /** A car alongside: `inside` → ◀, `outside` → ▶, `null` → nothing. */
-  readonly side: Side | null;
-  readonly gap: number;
+  /** Cars behind `[left, mid, right]`, each 0..3 (0 = none, 3 = bumper). */
+  readonly cars: Readonly<Cars>;
 }
 
 export const DESIGN = {
   /** 2x2 checkerboard used for every filled shape — half the glare, same size. */
   fill: { on: 15, off: 6 },
-  /** Bar fill above `bar.alertGap`: same dither, dimmer, so the bright
-   * outline is what the eye catches. */
+  /** Fill of a bar at level 3: same dither, dimmer, so the bright outline is
+   * what the eye catches. */
   alertFill: { on: 8, off: 3 },
   /**
-   * Lane call: three fixed positions so the driver always sees where the call
-   * could be, left to right as ▼ ● ▲.
+   * Lane call along the top edge: three fixed positions so the driver always
+   * sees where a call could be, left to right as ▼ ▬ ▲. Half the round-1 size:
+   * triangles 30 px tall and 34 px wide, the middle a 40×10 dash.
    */
   lanes: {
     slots: [
@@ -55,40 +55,38 @@ export const DESIGN = {
       { lane: 'mid', centreX: 144 },
       { lane: 'top', centreX: 240 },
     ],
-    topY: 6,
-    bottomY: 66,
+    topY: 4,
+    bottomY: 34,
     /** Triangles: half the base width. */
-    halfWidth: 34,
-    /** `mid` is a disc rather than a triangle so the three lanes never blur. */
-    circleRadius: 30,
+    halfWidth: 17,
+    /** `mid` is a dash, so it can never be mistaken for either arrow. */
+    dashWidth: 40,
+    dashHeight: 10,
     /** The two lanes that were not called: thin, faint, still legible. */
     outlineThickness: 2,
     outlineLevel: 4,
   },
-  /** Car-behind bar: outline, dithered fill proportional to `gap`, three ticks. */
-  bar: {
-    x: 0,
-    y: 76,
-    width: 288,
-    height: 32,
+  /**
+   * Cars behind along the bottom edge: one hollow bar per `cars` slot, centred
+   * under the lane icon of the same side (x centres 48 / 144 / 240). Each bar
+   * is three `segmentWidth` cells between 2 px dividers; `cars[i]` fills that
+   * many cells LEFT-TO-RIGHT (the same direction as the spotter's segments).
+   */
+  cars: {
+    xs: [5, 101, 197],
+    y: 114,
+    /** 2 + 3 × 26 + 2 × 2 + 2: outline, three cells, two dividers. */
+    width: 86,
+    height: 28,
     outlineThickness: 2,
     outlineLevel: 6,
-    fillInset: 3,
-    fillY: 79,
-    fillHeight: 26,
-    tickXs: [72, 144, 216],
-    tickLevel: 3,
-    /** At/above this gap the bar inverts: bright outline, dimmer fill. */
-    alertGap: 90,
+    segmentWidth: 26,
+    /** Dark gap between a cell's walls and its fill. */
+    fillInset: 1,
+    fillDirection: 'left-to-right',
+    /** At this level the bar swaps to the bright outline and dimmer fill. */
+    alertLevel: CAR_LEVEL_MAX,
     alertOutlineLevel: 15,
-  },
-  /** Pass warning: an arrow hard against the edge the car is on. */
-  side: {
-    y: 112,
-    height: 30,
-    /** Point-to-base length; the apex sits `margin` from the canvas edge. */
-    length: 34,
-    margin: 4,
   },
 } as const;
 
@@ -103,16 +101,17 @@ function laneShape(
   centreX: number,
   active: boolean,
 ): void {
-  const { topY, bottomY, halfWidth, circleRadius, outlineThickness } =
+  const { topY, bottomY, halfWidth, dashWidth, dashHeight, outlineThickness } =
     DESIGN.lanes;
   const paint: Paint = active ? DESIGN.fill : DESIGN.lanes.outlineLevel;
 
   if (lane === 'mid') {
-    const centre = { x: centreX, y: (topY + bottomY) / 2 };
+    const x = centreX - dashWidth / 2;
+    const y = Math.round((topY + bottomY - dashHeight) / 2);
     if (active) {
-      fillCircle(canvas, centre, circleRadius, paint);
+      fillRect(canvas, x, y, dashWidth, dashHeight, paint);
     } else {
-      strokeCircle(canvas, centre, circleRadius, paint, outlineThickness);
+      strokeRect(canvas, x, y, dashWidth, dashHeight, paint, outlineThickness);
     }
     return;
   }
@@ -140,77 +139,45 @@ function drawLanes(canvas: Canvas, lane: Lane | null): void {
   }
 }
 
-function drawBar(canvas: Canvas, gap: number): void {
-  const bar = DESIGN.bar;
-  const alert = gap >= bar.alertGap;
-  const outlineLevel = alert ? bar.alertOutlineLevel : bar.outlineLevel;
-  const fillPaint: Paint = alert ? DESIGN.alertFill : DESIGN.fill;
-  const thickness = bar.outlineThickness;
+function drawCarBar(canvas: Canvas, x: number, level: number): void {
+  const bar = DESIGN.cars;
+  const filled = Math.max(0, Math.min(CAR_LEVEL_MAX, Math.round(level)));
+  const alert = filled >= bar.alertLevel;
+  const outline = alert ? bar.alertOutlineLevel : bar.outlineLevel;
+  const fill: Paint = alert ? DESIGN.alertFill : DESIGN.fill;
+  const wall = bar.outlineThickness;
 
-  fillRect(canvas, bar.x, bar.y, bar.width, thickness, outlineLevel);
-  fillRect(
-    canvas,
-    bar.x,
-    bar.y + bar.height - thickness,
-    bar.width,
-    thickness,
-    outlineLevel,
-  );
-  fillRect(canvas, bar.x, bar.y, thickness, bar.height, outlineLevel);
-  fillRect(
-    canvas,
-    bar.x + bar.width - thickness,
-    bar.y,
-    thickness,
-    bar.height,
-    outlineLevel,
-  );
+  strokeRect(canvas, x, bar.y, bar.width, bar.height, outline, wall);
 
-  const trackWidth = bar.width - 2 * bar.fillInset;
-  const clamped = Math.max(0, Math.min(100, gap));
-  const fillWidth = Math.round((trackWidth * clamped) / 100);
-  fillRect(
-    canvas,
-    bar.x + bar.fillInset,
-    bar.fillY,
-    fillWidth,
-    bar.fillHeight,
-    fillPaint,
-  );
-
-  // Ticks mark the quarters, but only where the fill has not reached yet:
-  // inside the fill they would read as gaps in a solid bar.
-  const fillEnd = bar.x + bar.fillInset + fillWidth;
-  for (const tickX of bar.tickXs) {
-    if (tickX >= fillEnd) {
-      vline(canvas, tickX, bar.fillY, bar.fillHeight, bar.tickLevel);
+  const innerY = bar.y + wall;
+  const innerHeight = bar.height - 2 * wall;
+  for (let cell = 0; cell < CAR_LEVEL_MAX; cell += 1) {
+    const cellX = x + wall + cell * (bar.segmentWidth + wall);
+    if (cell > 0) {
+      // The divider in front of this cell is part of the outline.
+      fillRect(canvas, cellX - wall, innerY, wall, innerHeight, outline);
+    }
+    if (cell < filled) {
+      fillRect(
+        canvas,
+        cellX + bar.fillInset,
+        innerY + bar.fillInset,
+        bar.segmentWidth - 2 * bar.fillInset,
+        innerHeight - 2 * bar.fillInset,
+        fill,
+      );
     }
   }
 }
 
-function drawSide(canvas: Canvas, side: Side | null): void {
-  if (side === null) {
-    return;
-  }
-
-  const { y, height, length, margin } = DESIGN.side;
-  const centreY = y + height / 2;
-  const apexX = side === 'inside' ? margin : HUD_WIDTH - 1 - margin;
-  const baseX =
-    side === 'inside' ? margin + length : HUD_WIDTH - 1 - margin - length;
-
-  fillTriangle(
-    canvas,
-    { x: apexX, y: centreY },
-    { x: baseX, y },
-    { x: baseX, y: y + height },
-    DESIGN.fill,
-  );
+function drawCars(canvas: Canvas, cars: Readonly<Cars>): void {
+  DESIGN.cars.xs.forEach((x, index) => {
+    drawCarBar(canvas, x, cars[index] ?? 0);
+  });
 }
 
 /** Composes the current look onto `canvas`. Pure apart from the canvas it fills. */
 export function drawDesign(canvas: Canvas, state: HudState): void {
   drawLanes(canvas, state.lane);
-  drawBar(canvas, state.gap);
-  drawSide(canvas, state.side);
+  drawCars(canvas, state.cars);
 }

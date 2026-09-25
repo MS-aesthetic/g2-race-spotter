@@ -22,11 +22,11 @@ describe('image send failure fallback', () => {
       onModeChange: (mode) => modes.push(mode),
     });
 
-    // Three lane changes so each HUD job bypasses the gap debounce.
+    // Three lane changes so each HUD job bypasses the cars debounce.
     for (const lane of ['top', 'mid', 'bot'] as const) {
       queue.push({
         kind: 'hud',
-        state: { lane, side: null, gap: 40 },
+        state: { lane, cars: [1, 2, 0] },
         linkOk: true,
       });
       await queue.whenIdle();
@@ -47,12 +47,12 @@ describe('image send failure fallback', () => {
       page.textObject.find(
         (container) => container.containerID === CONTAINER_HUD,
       )?.content,
-    ).toBe(renderText({ lane: 'bot', side: null, gap: 40 }));
+    ).toBe(renderText({ lane: 'bot', cars: [1, 2, 0] }));
 
     // Every later HUD update is a text upgrade on the same container.
     queue.push({
       kind: 'hud',
-      state: { lane: 'top', side: null, gap: 90 },
+      state: { lane: 'top', cars: [3, 3, 0] },
       linkOk: true,
     });
     await queue.whenIdle();
@@ -67,7 +67,7 @@ describe('image send failure fallback', () => {
     expect(upgrades[0]).toEqual({
       containerID: CONTAINER_HUD,
       containerName: 'hud',
-      content: renderText({ lane: 'top', side: null, gap: 90 }),
+      content: renderText({ lane: 'top', cars: [3, 3, 0] }),
     });
   });
 
@@ -88,7 +88,7 @@ describe('image send failure fallback', () => {
     for (const lane of ['top', 'mid', 'bot'] as const) {
       queue.push({
         kind: 'hud',
-        state: { lane, side: null, gap: 10 },
+        state: { lane, cars: [0, 1, 0] },
         linkOk: true,
       });
       await queue.whenIdle();
@@ -118,7 +118,7 @@ describe('image send failure fallback', () => {
     for (const lane of ['top', 'mid', 'bot', null] as const) {
       queue.push({
         kind: 'hud',
-        state: { lane, side: null, gap: 10 },
+        state: { lane, cars: [0, 1, 0] },
         linkOk: true,
       });
       await queue.whenIdle();
@@ -144,7 +144,7 @@ describe('image send failure fallback', () => {
     for (const lane of ['top', 'mid', 'bot', null] as const) {
       queue.push({
         kind: 'hud',
-        state: { lane, side: null, gap: 10 },
+        state: { lane, cars: [0, 1, 0] },
         linkOk: true,
       });
       await queue.whenIdle();

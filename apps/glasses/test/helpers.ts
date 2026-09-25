@@ -6,7 +6,7 @@
  * does, and no test imports it.
  */
 
-import type { RoomClientTimers, State } from '@g2-race-spotter/protocol';
+import type { Cars, RoomClientTimers, State } from '@g2-race-spotter/protocol';
 
 import type {
   Bridge,
@@ -278,14 +278,21 @@ export function collectLogs(): {
   };
 }
 
+/**
+ * The `index`-th distinct `cars` triple (base 4, right digit fastest) — a
+ * stand-in for a burst of spotter segment taps.
+ */
+export function burstCars(index: number): Cars {
+  return [(index >> 4) & 3, (index >> 2) & 3, index & 3] as Cars;
+}
+
 /** A room `state` frame with sensible defaults. */
 export function stateFrame(overrides: Partial<State> = {}): State {
   return {
     t: 'state',
     seq: 1,
     lane: null,
-    side: null,
-    gap: 0,
+    cars: [0, 0, 0],
     msg: null,
     spotterOnline: true,
     driverOnline: true,

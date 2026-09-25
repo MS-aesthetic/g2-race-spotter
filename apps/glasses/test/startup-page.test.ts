@@ -36,8 +36,9 @@ describe('startup page', () => {
     });
   });
 
-  it('lays the page out message-top, HUD-middle, status bottom-right', () => {
-    // The layout table in the g2-hud-display skill (Maxx, 2026-09-04).
+  it('lays the page out HUD-top, message under it, status bottom-right', () => {
+    // The layout table in the g2-hud-display skill (Maxx design round 3,
+    // 2026-09-25): the one image container is the top of the screen.
     const page = buildPage({ mode: 'image', status: 'L S', message: 'BOX' });
     const byId = new Map(
       [...page.textObject, ...(page.imageObject ?? [])].map((container) => [
@@ -49,15 +50,15 @@ describe('startup page', () => {
     expect(byId.get(3)).toMatchObject({
       containerName: 'msg',
       xPosition: 16,
-      yPosition: 8,
+      yPosition: 160,
       width: 544,
-      height: 96,
+      height: 90,
       content: 'BOX',
     });
     expect(byId.get(2)).toMatchObject({
       containerName: 'hud',
       xPosition: 144,
-      yPosition: 108,
+      yPosition: 8,
       width: 288,
       height: 144,
     });
@@ -76,10 +77,10 @@ describe('startup page', () => {
       expect(container.xPosition + container.width).toBeLessThanOrEqual(576);
       expect(container.yPosition + container.height).toBeLessThanOrEqual(288);
     }
-    expect(byId.get(3)!.yPosition + byId.get(3)!.height).toBeLessThanOrEqual(
-      byId.get(2)!.yPosition,
-    );
     expect(byId.get(2)!.yPosition + byId.get(2)!.height).toBeLessThanOrEqual(
+      byId.get(3)!.yPosition,
+    );
+    expect(byId.get(3)!.yPosition + byId.get(3)!.height).toBeLessThanOrEqual(
       byId.get(4)!.yPosition,
     );
   });

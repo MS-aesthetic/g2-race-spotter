@@ -8,6 +8,7 @@
  */
 
 import type {
+  Cars,
   ConnectionCloseDetail,
   ConnectionState,
   ErrorCode,
@@ -34,6 +35,13 @@ export interface RenderSink {
  * driver-side display rule, not a wire timing, and the relay never sees it.
  */
 export const MSG_AUTO_ACK_MS = 5_000;
+
+/** Before the first `state`: no car behind anywhere. */
+const NO_CARS: Readonly<Cars> = [0, 0, 0];
+
+function sameCars(a: Readonly<Cars>, b: Readonly<Cars>): boolean {
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+}
 
 export interface HudAppOptions {
   readonly queue: RenderSink;
@@ -170,7 +178,7 @@ export class HudApp {
    * — the one thing the driver's side decides on its own, because "the text
    * goes away after 5 s" is a display rule and the timer that enforces it must
    * not depend on a round trip that may never come back (constitution §2 still
-   * holds for lane/gap/side: nothing is *drawn* from an unconfirmed intent).
+   * holds for lane/cars: nothing is *drawn* from an unconfirmed intent).
    */
   hideMessage(msgId: string): void {
     if (this.hiddenMessageId === msgId) {
@@ -189,22 +197,20 @@ export class HudApp {
   render(): void {
     const hud = {
       lane: this.state?.lane ?? null,
-      side: this.state?.side ?? null,
-      gap: this.state?.gap ?? 0,
+      cars: this.state?.cars ?? NO_CARS,
       linkOk: this.linkOkFlag,
     };
 
     if (
       this.lastHud === undefined ||
       this.lastHud.lane !== hud.lane ||
-      this.lastHud.side !== hud.side ||
-      this.lastHud.gap !== hud.gap ||
+      !sameCars(this.lastHud.cars, hud.cars) ||
       this.lastHud.linkOk !== hud.linkOk
     ) {
       this.lastHud = hud;
       this.queue.push({
         kind: 'hud',
-        state: { lane: hud.lane, side: hud.side, gap: hud.gap },
+        state: { lane: hud.lane, cars: hud.cars },
         linkOk: hud.linkOk,
       });
     }

@@ -20,16 +20,16 @@ a local relay. Image mode is the default everywhere, simulator included.
 
 | File                             | Purpose                                                                                                                                                                   |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/render/primitives.ts`       | Generic drawing ops on a `Uint8Array` canvas (`fillRect`, `fillTriangle`, `fillCircle`, `hline`, `vline`, `pixel`, `dim`). Knows nothing about racing.                    |
-| `src/render/hud-design.ts`       | **The look.** `DESIGN` holds every position/level/threshold; `drawSymbol`/`drawBar` compose the primitives. Edit this file (and re-record the goldens) to change the HUD. |
+| `src/render/primitives.ts`       | Generic drawing ops on a `Uint8Array` canvas (`fillRect`, `strokeRect`, `fillTriangle`, `fillCircle`, `hline`, `vline`, `pixel`, `dim`). Knows nothing about racing.      |
+| `src/render/hud-design.ts`       | **The look.** `DESIGN` holds every position/level/threshold; `drawLanes`/`drawCars` compose the primitives.   Edit this file (and re-record the goldens) to change the HUD. |
 | `src/render/draw-hud.ts`         | `drawHud(state, {linkOk}) → Uint8Array(288*144)`. Allocates, calls the design, halves the frame when the link is stale.                                                   |
 | `src/render/gray4.ts`            | Packs the frame to 20 736 gray4 bytes. `NIBBLE_ORDER` is the one thing to flip if hardware mirrors the image.                                                             |
 | `src/render/sdk-quirks.ts`       | Everything version-specific about SDK 0.0.12 (`compressMode`, minimum Even App version).                                                                                  |
-| `src/render/text.ts`             | ASCII fallback (`^ o v`, `#`/`-`, `!!` at gap ≥ 90).                                                                                                                      |
+| `src/render/text.ts`             | ASCII fallback: `v - ^` lane markers, then three `[## ]` car bars.                                                                                                        |
 | `src/render/ascii.ts`            | Bitmap → ASCII, for the golden snapshots.                                                                                                                                 |
 | `src/render/glyphs.ts`           | The only non-ASCII characters in the app (`·`, `…`), each with an ASCII fallback.                                                                                         |
 | `src/render/mode.ts`             | `?render=` → KV `g2rs:v1:render` → image. Never looks at the build mode.                                                                                                  |
-| `src/render/queue.ts`            | Single async writer: one bridge call in flight, HUD jobs replace each other, gap changes debounce to 250 ms, three `sendFailed` → text mode.                              |
+| `src/render/queue.ts`            | Single async writer: one bridge call in flight, HUD jobs replace each other, cars changes debounce to 250 ms, three `sendFailed` → text mode.                              |
 | `src/bridge.ts`                  | The `Bridge` interface the app talks to.                                                                                                                                  |
 | `src/even-bridge.ts`             | The only file that imports the SDK. No test loads it.                                                                                                                     |
 | `src/startup-page.ts`            | The 4-container page (`bg`/`hud`/`msg`/`status`) and the one-call guard.                                                                                                  |

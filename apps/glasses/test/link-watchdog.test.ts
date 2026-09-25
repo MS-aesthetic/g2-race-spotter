@@ -94,7 +94,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(statuses(bridge)[0]).toMatch(/^CONNECTING/);
 
-    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
 
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
@@ -103,10 +103,10 @@ describe('NO LINK watchdog (030 AC-4)', () => {
   it('goes NO LINK after 5 s of silence and dims the next HUD frame', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', side: null, gap: 30 }, { linkOk: true })),
+      pack(drawHud({ lane: 'top', cars: [1, 1, 1] }, { linkOk: true })),
     );
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
@@ -115,7 +115,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', side: null, gap: 30 }, { linkOk: false })),
+      pack(drawHud({ lane: 'top', cars: [1, 1, 1] }, { linkOk: false })),
     );
 
     // NO LINK is a blinking `L`: one status job per phase, never an image send.
@@ -133,7 +133,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
     socket.receive(
-      stateFrame({ lane: 'mid', side: null, gap: 10, spotterOnline: false }),
+      stateFrame({ lane: 'mid', cars: [0, 1, 0], spotterOnline: false }),
     );
     await queue.whenIdle();
 
@@ -149,14 +149,14 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, false));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', side: null, gap: 10 }, { linkOk: true })),
+      pack(drawHud({ lane: 'mid', cars: [0, 1, 0] }, { linkOk: true })),
     );
   });
 
   it('spends exactly one image send on a recovery frame, with its values', async () => {
     const { bridge, clock, socket, queue, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', side: null, gap: 30 }));
+    socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
 
     await clock.advance(DRIVER_NO_LINK_MS + 1);
@@ -164,14 +164,14 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     await queue.whenIdle();
     const beforeRecovery = images(bridge).length;
 
-    // The frame that clears NO LINK must not first redraw the OLD gap bright.
-    socket.receive(stateFrame({ seq: 2, lane: 'top', gap: 70 }));
+    // The frame that clears NO LINK must not first redraw the OLD cars bright.
+    socket.receive(stateFrame({ seq: 2, lane: 'top', cars: [0, 2, 2] }));
     await queue.whenIdle();
 
     const sent = images(bridge);
     expect(sent.length - beforeRecovery).toBe(1);
     expect(sent.at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', side: null, gap: 70 }, { linkOk: true })),
+      pack(drawHud({ lane: 'top', cars: [0, 2, 2] }, { linkOk: true })),
     );
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
   });
@@ -179,7 +179,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
   it('re-checks on its own interval without an explicit call', async () => {
     const { bridge, clock, socket, queue } = await harness();
 
-    socket.receive(stateFrame({ lane: 'bot', side: null, gap: 80 }));
+    socket.receive(stateFrame({ lane: 'bot', cars: [3, 0, 1] }));
     await queue.whenIdle();
 
     await clock.advance(DRIVER_NO_LINK_MS + 1_000);
@@ -191,7 +191,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
   it('dims while a reconnect blip has no frame of its own', async () => {
     const { bridge, clock, socket, queue, client, driver } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', side: null, gap: 45 }));
+    socket.receive(stateFrame({ lane: 'top', cars: [2, 1, 0] }));
     await queue.whenIdle();
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
 
@@ -206,12 +206,12 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(FakeWebSocket.sockets.length).toBeGreaterThan(1);
     expect(BLINK_PHASES).toContain(statuses(bridge).at(-1));
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'top', side: null, gap: 45 }, { linkOk: false })),
+      pack(drawHud({ lane: 'top', cars: [2, 1, 0] }, { linkOk: false })),
     );
 
     const next = FakeWebSocket.last();
     next.open();
-    next.receive(stateFrame({ seq: 2, lane: 'top', gap: 45 }));
+    next.receive(stateFrame({ seq: 2, lane: 'top', cars: [2, 1, 0] }));
     await queue.whenIdle();
 
     expect(statuses(bridge).at(-1)).toBe(statusStrip(true, true));
@@ -220,7 +220,7 @@ describe('NO LINK watchdog (030 AC-4)', () => {
   it('reports a terminal close instead of spinning', async () => {
     const { bridge, socket, queue } = await harness();
 
-    socket.receive(stateFrame({ lane: 'top', side: null, gap: 10 }));
+    socket.receive(stateFrame({ lane: 'top', cars: [0, 1, 0] }));
     await queue.whenIdle();
 
     socket.close(4_401);
@@ -230,23 +230,23 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(FakeWebSocket.sockets).toHaveLength(1);
   });
 
-  it('draws the side call carried by the room state (050, T052)', async () => {
+  it('draws the cars carried by the room state and the relay stale clear (T055)', async () => {
     const { bridge, socket, queue } = await harness();
 
-    socket.receive(stateFrame({ lane: 'mid', side: 'inside', gap: 20 }));
+    socket.receive(stateFrame({ lane: 'mid', cars: [0, 2, 3] }));
     await queue.whenIdle();
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', side: 'inside', gap: 20 }, { linkOk: true })),
+      pack(drawHud({ lane: 'mid', cars: [0, 2, 3] }, { linkOk: true })),
     );
 
-    // Clearing the side is a change like any other: one more frame, no lane
-    // or gap churn.
+    // The relay's stale clear is an ordinary `state`: one more frame, blank
+    // lanes and empty bars, still at full intensity (the link is fine).
     const before = images(bridge).length;
-    socket.receive(stateFrame({ seq: 2, lane: 'mid', side: null, gap: 20 }));
+    socket.receive(stateFrame({ seq: 2, lane: null, cars: [0, 0, 0] }));
     await queue.whenIdle();
     expect(images(bridge).length).toBe(before + 1);
     expect(images(bridge).at(-1)?.imageData).toEqual(
-      pack(drawHud({ lane: 'mid', side: null, gap: 20 }, { linkOk: true })),
+      pack(drawHud({ lane: null, cars: [0, 0, 0] }, { linkOk: true })),
     );
   });
 

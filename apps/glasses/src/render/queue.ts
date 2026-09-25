@@ -3,8 +3,11 @@
  *
  * - a new `hud` job REPLACES a pending one (latest wins, never queued behind
  *   another HUD job);
- * - gap-only changes wait out `HUD_GAP_FLUSH_MS`; a lane change, a side call or
- *   a link-state change bypasses the debounce (the driver must see those now);
+ * - cars-only changes wait out `HUD_GAP_FLUSH_MS` (the old gap floor: at most
+ *   one image send per 250 ms while the spotter taps through segments); a lane
+ *   change or a link-state change bypasses the debounce (the driver must see
+ *   those now) — the relay's stale clear resets the lane, so it is immediate
+ *   whenever a lane was up;
  * - `msg` → container 3, `status` → container 4, both `textContainerUpgrade`;
  * - every call is timed and logged `{call, ms, result}` (030 R7);
  * - three consecutive `sendFailed` rebuild the page with a text HUD and the app
@@ -73,7 +76,7 @@ export interface RenderQueueOptions {
 }
 
 interface PendingHud extends HudJob {
-  /** Skips the gap debounce: a lane or link-state change, or the first frame. */
+  /** Skips the cars debounce: a lane or link-state change, or the first frame. */
   readonly immediate: boolean;
 }
 
@@ -144,8 +147,6 @@ export class RenderQueue {
     return (
       last === undefined ||
       last.state.lane !== job.state.lane ||
-      // A car alongside is a safety call: it never waits out the gap debounce.
-      last.state.side !== job.state.side ||
       last.linkOk !== job.linkOk
     );
   }

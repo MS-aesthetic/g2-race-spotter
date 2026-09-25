@@ -120,6 +120,26 @@ export function fillRect(
   }
 }
 
+/**
+ * Rectangle outline `thickness` pixels wide, inside the `width`×`height` box.
+ * Like the other strokes it leaves the interior untouched.
+ */
+export function strokeRect(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  paint: Paint,
+  thickness: number,
+): void {
+  const t = Math.max(1, Math.min(thickness, width / 2, height / 2));
+  fillRect(canvas, x, y, width, t, paint);
+  fillRect(canvas, x, y + height - t, width, t, paint);
+  fillRect(canvas, x, y + t, t, height - 2 * t, paint);
+  fillRect(canvas, x + width - t, y + t, t, height - 2 * t, paint);
+}
+
 /** Inclusive horizontal span — the shape helpers below think in edges, not widths. */
 function span(
   canvas: Canvas,
