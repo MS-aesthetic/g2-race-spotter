@@ -11,6 +11,7 @@ import {
   isClientMessage,
   isHello,
   isPing,
+  isState,
   PROTOCOL_VERSION,
   reduce,
   ROOM_TTL_MS,
@@ -62,8 +63,17 @@ export class RaceRoom extends DurableObject<Env> {
 
   private async loadState(): Promise<State> {
     if (this.state === undefined) {
-      this.state =
-        (await this.ctx.storage.get<State>('state')) ?? createInitialState();
+      // Storage outlives a deploy: a room written by an older relay (v1:
+      // `gap`/`side`, no `cars`/`calledAt`) must not be replayed — no v2
+      // client would accept it and `alarm()` would throw on it. Start the
+      // room's state fresh; `pin` and `createdAt` are separate keys and stay.
+      const stored = await this.ctx.storage.get('state');
+      if (stored !== undefined && !isState(stored)) {
+        console.warn(
+          'g2rs: discarding stored room state with an unknown shape (older protocol?)',
+        );
+      }
+      this.state = isState(stored) ? stored : createInitialState();
     }
     return this.state;
   }
