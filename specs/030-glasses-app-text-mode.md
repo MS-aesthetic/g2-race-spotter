@@ -30,8 +30,8 @@ R8. Double tap on the root page MUST call `shutDownPageContainer(1)`.
 
 | ID | Given / When / Then | Verification |
 |---|---|---|
-| AC-1 | Given a state with `lane:"top", cars:[1,2,3]`, when `renderText` runs, then output is `. . ^\n[#  ] [## ] [###]` | `apps/glasses/test/render-text.test.ts` |
-| AC-2 | Given `lane:null`, then the first line is `. . .`; given any state, then both lines keep a fixed width (5 and 17 characters) and are ASCII only | `apps/glasses/test/render-text.test.ts` |
+| AC-1 | Given a state with `lane:"top", cars:[1,2,3]`, when `renderText` runs, then output is `  <     ^    [>] \n[#  ] [## ] [###]` (the called marker bracketed) | `apps/glasses/test/render-text.test.ts` |
+| AC-2 | Given `lane:null`, then the first line is `  <     ^     >  ` (no brackets); given any state, then both lines keep a fixed width (17 characters) and are ASCII only | `apps/glasses/test/render-text.test.ts` |
 | AC-3 | Given a mocked bridge, when 10 `cars` states arrive within 250 ms, then at most one `textContainerUpgrade` for the HUD container is issued per 250 ms window and the last value wins | `apps/glasses/test/queue.test.ts` |
 | AC-4 | Given a mocked bridge and no frames for 5 s, then status becomes `NO LINK` and the next HUD render is the dimmed variant; when a frame arrives, status returns to `LINK OK · …` | `apps/glasses/test/link-watchdog.test.ts` |
 | AC-5 | Given `msg` with `ackedAt:null`, when `CLICK_EVENT` fires, then `ack{msgId}` is sent and the text remains until a `state` with `ackedAt` arrives | `apps/glasses/test/ack.test.ts` |

@@ -17,7 +17,7 @@ Out: accounts, multiple drivers, push notifications.
 
 R1. MUST follow `.agents/skills/spotter-ui/SKILL.md` for layout, sizes, colours, behaviour, and structure.
 R2. Lane buttons MUST be stacked ▲/▬/▼ and stretch to fill the console, never under 64 px; tapping the selected lane is a no-op; "clear lane" sends `lane:null`.
-R3. The car-behind control MUST be three rows LEFT / MIDDLE / RIGHT, each a 3-segment tappable bar: tapping segment n sets that row to level n, tapping the lit top segment sets it to 0, and each change sends exactly one `cars` frame with the full `[left, mid, right]` triple; lit segments come from `state.cars`. There is no slider and no throttle.
+R3. The car-behind control MUST be three vertical faders INSIDE / BEHIND / OUTSIDE (= `cars[0..2]`) with four detents (0 bottom … 3 top): a drag moves the knob live and sends exactly one `cars` frame (full triple, detent value) on release, a tap on the panel jumps to that detent and sends one; the knob position comes from `state.cars`. No send throttle is needed (one frame per gesture).
 R4. Messages MUST be trimmed, capped at `MSG_MAX_CHARS`, stored as 5 recent chips in `localStorage`.
 R5. Header MUST show room, driver online/offline, EWMA round-trip latency, and ack state; socket loss shows a RECONNECTING banner while controls stay enabled.
 R6. Reconnect MUST rely on `RoomClient` (replay is truth; only offline-queued intents are flushed).
@@ -28,14 +28,14 @@ R8. The console MUST fit the viewport without scrolling at 360×640 and in lands
 
 | ID | Given / When / Then | Verification |
 |---|---|---|
-| AC-1 | Given a `State` with `lane:"mid"`, when `view()` renders, then the lane row reads **▼ BOTTOM · ▬ MIDDLE · ▲ TOP** left to right, only the ▬ button has the selected class, and the header's driver dot shows online/offline per `driverOnline` | `apps/spotter/test/view.test.ts` (jsdom) |
+| AC-1 | Given a `State` with `lane:"mid"`, when `view()` renders, then the lane row reads **◀ BOTTOM · ▲ MIDDLE · ▶ TOP** left to right, only the ▲ button has the selected class, and the header's driver dot shows online/offline per `driverOnline` | `apps/spotter/test/view.test.ts` (jsdom) |
 | AC-2 | Given the three vertical faders INSIDE / BEHIND / OUTSIDE (`cars[0]`, `[1]`, `[2]`; four detents, 0 at the bottom … 3 on top), when a pointer goes down on a fader's track, then its knob follows the finger live and nothing is sent while the finger is down; when the pointer is released (or cancelled), then the knob snaps to the nearest detent (`detentFromPointer(y, trackTop, trackHeight)`) and exactly one `cars` with the full triple (that fader = the detent, the others unchanged) is sent — none when the detent equals the fader's level at pointerdown; a tap on the track jumps to the detent under it and sends once; each knob sits on the detent of `state.cars` (optimistically for ≤ 300 ms, then from the room); a fader at level 3 is marked hot | `apps/spotter/test/intents.test.ts`, `apps/spotter/test/view.test.ts`, `apps/spotter/test/main-fader.test.ts`, `apps/spotter/test/main-rebase.test.ts` |
 | AC-3 | Given connection `closed`, then the banner (since design round 4 the header's `RECONNECTING` pill beside a red link dot) is present and buttons are not disabled; given `open` and a replayed `state`, then the banner is gone and controls reflect the replayed state | `apps/spotter/test/view.test.ts` |
 | AC-4 | Given a sent message, when `state.msg.ackedAt` becomes non-null, then the header shows the ack tick | `apps/spotter/test/view.test.ts` |
 | AC-5 | Given `npm run build -w apps/spotter`, then the main JS chunk is ≤ 40 KB gzipped | `apps/spotter/test/bundle-size.test.ts` |
 | AC-6 | Given the built app served by `wrangler dev`, when opened on iOS Safari and Android Chrome, then join → console works, "Add to Home Screen" installs, and landscape keeps lane buttons ≥ 64 px | `[HW]` screenshots `qa/<date>/040-*.png` |
 | AC-7 | Given two phones and real glasses on LTE, when the spotter taps ▲, then the glasses show ▲ within ~0.5 s (log timestamps) | `[HW]` `qa/<date>/REPORT.md` |
-| AC-8 | Given the built app served over http, when it is opened at 390×664, 360×640 and 740×360 in Chromium, then `documentElement.scrollHeight <= innerHeight`, the console root's `scrollHeight <= clientHeight`, every visible button is ≥ 44 px tall and the lane buttons ≥ 64 px; in portrait the lane row and the car sliders end within the top half of the viewport; and a room holding three saved messages shows all three chips without scrolling | `apps/spotter/test/layout.test.ts` (skips with a message when no Chromium is found) |
+| AC-8 | Given the built app served over http, when it is opened at 390×664, 360×640 and 740×360 in Chromium, then `documentElement.scrollHeight <= innerHeight`, the console root's `scrollHeight <= clientHeight`, every visible button is ≥ 44 px tall and the lane buttons ≥ 64 px; in portrait the lane row and the faders end within the top 55 % of the viewport; and a room holding three saved messages shows all three chips without scrolling | `apps/spotter/test/layout.test.ts` (skips with a message when no Chromium is found) |
 
 ## Decisions
 
