@@ -7,6 +7,7 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createModel, type Model } from '../src/model.ts';
+import { encodeQr, qrPath } from '../src/ui/qr.ts';
 import { createRenderer } from '../src/ui/vdom.ts';
 import { view } from '../src/ui/view.ts';
 
@@ -150,6 +151,74 @@ describe('AC-1 lane row and driver status (design round 4)', () => {
         .getAttribute('data-act'),
     ).toBe('code');
     expect(overlay!.getAttribute('data-act')).toBe('code');
+  });
+
+  it('is the driver setup screen: a QR (SVG) of the hosted glasses URL, the URL as text and the scan steps (T058)', () => {
+    const url =
+      'https://g2-race-relay.maxx-384.workers.dev/glasses/?room=QA01&pin=4821&name=driver';
+    render(
+      consoleModel({
+        form: { room: 'QA01', pin: '4821', name: 'Sam' },
+        relayHost: 'wss://g2-race-relay.maxx-384.workers.dev',
+        showCode: true,
+      }),
+    );
+
+    const overlay = root.querySelector('[data-testid="code-overlay"]')!;
+    const svg = overlay.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Created in the SVG namespace, or a browser draws nothing.
+    expect(svg!.namespaceURI).toBe('http://www.w3.org/2000/svg');
+    expect(svg!.querySelector('path')!.namespaceURI).toBe(
+      'http://www.w3.org/2000/svg',
+    );
+    // The modules drawn are the encoding of exactly this URL.
+    const matrix = encodeQr(url);
+    expect(svg!.getAttribute('viewBox')).toBe(
+      `0 0 ${matrix.length + 8} ${matrix.length + 8}`,
+    );
+    expect(svg!.querySelector('path')!.getAttribute('d')).toBe(qrPath(matrix));
+    expect(svg!.getAttribute('data-url')).toBe(url);
+
+    expect(text('[data-testid="driver-url"]')).toBe(url);
+    expect(overlay.textContent).toContain(url);
+    expect(
+      [...overlay.querySelectorAll('.codeview__hint span')].map(
+        (line) => line.textContent,
+      ),
+    ).toEqual([
+      'Driver: Even app → Developer Mode → Scan → aim at this code.',
+      'The glasses join this room automatically.',
+      'Tap anywhere to close.',
+    ]);
+    expect(text('.codeview__code')).toBe('QA01');
+    expect(text('.codeview__pin')).toBe('PIN 4821');
+  });
+
+  it('re-draws the QR in place when the room changes', () => {
+    const relayHost = 'wss://relay.example';
+    render(
+      consoleModel({
+        form: { room: 'QA01', pin: '4821', name: '' },
+        relayHost,
+        showCode: true,
+      }),
+    );
+    const svg = root.querySelector('[data-testid="driver-qr"]');
+    const before = svg!.querySelector('path')!.getAttribute('d');
+
+    render(
+      consoleModel({
+        form: { room: 'ZZ99', pin: '1111', name: '' },
+        relayHost,
+        showCode: true,
+      }),
+    );
+    expect(root.querySelector('[data-testid="driver-qr"]')).toBe(svg);
+    expect(svg!.querySelector('path')!.getAttribute('d')).not.toBe(before);
+    expect(text('[data-testid="driver-url"]')).toBe(
+      'https://relay.example/glasses/?room=ZZ99&pin=1111&name=driver',
+    );
   });
 });
 

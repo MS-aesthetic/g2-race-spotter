@@ -49,8 +49,13 @@ export function shellAssets(html: string): string[] {
   return [...urls];
 }
 
-/** Paths the worker must stay out of. */
-const PASSTHROUGH = /^\/(?:room\/|health$)/;
+/**
+ * Paths the worker must stay out of: the relay's socket and health routes,
+ * and the glasses app the relay hosts at `/glasses/` (T058) — a driver who
+ * opens the glasses URL on a phone that also runs the spotter must get the
+ * glasses app from the network, never the cached spotter shell.
+ */
+const PASSTHROUGH = /^\/(?:room\/|health$|glasses(?:\/|$))/;
 
 /**
  * Pure so the R7 guarantee is unit-testable without a ServiceWorker global.

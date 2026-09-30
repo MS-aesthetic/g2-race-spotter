@@ -155,3 +155,26 @@ export function relayOrigin(
   const scheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${scheme}//${location.host}`;
 }
+
+/**
+ * What the driver setup screen's QR carries (T058):
+ * `https://<relay>/glasses/?room=<ROOM>&pin=<PIN>&name=driver`. The relay
+ * hosts the glasses app at `/glasses/`, the Even app's Developer Mode loads
+ * whatever URL it scans, and the glasses app seeds its settings from the
+ * query — so the driver neither types nor needs a PC. `pin` is sent even when
+ * empty so a PIN saved for an earlier room is cleared.
+ */
+export function glassesUrl(
+  relay: string,
+  form: Pick<JoinForm, 'room' | 'pin'>,
+): string {
+  const origin = relay
+    .replace(/\/+$/, '')
+    .replace(/^ws(s?):\/\//i, (_match, secure: string) => `http${secure}://`);
+  const query = new URLSearchParams({
+    room: form.room,
+    pin: form.pin,
+    name: 'driver',
+  });
+  return `${origin}/glasses/?${query.toString()}`;
+}

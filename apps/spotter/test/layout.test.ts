@@ -334,4 +334,77 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
       }, 60_000);
     }
   }
+
+  /** Smallest QR edge a phone camera reads comfortably across a pit lane. */
+  const MIN_QR_PX = 140;
+
+  for (const viewport of VIEWPORTS) {
+    it(`fits the driver setup screen (room, PIN, QR, URL, instructions) in ${viewport.name} (${viewport.width}x${viewport.height})`, async () => {
+      const context = await browser.newContext({
+        viewport: { width: viewport.width, height: viewport.height },
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
+        await page.evaluate(() => {
+          localStorage.setItem('g2rs:v1:room', 'Q7X2KD');
+          localStorage.setItem('g2rs:v1:pin', '0042');
+          localStorage.setItem('g2rs:v1:seenAt', String(Date.now()));
+        });
+        await page.goto(`${origin}/`, { waitUntil: 'load' });
+        await page.click('[data-testid="header-room"]');
+        await page.waitForSelector(
+          '[data-testid="code-overlay"]:not([hidden])',
+        );
+
+        const measured = await page.evaluate(() => {
+          const overlay = document.querySelector('.codeview')!;
+          const box = (selector: string): DOMRect =>
+            overlay.querySelector(selector)!.getBoundingClientRect();
+          const parts = [
+            '.codeview__code',
+            '.codeview__pin',
+            '.codeview__qr',
+            '.codeview__url',
+            '.codeview__hint',
+          ].map(box);
+          return {
+            innerWidth: window.innerWidth,
+            innerHeight: window.innerHeight,
+            overlayScroll: overlay.scrollHeight,
+            overlayClient: overlay.clientHeight,
+            qr: box('.codeview__qr').toJSON() as DOMRect,
+            top: Math.min(...parts.map((part) => part.top)),
+            bottom: Math.max(...parts.map((part) => part.bottom)),
+            right: Math.max(...parts.map((part) => part.right)),
+          };
+        });
+        console.info(
+          `driver setup ${viewport.width}x${viewport.height}: overlay ${measured.overlayScroll} <= ${measured.overlayClient}, QR ${Math.round(measured.qr.width)}x${Math.round(measured.qr.height)} at y=${Math.round(measured.qr.top)}, content y ${Math.round(measured.top)}..${Math.round(measured.bottom)}`,
+        );
+
+        expect(measured.overlayScroll).toBeLessThanOrEqual(
+          measured.overlayClient,
+        );
+        expect(measured.top).toBeGreaterThanOrEqual(0);
+        expect(measured.bottom).toBeLessThanOrEqual(measured.innerHeight);
+        expect(measured.right).toBeLessThanOrEqual(measured.innerWidth);
+        expect(measured.qr.width).toBeGreaterThanOrEqual(MIN_QR_PX);
+        expect(measured.qr.height).toBeCloseTo(measured.qr.width, 0);
+        if (process.env.G2RS_LAYOUT_SHOTS) {
+          await page.screenshot({
+            path: join(
+              process.env.G2RS_LAYOUT_SHOTS,
+              `driver-setup-${viewport.width}x${viewport.height}.png`,
+            ),
+          });
+        }
+      } finally {
+        await context.close();
+      }
+    }, 60_000);
+  }
 });

@@ -74,20 +74,31 @@ function patchProps(element: Element, previous: Props, next: Props): void {
   }
 }
 
-export function createNode(child: VNodeChild): Node {
+/** `<svg>` and everything under it must be created in the SVG namespace or
+ * the browser treats it as an unknown HTML element and draws nothing. */
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+export function createNode(child: VNodeChild, inSvg = false): Node {
   if (typeof child === 'string') {
     return document.createTextNode(child);
   }
 
-  const element = document.createElement(child.tag);
+  const svg = inSvg || child.tag === 'svg';
+  const element = svg
+    ? document.createElementNS(SVG_NS, child.tag)
+    : document.createElement(child.tag);
   for (const key of Object.keys(child.props)) {
     setProp(element, key, child.props[key]);
   }
   for (const grandchild of child.children) {
-    element.appendChild(createNode(grandchild));
+    element.appendChild(createNode(grandchild, svg));
   }
 
   return element;
+}
+
+function isSvgParent(node: Node): boolean {
+  return (node as Element).namespaceURI === SVG_NS;
 }
 
 function patchNode(
@@ -104,12 +115,12 @@ function patchNode(
       return;
     }
 
-    parent.replaceChild(createNode(next), node);
+    parent.replaceChild(createNode(next, isSvgParent(parent)), node);
     return;
   }
 
   if (previous.tag !== next.tag || node.nodeType !== 1) {
-    parent.replaceChild(createNode(next), node);
+    parent.replaceChild(createNode(next, isSvgParent(parent)), node);
     return;
   }
 
@@ -126,7 +137,7 @@ function patchChildren(
   for (let index = 0; index < next.length; index += 1) {
     const existing = parent.childNodes[index];
     if (existing === undefined) {
-      parent.appendChild(createNode(next[index]!));
+      parent.appendChild(createNode(next[index]!, isSvgParent(parent)));
       continue;
     }
 

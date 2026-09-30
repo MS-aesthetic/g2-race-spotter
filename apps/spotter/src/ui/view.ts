@@ -14,7 +14,9 @@ import {
   selectedLane,
   type Model,
 } from '../model.ts';
+import { glassesUrl } from '../net/room-client.ts';
 import { isValidRoom } from '../storage.ts';
+import { encodeQr, qrPath } from './qr.ts';
 import { h, type VNode } from './vdom.ts';
 
 interface LaneButton {
@@ -341,14 +343,33 @@ function messageRow(model: Model): VNode {
   ]);
 }
 
-/** The room code, large, for the driver to copy into the glasses app. */
+/** The QR is the same until the room or PIN changes; one encode per change. */
+let qrMemo: { url: string; size: number; path: string } | null = null;
+
+function qrFor(url: string): { size: number; path: string } {
+  if (qrMemo?.url !== url) {
+    const matrix = encodeQr(url);
+    qrMemo = { url, size: matrix.length + 8, path: qrPath(matrix) };
+  }
+  return qrMemo;
+}
+
+/**
+ * The driver setup screen (T058, Maxx 2026-09-30): room and PIN large, and a
+ * QR of the hosted glasses app URL with this room in it. The driver scans it
+ * from the Even app's Developer Mode; the glasses app joins with no typing
+ * and no PC. Tap anywhere to close.
+ */
 function codeOverlay(model: Model): VNode {
+  const url = glassesUrl(model.relayHost, model.form);
+  const qr = qrFor(url);
+
   return h(
     'div',
     {
       class: 'codeview',
       role: 'dialog',
-      'aria-label': 'Room code',
+      'aria-label': 'Driver setup',
       'data-act': 'code',
       'data-testid': 'code-overlay',
       hidden: !model.showCode,
@@ -359,8 +380,29 @@ function codeOverlay(model: Model): VNode {
       h('p', { class: 'codeview__pin' }, [
         model.form.pin === '' ? 'no PIN' : `PIN ${model.form.pin}`,
       ]),
+      h(
+        'svg',
+        {
+          class: 'codeview__qr',
+          viewBox: `0 0 ${qr.size} ${qr.size}`,
+          role: 'img',
+          'aria-label': 'QR code: the glasses app for this room',
+          'shape-rendering': 'crispEdges',
+          'data-testid': 'driver-qr',
+          'data-url': url,
+        },
+        [
+          h('rect', { width: qr.size, height: qr.size, fill: '#fff' }),
+          h('path', { d: qr.path, fill: '#000' }),
+        ],
+      ),
+      h('p', { class: 'codeview__url', 'data-testid': 'driver-url' }, [url]),
       h('p', { class: 'codeview__hint' }, [
-        'Driver: enter this room and PIN in the glasses app. Tap to close.',
+        h('span', {}, [
+          'Driver: Even app → Developer Mode → Scan → aim at this code.',
+        ]),
+        h('span', {}, ['The glasses join this room automatically.']),
+        h('span', {}, ['Tap anywhere to close.']),
       ]),
     ],
   );

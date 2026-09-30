@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createSpotterClient,
+  glassesUrl,
   nextLatency,
   relayOrigin,
   roomUrl,
@@ -247,6 +248,22 @@ describe('R7 service worker passthrough', () => {
     expect(shouldHandle('GET', `${origin}/health`, origin)).toBe(false);
   });
 
+  it('never intercepts the glasses app the relay hosts at /glasses/ (T058)', () => {
+    for (const path of [
+      '/glasses',
+      '/glasses/',
+      '/glasses/?room=QA01&pin=1234&name=driver',
+      '/glasses/index.html',
+      '/glasses/app.json',
+      '/glasses/assets/index-abc.js',
+    ]) {
+      expect(shouldHandle('GET', `${origin}${path}`, origin), path).toBe(false);
+    }
+    // Only the mount itself: a spotter path that merely starts with the word
+    // is still shell.
+    expect(shouldHandle('GET', `${origin}/glassesx`, origin)).toBe(true);
+  });
+
   it('handles the app shell and its assets', () => {
     expect(shouldHandle('GET', `${origin}/`, origin)).toBe(true);
     expect(shouldHandle('GET', `${origin}/assets/main-abc.js`, origin)).toBe(
@@ -261,5 +278,24 @@ describe('R7 service worker passthrough', () => {
     expect(shouldHandle('GET', 'https://other.example/', origin)).toBe(false);
     expect(shouldHandle('POST', `${origin}/`, origin)).toBe(false);
     expect(shouldHandle('GET', 'not a url', origin)).toBe(false);
+  });
+});
+
+describe('glassesUrl (T058 driver QR)', () => {
+  it('points at the relay-hosted glasses app with room, PIN and name=driver', () => {
+    expect(
+      glassesUrl('wss://g2-race-relay.maxx-384.workers.dev', {
+        room: 'QA01',
+        pin: '4821',
+      }),
+    ).toBe(
+      'https://g2-race-relay.maxx-384.workers.dev/glasses/?room=QA01&pin=4821&name=driver',
+    );
+  });
+
+  it('keeps plain http for a LAN relay and drops trailing slashes', () => {
+    expect(
+      glassesUrl('ws://192.168.1.20:8787/', { room: 'CAR42', pin: '' }),
+    ).toBe('http://192.168.1.20:8787/glasses/?room=CAR42&pin=&name=driver');
   });
 });
