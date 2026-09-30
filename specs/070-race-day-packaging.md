@@ -34,6 +34,8 @@ R4. A `scripts/latency-report.ts` MUST turn a glasses console log into `latency.
 
 - 2026-09-03 Sideload via Developer Mode for v1; store submission later — why: private use, fastest iteration.
 
+- 2026-09-30 (Maxx) **Hosted deploy + QR hand-off.** Maxx: "a deployable app not requiring a PC running locally (use a service like Cloudflare)." The relay Worker now serves the glasses app too: `npm run build:site` (`scripts/build-site.mjs`) builds the spotter into `site/` and the glasses app (Vite `base: '/glasses/'`, `app.json` copied into its dist) into `site/glasses/`; `services/relay/wrangler.jsonc` serves `../../site`; `npm run deploy` = typecheck + `build:site` + `wrangler deploy`. `not_found_handling` is `"none"` and the Worker does the spotter's single-page fallback itself for misses outside `/glasses`, so `/glasses/<missing>` is a 404, never the spotter shell. `evenhub qr` encodes a plain URL and the Even app's Developer Mode loads whatever URL a scanned QR carries, so the driver sideloads from the spotter's driver setup screen (spec 040) with no PC; the glasses app joins via `seedFromSearch` and resolves `wss://` from its own https origin. This is the v1 race-day path; the `.ehpk` (R2, AC-3) remains for store submission. Verifiers: `scripts/test/build-site.test.ts`, `services/relay/test/site.test.ts` (T058).
+
 ## Open questions
 
 - Even Hub store submission requirements (review, listing) once the portal accepts submissions.

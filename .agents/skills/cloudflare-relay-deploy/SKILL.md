@@ -1,6 +1,6 @@
 ---
 name: cloudflare-relay-deploy
-description: Cloudflare Workers + Durable Objects setup, local dev, deployment and operations for the Race Spotter relay — wrangler config, SQLite DO migrations, static asset hosting of the spotter PWA, secrets, custom domain, CORS, wrangler tail, and the glasses app.json network whitelist that must match the deployed origin. Use when configuring, deploying, or debugging services/relay.
+description: Cloudflare Workers + Durable Objects setup, local dev, deployment and operations for the Race Spotter relay — wrangler config, SQLite DO migrations, static hosting of the assembled site (spotter PWA at / and the glasses app at /glasses/), one-command deploy, the driver's QR sideload, secrets, custom domain, CORS, wrangler tail, and the glasses app.json network whitelist that must match the deployed origin. Use when configuring, deploying, or debugging services/relay.
 ---
 
 # Cloudflare relay: config, deploy, operate
@@ -11,18 +11,29 @@ Verify against current docs before relying on any flag here — fetch https://de
 
 ```
 wrangler.jsonc
-src/index.ts        Worker: routes /health, /room/:id (upgrade), /room/:id/debug, assets fallback
+src/index.ts        Worker: routes /health, /room/:id (upgrade), /room/:id/debug, assets (+ spotter SPA fallback outside /glasses/)
 src/race-room.ts    RaceRoom Durable Object (hibernation API)
 src/cors.ts         helper adding Access-Control-* headers
-test/               integration tests using `ws` against wrangler dev
+test/               integration tests using `ws` against wrangler dev (site.test.ts: /glasses/ hosting)
 ```
+
+## The site the relay serves (T058, Maxx 2026-09-30: "a deployable app not requiring a PC running locally")
+
+`npm run build:site` (`scripts/build-site.mjs`) builds both apps and assembles the git-ignored `site/`:
+
+```
+site/                 spotter PWA dist (index.html, sw.js, assets/, manifest, icons)
+site/glasses/         glasses app dist — built with Vite base /glasses/ — plus a copy of apps/glasses/app.json
+```
+
+One Worker, one origin, so the glasses app served from `https://<relay>/glasses/` resolves its relay as `wss://<relay>` by itself (`resolveRelayBase`), and the spotter's driver setup screen can hand the driver a QR of `https://<relay>/glasses/?room=<ROOM>&pin=<PIN>&name=driver`. The Even app's Developer Mode loads whatever URL the scanned QR carries (`evenhub qr` itself just encodes a URL), and `seedFromSearch` in the glasses app reads `?room=&pin=&name=` — no PC, no typing. `scripts/test/build-site.test.ts` runs the real CLI into a temp dir.
 
 ## wrangler.jsonc essentials
 
 - `name: "g2-race-relay"`, `main: "src/index.ts"`, `compatibility_date` = today's date when the file is created, `compatibility_flags: ["nodejs_compat"]` only if the protocol package needs it (it should not).
 - `durable_objects.bindings: [{ name: "ROOMS", class_name: "RaceRoom" }]`
 - `migrations: [{ tag: "v1", new_sqlite_classes: ["RaceRoom"] }]` — **SQLite classes** are required for the Workers Free plan; never use `new_classes`.
-- `assets: { directory: "../../apps/spotter/dist", not_found_handling: "single-page-application" }` so the same Worker serves the spotter PWA; the Worker's `fetch` runs first for `/room/*` and `/health`, everything else falls through to assets (`run_worker_first` for those paths if the current asset routing needs it).
+- `assets: { binding: "ASSETS", directory: "../../site", not_found_handling: "none", run_worker_first: true }` — the Worker sees every request, answers `/room/*` and `/health` itself and hands the rest to `env.ASSETS`. `not_found_handling` is one policy for the whole site and the two apps need opposite ones, so the Worker does the spotter's single-page fallback itself: an asset 404 **outside** `/glasses` is re-fetched as `/` (the spotter shell, 200); a 404 under `/glasses/` stays a 404 so the Even app's WebView never receives the spotter shell as a script. `/glasses` → 307 `/glasses/` keeps the query string (asset `html_handling` default).
 - `observability: { enabled: true }` for logs in the dashboard.
 - Secrets via `wrangler secret put DEBUG_KEY`; never in the config file. Local: `.dev.vars` (git-ignored).
 
@@ -30,6 +41,7 @@ test/               integration tests using `ws` against wrangler dev
 
 - `GET /room/:id` with `Upgrade: websocket` → validate room id (`/^[A-Z0-9]{4,6}$/i`), `env.ROOMS.idFromName(id.toUpperCase())`, forward the request to the stub. Non-upgrade requests to `/room/:id` → 426.
 - `GET /health` → `{ ok: true, version }`.
+- Everything else → `serveAsset`: `env.ASSETS.fetch`; on 404 for a GET/HEAD not under `/glasses`, `env.ASSETS.fetch(/)`.
 - `GET /room/:id/debug` → requires header `X-Debug-Key === env.DEBUG_KEY`; returns the DO's current state JSON (implemented as an internal DO route).
 - All HTTP responses pass through `withCors()` → `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Headers: Content-Type, X-Debug-Key`, `Access-Control-Allow-Methods: GET, OPTIONS`; answer `OPTIONS` with 204.
 
@@ -73,14 +85,16 @@ Notes: `getWebSockets(tag)` gives you sockets by role after hibernation; the `he
 
 `npm run dev -w services/relay` → `wrangler dev` on `http://localhost:8787` (`ws://` for sockets). For phones on the LAN use `wrangler dev --ip 0.0.0.0` and put `http://<lan-ip>:8787` in the **dev** `app.json` whitelist of the glasses app (plain http is allowed only for local dev).
 
-Build the spotter first (`npm run build -w apps/spotter`) or the assets directory will not exist.
+Run `npm run build:site` first or the assets directory (`site/`) will not exist. The live tests pass `--assets <temp dir>` and never need it.
 
 ## Deploy
 
-1. `npm run build -w apps/spotter`
-2. `npx wrangler deploy` from `services/relay` → `https://g2-race-relay.<account>.workers.dev`
+One command from the repo root: **`npm run deploy`** = `npm run typecheck && npm run build:site && npm exec -w services/relay -- wrangler deploy` → `https://g2-race-relay.<account>.workers.dev` (currently `https://g2-race-relay.maxx-384.workers.dev`), serving relay, spotter and glasses app together. Needs `wrangler login` (or `CLOUDFLARE_API_TOKEN`) once on the deploying machine; agents never deploy. Verify first with `npm run build:site` then `npx wrangler deploy --dry-run` in `services/relay`.
+
+1. `npm run deploy` (or the three steps above by hand).
+2. Driver: on the spotter phone tap the room chip → the driver setup screen shows ROOM, PIN and a QR → Even app → Developer Mode → Scan. The glasses app loads from `https://<relay>/glasses/` and joins the room.
 3. Custom domain (optional, recommended for a stable whitelist entry): add a route/custom domain in `wrangler.jsonc` (`routes: [{ pattern: "spot.example.com", custom_domain: true }]`).
-4. Update `apps/glasses/app.json` → `permissions[] network.whitelist` with the exact `https://` origin (no path, no wildcard, one entry per origin). Rebuild/re-sideload the glasses app; the whitelist is read at load time.
+4. Update `apps/glasses/app.json` → `permissions[] network.whitelist` with the exact `https://` origin (no path, no wildcard, one entry per origin), then `npm run deploy` — the build copies it to `site/glasses/app.json`, next to the `index.html` the Even app loads. Re-scan the QR; the whitelist is read at load time.
 5. Smoke: `curl https://<host>/health`, then `npx tsx scripts/fake-spotter.ts --url wss://<host> --room QA01 --scenario lanes` with a `--role driver` instance in another terminal.
 
 ## Operate

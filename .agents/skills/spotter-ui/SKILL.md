@@ -14,7 +14,7 @@ The spotter is standing outside, glancing between the track and the phone, often
    - **Join an existing room** (a link under Start): the classic form — room code (auto-uppercase, 4–6 chars), PIN (optional), name, "Join as spotter" — for a second spotter phone. "Start a new room" goes back.
    - Room/PIN/name persist in `localStorage` (`g2rs:v1:*`); `g2rs:v1:seenAt` records when the phone last heard its room, so a return inside 24 h auto-joins. The relay host is in small print so a wrong deployment is obvious. Both sections are always rendered and toggled with `hidden`.
 2. **Console** — the only screen that matters. **It never scrolls** (Maxx, 2026-09-04 design round 2): a `100dvh` grid (with a `100vh` fallback first) with `overflow: hidden` and safe-area insets. Design round 4 (2026-09-25): "This can all fit on the top half of the app ui … On the bottom half, have buttons to send messages to driver."
-   - **Header — one 36 px row of small icons** (no full-width bars): the room code as a small mono chip (a button whose hit box is still 44 px, hanging transparently over the row's edges; tap → a full-screen overlay with the code and PIN large for the driver to type into the glasses app, tap again to close); the **link dot** (green when the socket is open *and* the room replayed, red otherwise) with a small red **`RECONNECTING`** pill beside it while down (`SYNCING…` while open but not yet replayed); the **driver dot** (green online / grey offline); the **ack icon** (`⌛` while the room's message is unacknowledged, `✓` once `ackedAt` is set, hidden when there is no message); latency `123 ms` on the right.
+   - **Header — one 36 px row of small icons** (no full-width bars): the room code as a small mono chip (a button whose hit box is still 44 px, hanging transparently over the row's edges; tap → the **driver setup screen**, see below, tap again to close); the **link dot** (green when the socket is open *and* the room replayed, red otherwise) with a small red **`RECONNECTING`** pill beside it while down (`SYNCING…` while open but not yet replayed); the **driver dot** (green online / grey offline); the **ack icon** (`⌛` while the room's message is unacknowledged, `✓` once `ackedAt` is set, hidden when there is no message); latency `123 ms` on the right.
    - **Top half** (fixed height; ends at y = 276 px at 360×640):
      - **Lane row**: three buttons side by side in glasses order, **left to right ▼ BOTTOM · ▬ MIDDLE · ▲ TOP** ("Bottom is the left most buttons, Middle is middle, and top is right"), glyph over label, **≥ 64 px tall**, then a narrow `✕ CLEAR` button (52 px wide) that sends `lane: null`. Selected = solid bright fill with dark glyph; unselected = dark fill with bright glyph and a 2 px border.
      - **Car sliders**: three **vertical 3-segment sliders** side by side, `LEFT` / `MIDDLE` / `RIGHT` (the glasses' left-to-right order), each a column of segments stacked bottom-up like a level meter (1 at the bottom, 3 on top) with its label underneath; segments ≥ 44 px tall. Segments `1..level` are lit (accent fill), the lit top one carries `is-top`, and a slider at level 3 turns red like the glasses' alert outline.
@@ -23,6 +23,8 @@ The spotter is standing outside, glancing between the track and the phone, often
      - **Saved messages**: the room's `state.presets` as chips (tap the text → `msg`; the small `×` → `preset remove`). They wrap, take whatever height is left, and scroll *inside their own box* if the room holds more than fits — the console itself never scrolls. The slot is hidden while the room has none.
      - **Message row**: `[type a short message] [Send] [Save]` — input maxlength 80; Send (primary) sends `msg` and clears the input; Save sends `preset add` and clears the input (shows `Full` with `aria-disabled` at `PRESETS_MAX`). There is no Clear button any more (the glasses auto-ack and the relay's 6 s stale clear retire a message).
    - Bottom safe area padded; the update toast is the last grid row and costs nothing while hidden.
+
+**Driver setup screen** (T058, Maxx 2026-09-30 — hosted deploy + QR hand-off): the room-chip overlay, full screen, tap anywhere to close. Top to bottom: `ROOM`, the code large (accent, mono), `PIN 1234` (or `no PIN`), a **QR code** (inline `<svg>`, black on a white quiet zone, `min(64vw, 38dvh, 320px)` square) of `https://<relay>/glasses/?room=<ROOM>&pin=<PIN>&name=driver` (`glassesUrl` in `net/room-client.ts`: the relay origin with `ws`→`http`, `pin=` always present so an old stored PIN is cleared), that URL as small selectable mono text, and three lines: "Driver: Even app → Developer Mode → Scan → aim at this code." / "The glasses join this room automatically." / "Tap anywhere to close." In landscape the QR sits left of the text. The QR comes from `ui/qr.ts`, a vendored MIT encoder (Project Nayuki port, level M, versions 1–10, byte mode) memoised per URL; `vdom.ts` creates `<svg>` subtrees with `createElementNS`. `view.test.ts` asserts the `<svg>`, its path = `qrPath(encodeQr(url))` and the exact URL text; `qr.test.ts` pins the encoder to Nayuki's reference `qrcodegen` 1.8.0; `layout.test.ts` checks the screen fits all three viewports with the QR ≥ 140 px.
 
 Landscape (`orientation: landscape` and height ≤ 560 px): the top half on the left (48 %), the messages on the right. Every button the spotter can hit stays ≥ 44 px, lanes ≥ 64 px.
 
@@ -47,7 +49,7 @@ Landscape (`orientation: landscape` and height ≤ 560 px): the top half on the 
 ## PWA
 
 - `manifest.webmanifest`: `display: standalone`, `orientation: any`, `theme_color` = background, 192/512 icons (simple ▲●▼ mark on dark), `start_url: /`.
-- Service worker: precache the built shell (`index.html`, JS, CSS, icons) with a version stamp; network-first for `index.html`; **never** intercept `/room/*` or WebSocket traffic. Show a small "update available — reload" toast when a new SW activates.
+- Service worker: precache the built shell (`index.html`, JS, CSS, icons) with a version stamp; network-first for `index.html`; **never** intercept `/room/*`, `/health`, WebSocket traffic, or `/glasses` / `/glasses/*` (the relay-hosted glasses app — a driver opening its URL on a phone that runs the spotter must never get the cached spotter shell). Show a small "update available — reload" toast when a new SW activates.
 - First-visit hint: "Add to Home Screen for full-screen use" with platform-specific one-liners (iOS: Share → Add to Home Screen).
 - `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">`.
 
@@ -60,8 +62,9 @@ intents.ts          pure decisions: CAR_ROWS/CAR_SEGMENTS, BUILTIN_MESSAGES, nex
                     startCarDrag/moveCarDrag/endCarDrag, rebaseCars, normaliseMessage
 join.ts             generateRoomCode, isStartPin, isSessionCurrent (24 h)
 storage.ts          join form + seenAt in localStorage
-net/room-client.ts  thin wrapper: `new RoomClient({ WebSocket: window.WebSocket, ... })` + latency tee
-ui/vdom.ts          ~150-line positional diff (no framework — AC-5's 40 KB budget)
+net/room-client.ts  thin wrapper: `new RoomClient({ WebSocket: window.WebSocket, ... })` + latency tee; roomUrl, glassesUrl
+ui/vdom.ts          ~170-line positional diff (no framework — AC-5's 40 KB budget); SVG namespace aware
+ui/qr.ts            vendored QR encoder (MIT, Project Nayuki port) → one SVG path
 ui/view.ts          join + console as one pure function of the Model
 sw.ts               service worker
 styles.css

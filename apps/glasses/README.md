@@ -5,13 +5,29 @@ through `@evenrealities/even_hub_sdk` 0.0.12. The page you see on the phone is t
 companion UI (room / PIN / name / HUD override + a bridge log); the interesting
 output is on the glasses.
 
-## Run
+## Put it on the glasses (no PC)
+
+The relay hosts the built app at `https://g2-race-relay.maxx-384.workers.dev/glasses/`
+(`npm run deploy` from the repo root builds both apps into `site/` and deploys it).
+On the spotter phone, tap the room chip: the driver setup screen shows a QR of
+`https://<relay>/glasses/?room=<ROOM>&pin=<PIN>&name=driver`. The driver opens the
+Even app → Developer Mode → Scan, and the glasses app loads from the relay, seeds
+room/PIN/name from the query (`seedFromSearch`) and connects to `wss://<relay>`
+(same origin, `resolveRelayBase`).
+
+`vite build` uses `base: '/glasses/'` and copies `app.json` into `dist/` (the Even
+app reads the network whitelist next to `index.html`); the dev server stays at `/`.
+
+## Run locally (dev PC)
 
 ```bash
 npm run dev -w apps/glasses         # Vite on 0.0.0.0:5173
 npx evenhub qr --url http://<your-ip>:5173   # sideload onto real glasses
 npm run simulate -w apps/glasses    # evenhub-simulator against the dev server
 ```
+
+A page served from the dev PC has no relay of its own, so it uses `VITE_RELAY_URL`
+from `.env` (the deployed relay) unless `?relay=` overrides it.
 
 `?render=text` forces the ASCII fallback, `?relay=ws://host:8787` points the app at
 a local relay. Image mode is the default everywhere, simulator included.

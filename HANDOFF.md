@@ -22,6 +22,17 @@ Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside 
 
 **Agents:** T050 — relay heartbeat + validation (020 AC-7, AC-9) in one task; Sonnet-tier is fine. Then nothing until hardware evidence arrives.
 
+## How to put it on the glasses
+
+Since T058 (Maxx 2026-09-30: "a deployable app not requiring a PC running locally") one Cloudflare Worker serves everything: the relay, the spotter PWA at `/`, and the glasses app at `/glasses/`.
+
+1. **Deploy (once per change, from any machine with `wrangler login`):** `npm ci`, then `npm run deploy` at the repo root (= typecheck → `npm run build:site` → `wrangler deploy` from `services/relay`). `site/` is build output and git-ignored. Dry run: `npm run build:site`, then `npx wrangler deploy --dry-run` in `services/relay`.
+2. **Spotter:** open `https://g2-race-relay.maxx-384.workers.dev/` on the phone (Add to Home Screen), set a PIN, Start.
+3. **Driver:** on the spotter phone tap the room chip in the header. The driver setup screen shows ROOM, PIN, a QR and the URL it carries — `https://g2-race-relay.maxx-384.workers.dev/glasses/?room=<ROOM>&pin=<PIN>&name=driver`. Driver: Even app → Developer Mode → Scan → aim at the code. The glasses app loads from the relay and joins the room; no PC, no typing.
+4. New relay origin (custom domain)? Put it in `apps/glasses/app.json`'s network whitelist and redeploy — the build copies `app.json` next to the hosted `index.html`.
+
+The dev-PC path (`npm run dev -w apps/glasses` + `npx evenhub qr --url http://<ip>:5173`, relay from `apps/glasses/.env`) still works for local iteration.
+
 ## Workflow and gates
 
 Use one isolated lease, one fresh worker, one task, and one commit. A fresh `protocol-keeper` reviews the exact range **and writes `ralph/last-review.md` before the planner runs** — two commits landed without a review record this week; do not repeat that. Integrate only an approved stack and rerun all gates. Never assign `[HW]` work to an agent, redefine wire types outside `packages/protocol`, show stale driver data as live, commit secrets, or hand-edit generated `.claude/`/`.codex/` files (edit `agents/roles/` or `.agents/skills/` and run `node scripts/sync-agents.mjs`).
