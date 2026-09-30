@@ -18,8 +18,10 @@ export interface AsciiOptions {
   readonly scale?: number;
   /**
    * `max` (the default) keeps thin features; `min` takes the DIMMEST pixel in
-   * the block, which is what makes the dither visible in a snapshot: a solid
-   * area stays `#` while a dithered one drops to its `off` level.
+   * the block, which is what makes a dither visible in a snapshot: a solid
+   * area stays `#` while a dithered one drops to its `off` level. (Fills are
+   * solid since 2026-09-30, so no golden uses `min` today; it is kept for when
+   * a dither is re-enabled in `DESIGN`.)
    */
   readonly sample?: 'max' | 'min';
 }

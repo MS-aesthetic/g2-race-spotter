@@ -21,12 +21,13 @@
  *
  * Top strip: the three lane icons in track order — ▼ in the top-left corner,
  * ▬ centred on the seam, ▲ in the top-right corner — the called one
- * dithered-filled, the other two thin outlines. Bottom strip: three hollow
+ * solid-filled, the other two thin outlines. Bottom strip: three hollow
  * car-behind bars — LEFT in the bottom-left corner, MIDDLE centred on the
  * seam, RIGHT in the bottom-right corner — each split into three segments that
  * fill LEFT-TO-RIGHT with `cars[i]`; a bar at level 3 gets the bright alert
- * outline. Every filled area is dithered (`DESIGN.fill`) so the driver is not
- * staring at a solid bright panel. Coordinates below are strip coordinates
+ * outline. Every filled area is a solid level (`DESIGN.fill`, `DESIGN.alertFill`);
+ * both are `Paint`s, so a dither can be re-enabled by editing those two
+ * values. Coordinates below are strip coordinates
  * (x 0..575, y 0..47); the strips' place on the canvas is `STRIP_Y`.
  */
 
@@ -66,11 +67,16 @@ export interface HudState {
 }
 
 export const DESIGN = {
-  /** 2x2 checkerboard used for every filled shape — half the glare, same size. */
-  fill: { on: 15, off: 6 },
-  /** Fill of a bar at level 3: same dither, dimmer, so the bright outline is
-   * what the eye catches. */
-  alertFill: { on: 8, off: 3 },
+  /**
+   * Paint of every filled shape: a SOLID level 15 (Maxx, 2026-09-30: dithering
+   * off). `Paint` is `number | {on, off}`, so a 2x2 checkerboard is one edit
+   * away — e.g. `{ on: 15, off: 6 }` (the 2026-09-04 look) — and nothing else
+   * in the renderer or the tests needs to change.
+   */
+  fill: 15 as Paint,
+  /** Fill of a bar at level 3: solid but dimmer (8), so the bright outline is
+   * what the eye catches. Same one-object switch to a dither as `fill`. */
+  alertFill: 8 as Paint,
   /**
    * Lane call along the TOP strip: three fixed positions so the driver always
    * sees where a call could be, left to right as ▼ ▬ ▲. ▼ and ▲ sit in the
