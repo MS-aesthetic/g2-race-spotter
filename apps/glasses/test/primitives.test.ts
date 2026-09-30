@@ -10,8 +10,8 @@ import {
 } from '../src/render/primitives.ts';
 
 /**
- * The ring-sector primitives behind the corner car bars (Maxx, design round
- * 5). Rasterised at pixel centres with plain integer indexing: every pixel
+ * The ring-sector primitives behind the corner car bars (Maxx, design rounds
+ * 5 and 5b). Rasterised at pixel centres with plain integer indexing: every pixel
  * stays 0..15, nothing is written off the canvas, and the outline is closed.
  */
 
@@ -19,7 +19,43 @@ const W = 200;
 const H = 120;
 
 const SECTORS: readonly RingSector[] = [
-  // The HUD's own corner segments: bottom-left and bottom-right quarter rings.
+  // The HUD's corner segments (round 5b): quarter rings centred INSIDE the
+  // strip, sweeping the quadrant that faces the bottom corner — left 180..270,
+  // right 270..360 — so the angles run past 180.
+  {
+    centre: { x: 88, y: 8 },
+    innerRadius: 60,
+    outerRadius: 88,
+    startAngle: 240,
+    endAngle: 270,
+    edgeInset: 1,
+  },
+  {
+    centre: { x: 88, y: 8 },
+    innerRadius: 60,
+    outerRadius: 88,
+    startAngle: 180,
+    endAngle: 210,
+    edgeInset: 1,
+  },
+  {
+    centre: { x: 112, y: 8 },
+    innerRadius: 60,
+    outerRadius: 88,
+    startAngle: 270,
+    endAngle: 300,
+    edgeInset: 1,
+  },
+  {
+    centre: { x: 112, y: 8 },
+    innerRadius: 60,
+    outerRadius: 88,
+    startAngle: 330,
+    endAngle: 360,
+    edgeInset: 1,
+  },
+  // The round-5 corner segments, centred on the bottom corners (curve towards
+  // the screen centre), kept because the primitive must not care.
   {
     centre: { x: 0, y: 96 },
     innerRadius: 60,
@@ -134,7 +170,7 @@ describe('ring-sector primitives', () => {
   it('clips a sector that runs off the canvas', () => {
     const canvas = createCanvas(40, 30);
     expect(() => {
-      fillRingSector(canvas, SECTORS[4]!, 9);
+      fillRingSector(canvas, SECTORS[8]!, 9);
       strokeRingSector(canvas, SECTORS[0]!, 9, 2);
     }).not.toThrow();
     expect(canvas.data.length).toBe(40 * 30);
@@ -156,7 +192,11 @@ describe('ring-sector primitives', () => {
           const r = Math.hypot(dx, dy);
           expect(r).toBeGreaterThanOrEqual(sector.innerRadius);
           expect(r).toBeLessThanOrEqual(sector.outerRadius);
-          const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+          // atan2 answers -180..180; sectors may sweep anywhere in 0..360.
+          while (angle < sector.startAngle - 1e-9) {
+            angle += 360;
+          }
           expect(angle).toBeGreaterThanOrEqual(sector.startAngle - 1e-9);
           expect(angle).toBeLessThanOrEqual(sector.endAngle + 1e-9);
         }

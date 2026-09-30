@@ -9,7 +9,7 @@
  * language. The golden ASCII snapshots in `test/draw-hud.test.ts` pin whatever
  * design is current — a deliberate change updates them in the same commit.
  *
- * Layout (Maxx, 2026-09-30 design round 5, on the round-4 perimeter layout):
+ * Layout (Maxx, 2026-09-30 design rounds 5 and 5b, on the round-4 perimeter layout):
  * the HUD is two STRIPS the full 576-px canvas width — a 576×48 one along the
  * top edge and a 576×96 one along the bottom edge — and the centre of the
  * screen holds only the message. The pinned SDK caps a page at four image
@@ -20,17 +20,20 @@
  * Top strip — "make left triangle point left, right triangle point right,
  * make middle a triangle pointing up": ◀ at the far left (bottom lane), ▲
  * centred on the seam (middle lane), ▶ at the far right (top lane); the called
- * one solid-filled, the other two thin outlines. On a new call the called icon
+ * one solid-filled, the other two thin outlines; round 5b made them larger
+ * (42 px along the pointing axis, 44 across). On a new call the called icon
  * blinks outline → filled → outline → filled (`LaneStyle`, driven by
  * `blink.ts`).
  *
  * Bottom strip — "bars on the corners with rounded edges … a mix between a
  * banana and an L; middle still a bar but vertical; segments instead of
- * dynamic sliders": LEFT = a quarter ring hugging the bottom-left corner,
- * RIGHT = its mirror in the bottom-right corner, MIDDLE = a vertical bar on
- * the seam. Each is three outlined segments with 2 px gaps that fill from the
- * BOTTOM EDGE UP with `cars[i]` (the corner rings from their horizontal end
- * towards their vertical end — the same direction as the spotter's faders);
+ * dynamic sliders", then (5b) "flip the corners — the rounded side down towards
+ * the corners": LEFT = a rounded L in the bottom-left corner (a quarter ring
+ * whose centre is INSIDE the strip, so its curve sits in the corner and its two
+ * arms point up the left edge and along the bottom edge), RIGHT = its mirror in
+ * the bottom-right corner, MIDDLE = a vertical bar on the seam. Each is three outlined segments with 2 px gaps that fill from the
+ * BOTTOM EDGE UP with `cars[i]` (the corner rings from their bottom-edge arm
+ * towards their vertical arm — the same direction as the spotter's faders);
  * a bar at level 3 gets the bright alert outline and the dimmer alert fill.
  *
  * Every filled area is a solid level (`DESIGN.fill`, `DESIGN.alertFill`); both
@@ -106,8 +109,10 @@ export const DESIGN = {
    * Lane call along the TOP strip (48 tall): three fixed positions so the
    * driver always sees where a call could be. ◀ (bottom lane) and ▶ (top lane)
    * point outwards from the far left and far right, ▲ (middle lane) sits on
-   * the seam at x 288, half in each image. Round-3 size: 30 px along the
-   * direction the triangle points, 34 px across it.
+   * the seam at x 288, half in each image. Round-5b size (was 30 × 34): 42 px
+   * along the direction the triangle points and 42 px between the base
+   * vertices (43 lit rows), so the icons span rows 3..45 of the 48 px strip —
+   * a 3 px margin above and 2 px below. (44 across would leave 1 px below.)
    */
   lanes: {
     slots: [
@@ -117,9 +122,9 @@ export const DESIGN = {
     ],
     centreY: 24,
     /** Apex to base. */
-    length: 30,
+    length: 42,
     /** Half the base. */
-    halfWidth: 17,
+    halfWidth: 21,
     /** The two lanes that were not called: thin, faint, still legible. */
     outlineThickness: 2,
     outlineLevel: 4,
@@ -128,10 +133,13 @@ export const DESIGN = {
   },
   /**
    * Cars behind along the BOTTOM strip (96 tall). LEFT and RIGHT are quarter
-   * rings centred on the strip's bottom corners (local (0, 96) and
-   * (576, 96)), 28 px thick, swept 90° from straight up to straight
-   * right (left) / straight left (right) and cut into three angular segments
-   * with 2 px parallel-sided gaps. MIDDLE is a vertical bar on the seam, three
+   * rings centred INSIDE the strip, at local (R, 96 − R) and (576 − R, 96 − R)
+   * with R = `outerRadius`, so the outer arc is tangent to the side edge and
+   * the bottom edge and the curve sits in the corner; 28 px thick, swept 90°
+   * over the quadrant that faces the corner (left: 180°→270°, right:
+   * 270°→360°) — a rounded L whose arms point up the side edge and along the
+   * bottom edge — and cut into three angular segments with 2 px
+   * parallel-sided gaps. MIDDLE is a vertical bar on the seam, three
    * stacked segments with the same gaps. Every segment is its own 2 px outline
    * (level 6) with a 1 px dark gap around its fill.
    */
@@ -225,9 +233,11 @@ function barLook(level: number): { readonly filled: number } & Look {
 }
 
 /**
- * The three segments of a corner ring, bottom first. `side` 'left' is centred
- * on the bottom-left corner and sweeps 0°→90° (right → up); 'right' is its
- * mirror, 180°→90°.
+ * The three segments of a corner ring, bottom-edge arm first. The ring is
+ * centred inside the strip at (R, h − R) ('left') or (576 − R, h − R)
+ * ('right'), R = outer radius. 'left' sweeps 270°→180° (the bottom-edge arm
+ * round to the vertical arm, through the corner); 'right' is its mirror,
+ * 270°→360°.
  */
 export function cornerSegments(
   side: 'left' | 'right',
@@ -236,20 +246,20 @@ export function cornerSegments(
   const { corner, gap } = DESIGN.cars;
   const step = 90 / CAR_LEVEL_MAX;
   const centre: Point = {
-    x: side === 'left' ? 0 : STRIP_WIDTH,
-    y: stripHeight,
+    x: side === 'left' ? corner.outerRadius : STRIP_WIDTH - corner.outerRadius,
+    y: stripHeight - corner.outerRadius,
   };
 
   return Array.from({ length: CAR_LEVEL_MAX }, (_, index) => {
-    // Angle measured from the bottom edge up.
+    // Sweep measured from the bottom-edge arm round to the vertical arm.
     const from = index * step;
     const to = from + step;
     return {
       centre,
       innerRadius: corner.innerRadius,
       outerRadius: corner.outerRadius,
-      startAngle: side === 'left' ? from : 180 - to,
-      endAngle: side === 'left' ? to : 180 - from,
+      startAngle: side === 'left' ? 270 - to : 270 + from,
+      endAngle: side === 'left' ? 270 - from : 270 + to,
       edgeInset: gap / 2,
     };
   });
