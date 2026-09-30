@@ -4,44 +4,63 @@ import { MSG_MAX_CHARS } from '@g2-race-spotter/protocol';
 
 import {
   BUILTIN_MESSAGES,
+  CAR_DETENTS,
   CAR_ROWS,
-  CAR_SEGMENTS,
+  detentFromPointer,
   dragCars,
   endCarDrag,
+  faderPosition,
   moveCarDrag,
-  nextCarLevel,
   nextCars,
   normaliseMessage,
   rebaseCars,
   startCarDrag,
 } from '../src/intents.ts';
 
-describe('AC-2 car sliders (levels)', () => {
-  it('offers LEFT / MIDDLE / RIGHT in the glasses order, three segments each', () => {
+describe('AC-2 car faders (design round 5)', () => {
+  it('offers INSIDE / BEHIND / OUTSIDE in the glasses order, four detents each', () => {
     expect(CAR_ROWS.map((row) => [row.index, row.label])).toEqual([
-      [0, 'LEFT'],
-      [1, 'MIDDLE'],
-      [2, 'RIGHT'],
+      [0, 'INSIDE'],
+      [1, 'BEHIND'],
+      [2, 'OUTSIDE'],
     ]);
-    expect([...CAR_SEGMENTS]).toEqual([1, 2, 3]);
+    expect([...CAR_DETENTS]).toEqual([0, 1, 2, 3]);
   });
 
-  it('sets the tapped segment as the level and clears on the lit top segment', () => {
-    // Tap segment n -> level n, from anywhere.
-    expect(nextCarLevel(0, 1)).toBe(1);
-    expect(nextCarLevel(0, 3)).toBe(3);
-    expect(nextCarLevel(3, 1)).toBe(1);
-    expect(nextCarLevel(1, 2)).toBe(2);
-    // Tapping the lit top segment is how the spotter says the car has gone.
-    expect(nextCarLevel(1, 1)).toBe(0);
-    expect(nextCarLevel(2, 2)).toBe(0);
-    expect(nextCarLevel(3, 3)).toBe(0);
+  it('snaps a pointer y to the nearest detent, 0 at the bottom of the track, 3 at the top', () => {
+    // Track from y=100 to y=250: detents at 250 (0), 200 (1), 150 (2), 100 (3).
+    const at = (y: number) => detentFromPointer(y, 100, 150);
+    expect(at(250)).toBe(0);
+    expect(at(200)).toBe(1);
+    expect(at(150)).toBe(2);
+    expect(at(100)).toBe(3);
+    // Halfway between two detents is the boundary.
+    expect(at(226)).toBe(0);
+    expect(at(224)).toBe(1);
+    expect(at(176)).toBe(1);
+    expect(at(174)).toBe(2);
+    expect(at(126)).toBe(2);
+    expect(at(124)).toBe(3);
   });
 
-  it('sends the full triple with only the tapped row changed', () => {
+  it('clamps a finger past either end of the track, and survives a zero-size box', () => {
+    expect(detentFromPointer(400, 100, 150)).toBe(0);
+    expect(detentFromPointer(-20, 100, 150)).toBe(3);
+    expect(faderPosition(400, 100, 150)).toBe(0);
+    expect(faderPosition(-20, 100, 150)).toBe(1);
+    expect(faderPosition(175, 100, 150)).toBe(0.5);
+    expect(detentFromPointer(120, 100, 0)).toBe(0);
+    expect(detentFromPointer(Number.NaN, 100, 150)).toBe(0);
+  });
+
+  it('sends the full triple with only that fader changed, or nothing when it did not move', () => {
     expect(nextCars([0, 0, 0], 0, 2)).toEqual([2, 0, 0]);
     expect(nextCars([1, 2, 3], 1, 3)).toEqual([1, 3, 3]);
-    expect(nextCars([1, 2, 3], 2, 3)).toEqual([1, 2, 0]);
+    expect(nextCars([1, 2, 3], 2, 0)).toEqual([1, 2, 0]);
+    // A fader has its own 0 detent: releasing on the current level is not a
+    // clear (the round-3 "tap the lit top" rule is gone).
+    expect(nextCars([1, 2, 3], 1, 2)).toBeNull();
+    expect(nextCars([0, 0, 0], 0, 0)).toBeNull();
   });
 
   it('never mutates the triple it was given', () => {
@@ -54,65 +73,56 @@ describe('AC-2 car sliders (levels)', () => {
   });
 });
 
-describe('AC-2 slider drag (design round 4)', () => {
-  it('a tap is a drag that never moves: same decision as nextCars', () => {
+describe('AC-2 fader drag', () => {
+  it('a tap is a drag that never moves: the knob jumps to that detent, same decision as nextCars', () => {
     for (const current of [0, 1, 2, 3] as const) {
-      for (const segment of [1, 2, 3] as const) {
+      for (const detent of [0, 1, 2, 3] as const) {
         const cars = [0, current, 0] as const;
-        expect(endCarDrag(startCarDrag(cars, 1, segment))).toEqual(
-          nextCars(cars, 1, segment),
+        expect(endCarDrag(startCarDrag(cars, 1, detent / 3))).toEqual(
+          nextCars(cars, 1, detent),
         );
       }
     }
-    // Tapping the lit top segment clears the slider.
-    expect(endCarDrag(startCarDrag([2, 0, 0], 0, 2))).toEqual([0, 0, 0]);
   });
 
-  it('sliding up from segment 1 to 3 ends with ONE triple at level 3', () => {
-    let drag = startCarDrag([0, 0, 1], 0, 1);
+  it('the knob follows the finger live; the level is the nearest detent; release sends ONE triple', () => {
+    let drag = startCarDrag([0, 0, 1], 0, 0.1);
+    expect(drag.position).toBeCloseTo(0.1);
+    expect(dragCars(drag)).toEqual([0, 0, 1]);
+    drag = moveCarDrag(drag, 0.4);
+    expect(drag.position).toBeCloseTo(0.4);
     expect(dragCars(drag)).toEqual([1, 0, 1]);
-    drag = moveCarDrag(drag, 0, 2);
+    drag = moveCarDrag(drag, 0.58);
     expect(dragCars(drag)).toEqual([2, 0, 1]);
-    drag = moveCarDrag(drag, 0, 3);
-    expect(dragCars(drag)).toEqual([3, 0, 1]);
+    drag = moveCarDrag(drag, 1.4);
+    expect(drag.position).toBe(1);
 
     expect(endCarDrag(drag)).toEqual([3, 0, 1]);
   });
 
-  it('sliding down onto the label clears the slider', () => {
-    let drag = startCarDrag([0, 3, 0], 1, 2);
-    drag = moveCarDrag(drag, 1, 1);
-    drag = moveCarDrag(drag, 1, 0);
+  it('dragging to the bottom clears the fader', () => {
+    let drag = startCarDrag([0, 3, 0], 1, 1);
+    drag = moveCarDrag(drag, 0.5);
+    drag = moveCarDrag(drag, -0.2);
 
     expect(endCarDrag(drag)).toEqual([0, 0, 0]);
   });
 
-  it('keeps a tap on the lit top at 0 while the finger wobbles inside it', () => {
-    let drag = startCarDrag([0, 0, 3], 2, 3);
-    expect(drag.level).toBe(0);
-    drag = moveCarDrag(drag, 2, 3);
-    drag = moveCarDrag(drag, 2, 3);
-
-    expect(endCarDrag(drag)).toEqual([0, 0, 0]);
-  });
-
-  it('ignores the other sliders and sends nothing when the level ends where it began', () => {
-    let drag = startCarDrag([2, 0, 0], 0, 3);
-    drag = moveCarDrag(drag, 1, 1);
-    expect(dragCars(drag)).toEqual([3, 0, 0]);
-    drag = moveCarDrag(drag, 0, 2);
+  it('sends nothing when the fader ends on the detent it started on', () => {
+    let drag = startCarDrag([2, 0, 0], 0, 1);
+    drag = moveCarDrag(drag, 0.62);
 
     expect(endCarDrag(drag)).toBeNull();
   });
 });
 
 describe('built-in messages', () => {
-  it('are the five Maxx named, each a valid msg text', () => {
+  it('are the five Maxx named (round 5 names), each a valid msg text', () => {
     expect(BUILTIN_MESSAGES).toEqual([
       'PULL OFF',
       'LEADERS BEHIND',
-      'BACK UP ENTRY',
-      'DRIVE IN FURTHER',
+      'CATCHING UP',
+      'PULLING AWAY',
       'SPIN',
     ]);
     for (const text of BUILTIN_MESSAGES) {

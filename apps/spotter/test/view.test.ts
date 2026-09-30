@@ -67,7 +67,7 @@ function shown(selector: string): boolean {
 }
 
 describe('AC-1 lane row and driver status (design round 4)', () => {
-  it('lays the lanes out left to right as ▼ BOTTOM · ▬ MIDDLE · ▲ TOP', () => {
+  it('lays the lanes out left to right as ◀ BOTTOM · ▲ MIDDLE · ▶ TOP (the glasses icons)', () => {
     render(consoleModel());
 
     const lanes = [...root.querySelectorAll('.lane')];
@@ -76,10 +76,11 @@ describe('AC-1 lane row and driver status (design round 4)', () => {
       'mid',
       'top',
     ]);
+    // ◀ and ▶ carry U+FE0E so iOS draws them as text, not emoji.
     expect(lanes.map((el) => el.textContent)).toEqual([
-      '▼BOTTOM',
-      '▬MIDDLE',
-      '▲TOP',
+      '◀\uFE0EBOTTOM',
+      '▲MIDDLE',
+      '▶\uFE0ETOP',
     ]);
     // The clear control closes the row and sends lane:null.
     expect(
@@ -222,44 +223,72 @@ describe('AC-1 lane row and driver status (design round 4)', () => {
   });
 });
 
-/** `[slider][segment 1..3]` → is that segment lit? Read straight off the DOM. */
-function litSegments(): boolean[][] {
-  return [...root.querySelectorAll('.slider')].map((slider) =>
-    [1, 2, 3].map((segment) =>
-      slider
-        .querySelector(`.seg[data-seg="${segment}"]`)!
-        .classList.contains('is-lit'),
-    ),
+/** Each fader's level as the view shows it: `data-level`, the knob's `--pos`,
+ * the highlighted detent mark and the slider's aria value must all agree. */
+function faderLevels(): number[] {
+  return [...root.querySelectorAll('.fader')].map((fader) => {
+    const level = Number(fader.getAttribute('data-level'));
+    const track = fader.querySelector('.fader__track')!;
+    expect(track.getAttribute('aria-valuenow')).toBe(String(level));
+    expect(
+      [...fader.querySelectorAll('.fader__tick.is-at')].map((el) =>
+        el.getAttribute('data-detent'),
+      ),
+    ).toEqual([String(level)]);
+    return level;
+  });
+}
+
+function knobPositions(): string[] {
+  return [...root.querySelectorAll('.fader__track')].map(
+    (el) => el.getAttribute('style') ?? '',
   );
 }
 
-describe('AC-2 vertical car sliders (design round 4)', () => {
-  it('offers LEFT / MIDDLE / RIGHT sliders side by side, segments stacked bottom-up, under the lanes', () => {
+describe('AC-2 vertical car faders (design round 5)', () => {
+  it('offers INSIDE / BEHIND / OUTSIDE faders side by side under the lanes, each a track with four detents and a knob', () => {
     render(consoleModel());
 
     expect(
-      [...root.querySelectorAll('.slider__label')].map((el) => el.textContent),
-    ).toEqual(['LEFT', 'MIDDLE', 'RIGHT']);
-    // DOM order is top to bottom: 3 on top, 1 at the bottom, label under it.
+      [...root.querySelectorAll('.fader__label')].map((el) => el.textContent),
+    ).toEqual(['INSIDE', 'BEHIND', 'OUTSIDE']);
+    // One slider track per fader; detent marks top to bottom (3 … 0), then
+    // the lit fill and the knob.
     expect(
-      [...root.querySelectorAll('.slider')].map((slider) =>
-        [...slider.children].map(
-          (el) => el.getAttribute('data-arg') ?? el.className,
+      [...root.querySelectorAll('.fader__track')].map((track) => [
+        track.getAttribute('data-act'),
+        track.getAttribute('data-arg'),
+        track.getAttribute('role'),
+        ...[...track.children].map(
+          (el) => el.getAttribute('data-detent') ?? el.className,
         ),
-      ),
-    ).toEqual([
-      ['0:3', '0:2', '0:1', '0:0'],
-      ['1:3', '1:2', '1:1', '1:0'],
-      ['2:3', '2:2', '2:1', '2:0'],
+      ]),
+    ).toEqual(
+      [0, 1, 2].map((row) => [
+        'fader',
+        String(row),
+        'slider',
+        '3',
+        '2',
+        '1',
+        '0',
+        'fader__fill',
+        'fader__knob',
+      ]),
+    );
+    expect(root.querySelectorAll('[data-act="car"]')).toHaveLength(0);
+    expect(faderLevels()).toEqual([0, 0, 0]);
+    expect(knobPositions()).toEqual([
+      '--pos:0.000',
+      '--pos:0.000',
+      '--pos:0.000',
     ]);
-    expect(root.querySelectorAll('[data-act="car"]')).toHaveLength(9);
-    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(0);
-    // Top half: lanes then sliders; bottom half: messages.
+    // Top half: lanes then faders; bottom half: messages.
     expect(
       [...root.querySelectorAll('.half--top > section')].map(
         (el) => el.className,
       ),
-    ).toEqual(['lanes', 'sliders']);
+    ).toEqual(['lanes', 'faders']);
     expect(
       [...root.querySelector('.half--bottom')!.children].map(
         (el) => el.className,
@@ -267,44 +296,39 @@ describe('AC-2 vertical car sliders (design round 4)', () => {
     ).toEqual(['says', 'presets', 'msg']);
   });
 
-  it('lights segments 1..level of each slider from the room state, bottom up', () => {
+  it('puts each knob on its detent from the room state', () => {
     render(consoleModel({ state: stateWith({ cars: [1, 2, 3] }) }));
 
-    expect(litSegments()).toEqual([
-      [true, false, false],
-      [true, true, false],
-      [true, true, true],
+    expect(faderLevels()).toEqual([1, 2, 3]);
+    expect(knobPositions()).toEqual([
+      '--pos:0.333',
+      '--pos:0.667',
+      '--pos:1.000',
     ]);
-    // The lit top segment is marked: tapping it clears the slider.
-    expect(
-      [...root.querySelectorAll('.seg.is-top')].map((el) =>
-        el.getAttribute('data-arg'),
-      ),
-    ).toEqual(['0:1', '1:2', '2:3']);
-    expect(
-      [...root.querySelectorAll('.slider')].map((el) =>
-        el.getAttribute('data-level'),
-      ),
-    ).toEqual(['1', '2', '3']);
   });
 
-  it('marks a level-3 slider hot, mirroring the glasses alert outline', () => {
+  it('marks a level-3 fader hot, mirroring the glasses alert outline', () => {
     render(consoleModel({ state: stateWith({ cars: [3, 2, 0] }) }));
 
-    const hot = [...root.querySelectorAll('.slider--hot')];
+    const hot = [...root.querySelectorAll('.fader--hot')];
     expect(hot.map((el) => el.getAttribute('data-row'))).toEqual(['0']);
   });
 
-  it('shows the finger while a slider is held, then the optimistic send, then the room', () => {
-    // Held: the drag level wins over the room and over an old send.
+  it('shows the knob under the finger while held, then the optimistic send, then the room', () => {
+    // Held: the knob sits where the finger is, the level is its detent.
     render(
       consoleModel({
         now: 5_100,
         state: stateWith({ cars: [0, 0, 0] }),
-        dragCars: [0, 3, 0],
+        dragCars: [0, 2, 0],
+        dragKnob: { row: 1, position: 0.58 },
       }),
     );
-    expect(litSegments()[1]).toEqual([true, true, true]);
+    expect(faderLevels()).toEqual([0, 2, 0]);
+    expect(knobPositions()[1]).toBe('--pos:0.580');
+    expect(root.querySelector('.fader.is-held')!.getAttribute('data-row')).toBe(
+      '1',
+    );
 
     render(
       consoleModel({
@@ -313,7 +337,9 @@ describe('AC-2 vertical car sliders (design round 4)', () => {
         optimisticCars: { cars: [0, 2, 0], at: 5_000 },
       }),
     );
-    expect(litSegments()[1]).toEqual([true, true, false]);
+    expect(faderLevels()).toEqual([0, 2, 0]);
+    expect(knobPositions()[1]).toBe('--pos:0.667');
+    expect(root.querySelectorAll('.fader.is-held')).toHaveLength(0);
 
     render(
       consoleModel({
@@ -322,16 +348,18 @@ describe('AC-2 vertical car sliders (design round 4)', () => {
         optimisticCars: { cars: [0, 2, 0], at: 5_000 },
       }),
     );
-    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(0);
+    expect(faderLevels()).toEqual([0, 0, 0]);
   });
 
-  it('keeps the segment buttons stable when the room state changes', () => {
+  it('keeps the tracks and knobs stable when the room state changes', () => {
     render(consoleModel());
-    const segments = [...root.querySelectorAll('.seg')];
+    const tracks = [...root.querySelectorAll('.fader__track')];
+    const knobs = [...root.querySelectorAll('.fader__knob')];
 
     render(consoleModel({ state: stateWith({ seq: 2, cars: [3, 3, 3] }) }));
-    expect([...root.querySelectorAll('.seg')]).toEqual(segments);
-    expect(root.querySelectorAll('.seg.is-lit')).toHaveLength(9);
+    expect([...root.querySelectorAll('.fader__track')]).toEqual(tracks);
+    expect([...root.querySelectorAll('.fader__knob')]).toEqual(knobs);
+    expect(faderLevels()).toEqual([3, 3, 3]);
   });
 });
 
@@ -382,11 +410,7 @@ describe('AC-3 reconnect pill', () => {
     const selected = root.querySelectorAll('.lane.is-selected');
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
-    expect(litSegments()).toEqual([
-      [false, false, false],
-      [false, false, false],
-      [true, true, true],
-    ]);
+    expect(faderLevels()).toEqual([0, 0, 3]);
     expect(
       [...root.querySelectorAll('[data-act="preset-send"]')].map(
         (el) => el.textContent,
@@ -397,17 +421,19 @@ describe('AC-3 reconnect pill', () => {
 });
 
 describe('pill toggling never re-creates the controls', () => {
-  it('keeps the same car segments and message input across hide and show', () => {
+  it('keeps the same fader tracks and message input across hide and show', () => {
     render(consoleModel({ conn: 'closed', state: null }));
-    const segmentsWhileDown = [...root.querySelectorAll('.seg')];
+    const tracksWhileDown = [...root.querySelectorAll('.fader__track')];
     const inputWhileDown = root.querySelector('[data-testid="msg-input"]');
-    expect(segmentsWhileDown).toHaveLength(9);
+    expect(tracksWhileDown).toHaveLength(3);
 
     // Socket recovers and the room replays: the pill hides, but a
     // half-typed message in flight must survive it.
     render(consoleModel({ conn: 'open', state: stateWith({ seq: 4 }) }));
     expect(banner()).toBeNull();
-    expect([...root.querySelectorAll('.seg')]).toEqual(segmentsWhileDown);
+    expect([...root.querySelectorAll('.fader__track')]).toEqual(
+      tracksWhileDown,
+    );
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );
@@ -415,7 +441,9 @@ describe('pill toggling never re-creates the controls', () => {
     // And back again when it drops.
     render(consoleModel({ conn: 'closed', state: null }));
     expect(banner()).not.toBeNull();
-    expect([...root.querySelectorAll('.seg')]).toEqual(segmentsWhileDown);
+    expect([...root.querySelectorAll('.fader__track')]).toEqual(
+      tracksWhileDown,
+    );
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(
       inputWhileDown,
     );
@@ -489,20 +517,23 @@ describe('AC-4 ack icon', () => {
 });
 
 describe('messages (design round 4)', () => {
-  it('offers the five built-in messages as one-tap buttons', () => {
+  it('offers the five built-in messages as one-tap buttons of one size, SPIN in the alert colour', () => {
     render(consoleModel());
 
     expect(
       [...root.querySelectorAll('[data-act="say"]')].map((el) => [
         el.textContent,
         el.getAttribute('data-arg'),
+        el.className,
       ]),
     ).toEqual([
-      ['PULL OFF', 'PULL OFF'],
-      ['LEADERS BEHIND', 'LEADERS BEHIND'],
-      ['BACK UP ENTRY', 'BACK UP ENTRY'],
-      ['DRIVE IN FURTHER', 'DRIVE IN FURTHER'],
-      ['SPIN', 'SPIN'],
+      ['PULL OFF', 'PULL OFF', 'say'],
+      ['LEADERS BEHIND', 'LEADERS BEHIND', 'say'],
+      ['CATCHING UP', 'CATCHING UP', 'say'],
+      ['PULLING AWAY', 'PULLING AWAY', 'say'],
+      // Same box as the others (layout.test.ts measures it); only the colour
+      // modifier differs.
+      ['SPIN', 'SPIN', 'say say--alert'],
     ]);
   });
 

@@ -8,6 +8,7 @@ import type {
   State,
 } from '@g2-race-spotter/protocol';
 import {
+  CAR_LEVEL_MAX,
   CLOSE_CODE_AUTH,
   MSG_MAX_CHARS,
   PING_INTERVAL_MS,
@@ -17,7 +18,9 @@ import {
 import {
   dragCars,
   endCarDrag,
+  faderPosition,
   moveCarDrag,
+  nextCars,
   normaliseMessage,
   rebaseCars,
   startCarDrag,
@@ -285,80 +288,84 @@ function sendCars(next: Cars, row: 0 | 1 | 2): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/** `data-arg="<row>:<segment>"` on a slider segment (0 = its label). */
-function carArg(arg: string): { row: 0 | 1 | 2; segment: CarLevel } | null {
-  const match = /^([0-2]):([0-3])$/.exec(arg);
-  if (match === null) {
-    return null;
-  }
-
-  return {
-    row: Number(match[1]) as 0 | 1 | 2,
-    segment: Number(match[2]) as CarLevel,
-  };
+/** `data-arg="<row>"` on a fader track. */
+function faderRow(arg: string): 0 | 1 | 2 | null {
+  return /^[0-2]$/.test(arg) ? (Number(arg) as 0 | 1 | 2) : null;
 }
 
 /**
- * The finger on a slider: `pointerdown` picks the level (a tap on the lit top
- * segment picks 0), `pointermove` across segments of the same slider changes
- * it, `pointerup` sends one `cars` frame if the level changed (040 AC-2).
+ * The finger on a fader (design round 5): `pointerdown` anywhere on the track
+ * captures the pointer and puts the knob under the finger, `pointermove`
+ * drags it live, and `pointerup` snaps it to the nearest detent and sends one
+ * `cars` frame if that fader changed (040 AC-2). A tap is a drag that never
+ * moves: the knob jumps to that detent and it is sent. The track box is read
+ * once per gesture — it does not move while the console never scrolls.
  */
-let drag: (CarDrag & { readonly pointerId: number }) | null = null;
-/** A pointer gesture also fires `click`; that click must not send again. */
-let gestureEndedAt = Number.NEGATIVE_INFINITY;
+let drag:
+  | (CarDrag & {
+      readonly pointerId: number;
+      readonly top: number;
+      readonly height: number;
+    })
+  | null = null;
 
-function slideTo(next: CarDrag): void {
-  if (drag === null || next === drag) {
+function showDrag(): void {
+  if (drag === null) {
     return;
   }
 
-  drag = { ...next, pointerId: drag.pointerId };
-  vibrate();
-  update({ dragCars: dragCars(drag) });
+  update({
+    dragCars: dragCars(drag),
+    dragKnob: { row: drag.row, position: drag.position },
+  });
 }
 
-function carUnder(
-  event: PointerEvent,
-): { row: 0 | 1 | 2; segment: CarLevel } | null {
-  // A touch pointer stays captured by the element it went down on, so the
-  // event target never changes: ask the layout what is under the finger.
-  const under =
-    typeof document.elementFromPoint === 'function'
-      ? document.elementFromPoint(event.clientX, event.clientY)
-      : null;
-  const el = under?.closest('[data-act="car"], [data-act="car-zero"]');
-  return el === null || el === undefined
-    ? null
-    : carArg(el.getAttribute('data-arg') ?? '');
-}
-
-function endDrag(event: PointerEvent, commit: boolean): void {
+function endDrag(event: PointerEvent): void {
   if (drag === null || event.pointerId !== drag.pointerId) {
     return;
   }
 
+  // A cancel (the OS took the touch) still commits the detent the knob was
+  // showing: the spotter let go of a fader that reads that level.
   const ended = drag;
   drag = null;
-  gestureEndedAt = Date.now();
-  const next = commit ? endCarDrag(ended) : null;
+  const next = endCarDrag(ended);
   if (next === null) {
-    update({ dragCars: null });
+    update({ dragCars: null, dragKnob: null });
     return;
   }
 
-  model = { ...model, dragCars: null };
+  model = { ...model, dragCars: null, dragKnob: null };
   sendCars(next, ended.row);
 }
 
-/** Keyboard (or a synthetic click): a plain tap, sent straight away. */
-function tapCar(row: 0 | 1 | 2, segment: CarLevel): void {
-  const next = endCarDrag(startCarDrag(selectedCars(model), row, segment));
-  if (next === null) {
-    return;
+/** Keyboard: arrows step one detent, Home/End go to 0/3. */
+const FADER_KEYS: Readonly<Record<string, (level: number) => number>> = {
+  ArrowUp: (level) => level + 1,
+  ArrowRight: (level) => level + 1,
+  ArrowDown: (level) => level - 1,
+  ArrowLeft: (level) => level - 1,
+  Home: () => 0,
+  End: () => CAR_LEVEL_MAX,
+};
+
+function keyFader(row: 0 | 1 | 2, key: string): boolean {
+  const step = FADER_KEYS[key];
+  if (step === undefined) {
+    return false;
   }
 
-  vibrate();
-  sendCars(next, row);
+  const current = selectedCars(model);
+  const level = Math.max(
+    0,
+    Math.min(CAR_LEVEL_MAX, step(current[row])),
+  ) as CarLevel;
+  const next = nextCars(current, row, level);
+  if (next !== null) {
+    vibrate();
+    sendCars(next, row);
+  }
+  return true;
 }
 
 function actionOf(
@@ -417,19 +424,6 @@ root.addEventListener('click', (event) => {
     case 'lane-clear':
       setLane(null);
       break;
-    case 'car': {
-      // A pointer gesture already sent (or deliberately did not); only a
-      // keyboard or synthetic click is a tap of its own.
-      const car = carArg(action.arg);
-      if (
-        car !== null &&
-        car.segment !== 0 &&
-        Date.now() - gestureEndedAt > 500
-      ) {
-        tapCar(car.row, car.segment);
-      }
-      break;
-    }
     case 'send':
       sendMessage(model.draft, true);
       break;
@@ -454,21 +448,35 @@ root.addEventListener('click', (event) => {
 
 root.addEventListener('pointerdown', (event) => {
   const action = actionOf(event);
-  if (action === null || action.act !== 'car' || drag !== null) {
+  if (action === null || action.act !== 'fader' || drag !== null) {
     return;
   }
 
-  const car = carArg(action.arg);
-  if (car === null || car.segment === 0) {
+  const row = faderRow(action.arg);
+  if (row === null) {
     return;
   }
 
+  const box = action.el.getBoundingClientRect();
+  try {
+    // Every move and the release land on this track, wherever the finger goes.
+    action.el.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Not an active pointer (synthetic event): window listeners still end it.
+  }
+  event.preventDefault();
   drag = {
-    ...startCarDrag(selectedCars(model), car.row, car.segment),
+    ...startCarDrag(
+      selectedCars(model),
+      row,
+      faderPosition(event.clientY, box.top, box.height),
+    ),
     pointerId: event.pointerId,
+    top: box.top,
+    height: box.height,
   };
   vibrate();
-  update({ dragCars: dragCars(drag) });
+  showDrag();
 });
 
 root.addEventListener('pointermove', (event) => {
@@ -476,15 +484,20 @@ root.addEventListener('pointermove', (event) => {
     return;
   }
 
-  const car = carUnder(event);
-  if (car !== null) {
-    slideTo(moveCarDrag(drag, car.row, car.segment));
+  const before = drag.level;
+  drag = {
+    ...drag,
+    ...moveCarDrag(drag, faderPosition(event.clientY, drag.top, drag.height)),
+  };
+  if (drag.level !== before) {
+    vibrate();
   }
+  showDrag();
 });
 
 // On `window`, not `root`: the finger may lift anywhere.
-window.addEventListener('pointerup', (event) => endDrag(event, true));
-window.addEventListener('pointercancel', (event) => endDrag(event, false));
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 
 root.addEventListener('input', (event) => {
   const action = actionOf(event);
@@ -512,12 +525,20 @@ root.addEventListener('input', (event) => {
 });
 
 root.addEventListener('keydown', (event) => {
-  if (event.key !== 'Enter') {
+  const action = actionOf(event);
+  if (action === null) {
     return;
   }
 
-  const action = actionOf(event);
-  if (action === null) {
+  if (action.act === 'fader') {
+    const row = faderRow(action.arg);
+    if (row !== null && keyFader(row, event.key)) {
+      event.preventDefault();
+    }
+    return;
+  }
+
+  if (event.key !== 'Enter') {
     return;
   }
 

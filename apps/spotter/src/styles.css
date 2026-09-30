@@ -150,8 +150,8 @@ button {
 
    One screen, never a scroll (Maxx, 2026-09-04 design round 2). Design round
    4 (2026-09-25): a one-row header of small icons, then the TOP half — lane
-   row (▼ BOTTOM · ▬ MIDDLE · ▲ TOP, left to right) and three vertical car
-   sliders — and the BOTTOM half: five built-in messages, the room's saved
+   row (◀ BOTTOM · ▲ MIDDLE · ▶ TOP, left to right) and three vertical car
+   faders (round 5) — and the BOTTOM half: five built-in messages, the room's saved
    messages, and the message row. The top half is fixed height; the saved
    messages take what is left. */
 
@@ -274,7 +274,7 @@ button {
   flex: 1 1 auto;
 }
 
-/* ---------- Lanes: ▼ BOTTOM · ▬ MIDDLE · ▲ TOP, left to right ---------- */
+/* ---------- Lanes: ◀ BOTTOM · ▲ MIDDLE · ▶ TOP, left to right ---------- */
 
 .lanes {
   display: flex;
@@ -331,55 +331,179 @@ button {
   letter-spacing: 0.06em;
 }
 
-/* ---------- Cars behind: three vertical 3-segment sliders ----------
+/* ---------- Cars behind: three vertical faders ----------
 
-   Segments stack bottom-up like a level meter (1 at the bottom, 3 on top),
-   label underneath. `touch-action: none` so a drag across the segments is a
-   slide, not a scroll or a cancelled pointer. */
+   Design round 5 (Maxx, 2026-09-30): "basic slider with a button kinda like
+   what you see on audio recording/dj devices". INSIDE / BEHIND / OUTSIDE,
+   each a panel with clear gaps between them: a slot, four detent marks
+   (0 at the bottom … 3 on top) and a rounded knob with a centre line. The
+   track box is the knob's travel (detent n at n/3 of it); the knob overhangs
+   it by half its height, which is what the track's margins leave room for.
+   `--track` is the travel: as tall as the top half allows (the faders end at
+   ≤ 55 % of a portrait screen), never under 96 px. */
 
-.sliders {
+.faders {
+  --knob-h: 44px;
+  --track: clamp(96px, 54vh - 194px, 200px);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  column-gap: 18px;
   flex: 0 0 auto;
 }
 
-.slider {
+/* A custom property is not re-validated, so the dvh value needs its own
+   guard rather than a second declaration. */
+@supports (height: 100dvh) {
+  .faders {
+    --track: clamp(96px, 54dvh - 194px, 200px);
+  }
+}
+
+.fader {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  touch-action: none;
+  min-width: 0;
+  padding: 2px 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
-.seg {
-  min-height: 44px;
-  padding: 0;
-  border: 2px solid var(--accent);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--accent);
-  font-size: 15px;
+.fader__track {
+  position: relative;
+  height: var(--track);
+  margin: calc(var(--knob-h) / 2) 0;
+  touch-action: none;
+  cursor: grab;
+}
+
+.fader__track:focus-visible {
+  outline-offset: calc(var(--knob-h) / 2);
+}
+
+/* The slot the knob rides in. */
+.fader__track::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  left: 50%;
+  width: 8px;
+  margin-left: -4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #05080b;
+}
+
+.fader__tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 14px;
+  margin-bottom: -7px;
+  padding-left: 6px;
+  color: #5b6874;
+  font-size: 11px;
   font-weight: 700;
-  touch-action: none;
-  transition: background 120ms linear;
+  line-height: 14px;
 }
 
-.seg.is-lit {
+.fader__tick::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 6px;
+  height: 2px;
+  background: linear-gradient(
+    to right,
+    #5b6874 0 32%,
+    transparent 32% 68%,
+    #5b6874 68%
+  );
+}
+
+.fader__tick[data-detent='0'] {
+  bottom: 0;
+}
+
+.fader__tick[data-detent='1'] {
+  bottom: 33.333%;
+}
+
+.fader__tick[data-detent='2'] {
+  bottom: 66.667%;
+}
+
+.fader__tick[data-detent='3'] {
+  bottom: 100%;
+}
+
+.fader__tick.is-at {
+  color: var(--accent);
+}
+
+/* The lit part of the slot, bottom to the knob: the level at a glance. */
+.fader__fill {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 6px;
+  height: calc(var(--pos) * 100%);
+  margin-left: -3px;
+  border-radius: 3px;
   background: var(--accent);
-  color: #06120a;
 }
 
-.slider--hot .seg {
+.fader__knob {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--pos) * 100% - var(--knob-h) / 2);
+  width: min(64px, 100% - 12px);
+  height: var(--knob-h);
+  transform: translateX(-50%);
+  border: 2px solid #9fb2bf;
+  border-radius: 8px;
+  background: linear-gradient(#3b4957, #1e2731);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 60%);
+  transition: bottom 90ms ease-out;
+}
+
+/* The centre line of a mixer knob. */
+.fader__knob::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+  background: var(--fg);
+}
+
+/* Held: the knob follows the finger with no lag. */
+.fader.is-held .fader__knob {
+  transition: none;
+  border-color: var(--accent);
+}
+
+.fader--hot {
   border-color: var(--alert);
+}
+
+.fader--hot .fader__fill,
+.fader--hot .fader__knob::after {
+  background: var(--alert);
+}
+
+.fader--hot .fader__tick.is-at {
   color: var(--alert);
 }
 
-.slider--hot .seg.is-lit {
-  background: var(--alert);
-  color: #1a0707;
-}
-
-.slider__label {
+/* 4 px of air between a knob parked on 0 and the name under it. */
+.fader__label {
+  margin-top: 4px;
   font-size: 12px;
   line-height: 16px;
   font-weight: 700;
@@ -390,28 +514,37 @@ button {
 
 /* ---------- Messages ---------- */
 
+/* Five equal buttons (design round 5: "Make them all the same size"): three
+   on the first row, two centred under them. A six-column grid where every
+   button spans two keeps the cells identical. */
 .says {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
   flex: 0 0 auto;
 }
 
 .say {
+  grid-column: span 2;
+  min-width: 0;
   min-height: 48px;
-  padding: 0 8px;
+  padding: 0 6px;
   border: 2px solid var(--amber);
   border-radius: 10px;
   background: var(--surface);
   color: var(--amber);
   font-size: 15px;
   font-weight: 700;
+  line-height: 1.15;
   letter-spacing: 0.04em;
 }
 
-/* SPIN is the odd fifth: it gets the full width, and the alert colour. */
-.say:last-child {
-  grid-column: 1 / -1;
+.say:nth-child(4) {
+  grid-column: 2 / span 2;
+}
+
+/* SPIN keeps the alert colour, not a bigger box. */
+.say--alert {
   border-color: var(--alert);
   color: var(--alert);
 }
@@ -597,13 +730,14 @@ button {
     flex: 1 1 0;
   }
 
-  /* Three columns so the built-ins take two rows, not three. */
-  .says {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .faders {
+    --track: clamp(96px, 100vh - 204px, 200px);
   }
 
-  .say:last-child {
-    grid-column: span 2;
+  @supports (height: 100dvh) {
+    .faders {
+      --track: clamp(96px, 100dvh - 204px, 200px);
+    }
   }
 
   /* Driver setup: the QR on the left, room, PIN and instructions beside it. */

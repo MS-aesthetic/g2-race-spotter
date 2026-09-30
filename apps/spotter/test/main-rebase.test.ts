@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { stubTrackBoxes, tapFader } from './fader-pointer.ts';
+
 /**
  * Pins the reconnect wiring in `main.ts` (T055a/T055b): a car tap made while
  * the socket is down is not queued as a triple built from the pre-drop copy;
- * the tapped row is rebased onto the replayed `state.cars` and sent once.
+ * the tapped fader is rebased onto the replayed `state.cars` and sent once.
+ * The fader gestures themselves are pinned in `main-fader.test.ts`.
  */
 
 type Listener = (event: unknown) => void;
@@ -61,26 +64,6 @@ function state(seq: number, cars: [number, number, number]) {
   };
 }
 
-function tap(arg: string): void {
-  const button = document.querySelector<HTMLButtonElement>(
-    `[data-act="car"][data-arg="${arg}"]`,
-  );
-  expect(button).not.toBeNull();
-  button!.click();
-}
-
-function pointer(type: string, target: Element | Window, pointerId = 1): void {
-  const event = new MouseEvent(type, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, 'pointerId', { value: pointerId });
-  target.dispatchEvent(event);
-}
-
-function segment(arg: string): HTMLButtonElement {
-  return document.querySelector<HTMLButtonElement>(
-    `[data-act="car"][data-arg="${arg}"]`,
-  )!;
-}
-
 describe('spotter reconnect: offline car taps (main.ts)', () => {
   beforeAll(async () => {
     vi.useFakeTimers();
@@ -101,12 +84,17 @@ describe('spotter reconnect: offline car taps (main.ts)', () => {
     const first = FakeSocket.sockets[0]!;
     first.emit('open');
     first.receive(state(1, [2, 1, 0]));
-    expect(document.querySelectorAll('.seg.is-lit')).toHaveLength(3);
+    stubTrackBoxes();
+    expect(
+      [...document.querySelectorAll('.fader')].map((el) =>
+        el.getAttribute('data-level'),
+      ),
+    ).toEqual(['2', '1', '0']);
 
     // The link drops; the relay stale-clears the room meanwhile. The spotter
-    // taps RIGHT 3 while offline, looking at the old [2, 1, 0].
+    // pushes OUTSIDE to 3 while offline, looking at the old [2, 1, 0].
     first.emit('close', { code: 1006 });
-    tap('2:3');
+    tapFader(2, 3);
     expect(first.frames().filter((frame) => frame.t === 'cars')).toEqual([]);
 
     await vi.advanceTimersByTimeAsync(10_000);
@@ -114,58 +102,16 @@ describe('spotter reconnect: offline car taps (main.ts)', () => {
     second.emit('open');
     second.receive(state(1, [0, 0, 0]));
 
-    // Only the tapped row overrides the replay: LEFT/MIDDLE stay cleared.
+    // Only the moved fader overrides the replay: INSIDE/BEHIND stay cleared.
     expect(second.frames().filter((frame) => frame.t === 'cars')).toEqual([
       { t: 'cars', cars: [0, 0, 3] },
     ]);
 
     // Once replayed, a tap goes straight out, built on what was just sent.
-    tap('0:1');
+    tapFader(0, 1);
     expect(second.frames().filter((frame) => frame.t === 'cars')).toEqual([
       { t: 'cars', cars: [0, 0, 3] },
       { t: 'cars', cars: [1, 0, 3] },
     ]);
-  });
-
-  it('a slider drag sends ONE cars frame on pointerup, and its click does not send again', async () => {
-    await vi.advanceTimersByTimeAsync(1_000);
-    const socket = FakeSocket.sockets[1]!;
-    // The relay has applied the earlier taps.
-    socket.receive(state(2, [1, 0, 3]));
-    const carsSent = (): unknown[] =>
-      socket.frames().filter((frame) => frame.t === 'cars');
-    const before = carsSent().length;
-
-    // The finger goes down on MIDDLE 1 and slides up to 3; jsdom has no
-    // layout, so the element under the finger is stubbed.
-    let under: Element = segment('1:1');
-    Object.assign(document, { elementFromPoint: () => under });
-    pointer('pointerdown', segment('1:1'));
-    expect(carsSent()).toHaveLength(before);
-    under = segment('1:2');
-    pointer('pointermove', segment('1:1'));
-    under = segment('1:3');
-    pointer('pointermove', segment('1:1'));
-    // Nothing is sent while the finger is down; the slider shows the finger.
-    expect(carsSent()).toHaveLength(before);
-    expect(
-      document.querySelector('[data-row="1"]')!.getAttribute('data-level'),
-    ).toBe('3');
-
-    pointer('pointerup', window);
-    segment('1:3').click();
-    expect(carsSent().slice(before)).toEqual([{ t: 'cars', cars: [1, 3, 3] }]);
-
-    // A drag that ends where it began sends nothing.
-    await vi.advanceTimersByTimeAsync(1_000);
-    under = segment('0:2');
-    pointer('pointerdown', segment('0:2'));
-    under = segment('0:1');
-    pointer('pointermove', segment('0:2'));
-    pointer('pointercancel', window);
-    expect(carsSent()).toHaveLength(before + 1);
-    expect(
-      document.querySelector('[data-row="0"]')!.getAttribute('data-level'),
-    ).toBe('1');
   });
 });

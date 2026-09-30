@@ -31,12 +31,14 @@ const VIEWPORTS = [
   { name: 'landscape', width: 740, height: 360 },
 ] as const;
 
-/** Every button, slider segments included (the round-4 brief allowed 40 px
- * segments; 44 px still fits the top half, so the floor did not move). */
+/** Every button, and each fader knob and track's hit width. */
 const MIN_TOUCH_PX = 44;
 const MIN_LANE_PX = 64;
-/** "This can all fit on the top half of the app ui" (Maxx, round 4). */
-const TOP_HALF = 0.5;
+/** Lanes and faders stay in the top of a portrait screen: round 4's "top
+ * half", loosened to 55 % in round 5 so the faders get a usable travel. */
+const TOP_SHARE = 0.55;
+/** Four detents on the smallest travel still leave a finger-sized step. */
+const MIN_TRACK_PX = 96;
 
 const LIVE_PRESETS = ['BOX THIS LAP', 'PIT NOW', 'DEBRIS TURN 4 STAY LEFT'];
 
@@ -124,10 +126,14 @@ interface Measured {
   consoleScroll: number;
   consoleClient: number;
   minButton: number;
-  minSegment: number;
   minLane: number;
   buttons: number;
-  slidersBottom: number;
+  fadersBottom: number;
+  faders: number;
+  gaps: number[];
+  knob: { minWidth: number; minHeight: number };
+  track: { minWidth: number; minHeight: number };
+  presetSizes: string[];
   presetChips: number;
   presetsScroll: number;
   presetsClient: number;
@@ -253,6 +259,15 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
     );
 
     try {
+      if (process.env.G2RS_LAYOUT_SHOTS) {
+        await page.waitForTimeout(200);
+        await page.screenshot({
+          path: join(
+            process.env.G2RS_LAYOUT_SHOTS,
+            `console-${width}x${height}-${live ? 'live' : 'down'}.png`,
+          ),
+        });
+      }
       return await page.evaluate(() => {
         const consoleEl = document.querySelector('.console')!;
         const presetsEl = document.querySelector('.presets')!;
@@ -265,23 +280,43 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         const buttons = [...consoleEl.querySelectorAll('button')].filter(
           visible,
         );
-        const segments = buttons.filter((el) => el.matches('.seg'));
-        const others = buttons.filter((el) => !el.matches('.seg'));
+        const boxes = (selector: string): DOMRect[] =>
+          [...consoleEl.querySelectorAll(selector)].map((el) =>
+            el.getBoundingClientRect(),
+          );
+        const faders = boxes('.fader');
+        const knobs = boxes('.fader__knob');
+        const tracks = boxes('.fader__track');
 
         return {
           documentScroll: document.documentElement.scrollHeight,
           innerHeight: window.innerHeight,
           consoleScroll: consoleEl.scrollHeight,
           consoleClient: consoleEl.clientHeight,
-          minButton: Math.min(...others.map(height)),
-          minSegment: Math.min(...segments.map(height)),
+          minButton: Math.min(...buttons.map(height)),
           minLane: Math.min(
             ...[...consoleEl.querySelectorAll('.lane')].map(height),
           ),
           buttons: buttons.length,
-          slidersBottom: document
-            .querySelector('.sliders')!
+          fadersBottom: document
+            .querySelector('.faders')!
             .getBoundingClientRect().bottom,
+          faders: faders.length,
+          // Horizontal space between neighbouring faders.
+          gaps: faders
+            .slice(1)
+            .map((box, index) => box.left - faders[index]!.right),
+          knob: {
+            minWidth: Math.min(...knobs.map((box) => box.width)),
+            minHeight: Math.min(...knobs.map((box) => box.height)),
+          },
+          track: {
+            minWidth: Math.min(...tracks.map((box) => box.width)),
+            minHeight: Math.min(...tracks.map((box) => box.height)),
+          },
+          presetSizes: boxes('.say').map(
+            (box) => `${box.width.toFixed(1)}x${box.height.toFixed(1)}`,
+          ),
           presetChips: presetsEl.querySelectorAll('.pchip').length,
           presetsScroll: presetsEl.scrollHeight,
           presetsClient: presetsEl.clientHeight,
@@ -301,7 +336,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
 
         // Reported so a regression says by how much, not just that it failed.
         console.info(
-          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, segments min ${measured.minSegment}px, lanes min ${measured.minLane}px, sliders end y=${measured.slidersBottom}, preset chips ${measured.presetChips} (${measured.presetsScroll} <= ${measured.presetsClient})`,
+          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes min ${measured.minLane}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, presets ${[...new Set(measured.presetSizes)].join(',')}, preset chips ${measured.presetChips} (${measured.presetsScroll} <= ${measured.presetsClient})`,
         );
 
         expect(measured.documentScroll).toBeLessThanOrEqual(
@@ -310,18 +345,31 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.consoleScroll).toBeLessThanOrEqual(
           measured.consoleClient,
         );
-        // code chip + 3 lanes + clear + 9 segments + 5 built-ins + Send/Save,
-        // and in the live room a text + × button per saved message.
+        // code chip + 3 lanes + clear + 5 built-ins + Send/Save, and in the
+        // live room a text + × button per saved message. Faders are not
+        // buttons: each is one slider track.
         expect(measured.buttons).toBe(
-          21 + (live ? 2 * LIVE_PRESETS.length : 0),
+          12 + (live ? 2 * LIVE_PRESETS.length : 0),
         );
         expect(measured.minButton).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
-        expect(measured.minSegment).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
         expect(measured.minLane).toBeGreaterThanOrEqual(MIN_LANE_PX);
+        // Three faders with clear horizontal gaps; a finger-sized knob on a
+        // track at least a finger wide and tall enough for four detents.
+        expect(measured.faders).toBe(3);
+        for (const gap of measured.gaps) {
+          expect(gap).toBeGreaterThanOrEqual(12);
+        }
+        expect(measured.knob.minWidth).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
+        expect(measured.knob.minHeight).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
+        expect(measured.track.minWidth).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
+        expect(measured.track.minHeight).toBeGreaterThanOrEqual(MIN_TRACK_PX);
+        // All five built-in messages are the same size (SPIN included).
+        expect(measured.presetSizes).toHaveLength(5);
+        expect(new Set(measured.presetSizes).size).toBe(1);
         if (portrait) {
-          // Lanes and sliders all sit in the top half of a portrait phone.
-          expect(measured.slidersBottom).toBeLessThanOrEqual(
-            measured.innerHeight * TOP_HALF,
+          // Lanes and faders sit in the top 55 % of a portrait phone.
+          expect(measured.fadersBottom).toBeLessThanOrEqual(
+            measured.innerHeight * TOP_SHARE,
           );
         }
         if (live) {

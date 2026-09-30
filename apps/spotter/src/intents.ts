@@ -6,121 +6,132 @@ import {
 } from '@g2-race-spotter/protocol';
 
 /**
- * The three car-behind sliders, in the glasses' left-to-right order (Maxx,
- * 2026-09-25 design round 3; vertical since round 4): one 3-segment level
- * meter per `cars` slot.
+ * The three car-behind faders, in the glasses' left-to-right order (Maxx,
+ * 2026-09-30 design round 5: "Change names to inside behind outside"): one
+ * vertical 4-detent fader per `cars` slot.
  */
 export const CAR_ROWS: readonly {
   readonly index: 0 | 1 | 2;
   readonly label: string;
 }[] = [
-  { index: 0, label: 'LEFT' },
-  { index: 1, label: 'MIDDLE' },
-  { index: 2, label: 'RIGHT' },
+  { index: 0, label: 'INSIDE' },
+  { index: 1, label: 'BEHIND' },
+  { index: 2, label: 'OUTSIDE' },
 ];
 
-/** Segment numbers, bottom (1) to top (3); tapping segment `n` calls level
- * `n`. The view stacks them bottom-up like a level meter. */
-export const CAR_SEGMENTS: readonly CarLevel[] = [1, 2, 3];
+/** A fader's detents, bottom (0 = no car) to top (3 = on the bumper). */
+export const CAR_DETENTS: readonly CarLevel[] = [0, 1, 2, 3];
 
 /**
- * The five built-in messages (Maxx, 2026-09-25 design round 4): client
- * constants, one tap sends them as `msg`. Room presets (`State.presets`) are
- * the spotter's own additions.
+ * The five built-in messages (Maxx, 2026-09-25 design round 4; round 5
+ * renamed "Back up entry" / "Drive in further"): client constants, one tap
+ * sends them as `msg`. Room presets (`State.presets`) are the spotter's own
+ * additions.
  */
 export const BUILTIN_MESSAGES: readonly string[] = [
   'PULL OFF',
   'LEADERS BEHIND',
-  'BACK UP ENTRY',
-  'DRIVE IN FURTHER',
+  'CATCHING UP',
+  'PULLING AWAY',
   'SPIN',
 ];
 
 /**
- * What a tap on segment `tapped` of a row at level `current` sets: that
- * level, or 0 when the tap lands on the lit top segment ("that car has
- * gone"), so there is no separate clear control to find.
+ * Where a finger at `y` sits on a fader track whose box starts at `trackTop`
+ * and is `trackHeight` tall: 0 at the bottom edge, 1 at the top, clamped. The
+ * track box *is* the knob's travel — detent n sits at n/3 of it — so the knob
+ * centre can follow this fraction directly while the finger is down.
  */
-export function nextCarLevel(current: CarLevel, tapped: CarLevel): CarLevel {
-  const level = Math.max(0, Math.min(CAR_LEVEL_MAX, tapped)) as CarLevel;
-  return level === current ? 0 : level;
+export function faderPosition(
+  y: number,
+  trackTop: number,
+  trackHeight: number,
+): number {
+  if (!(trackHeight > 0) || !Number.isFinite(y)) {
+    return 0;
+  }
+
+  const fraction = (trackTop + trackHeight - y) / trackHeight;
+  return Math.max(0, Math.min(1, fraction));
+}
+
+/** The detent nearest a finger at `y` on the track (0 bottom … 3 top). */
+export function detentFromPointer(
+  y: number,
+  trackTop: number,
+  trackHeight: number,
+): CarLevel {
+  return Math.round(
+    faderPosition(y, trackTop, trackHeight) * CAR_LEVEL_MAX,
+  ) as CarLevel;
 }
 
 /**
- * The full triple one tap sends (the wire always carries all three), or
- * `null` when it would not change the room.
+ * The full triple a fader release sends (the wire always carries all three),
+ * or `null` when that fader ends where the room already has it.
  */
 export function nextCars(
   current: Readonly<Cars>,
   row: 0 | 1 | 2,
-  tapped: CarLevel,
+  level: CarLevel,
 ): Cars | null {
-  return endCarDrag(startCarDrag(current, row, tapped));
-}
+  const clamped = Math.max(0, Math.min(CAR_LEVEL_MAX, level)) as CarLevel;
+  if (current[row] === clamped) {
+    return null;
+  }
 
-function withRow(cars: Readonly<Cars>, row: 0 | 1 | 2, level: CarLevel): Cars {
-  const next: Cars = [cars[0], cars[1], cars[2]];
-  next[row] = level;
+  const next: Cars = [current[0], current[1], current[2]];
+  next[row] = clamped;
   return next;
 }
 
 /**
- * One touch on a slider, from `pointerdown` to `pointerup`. The level shown
- * while the finger is down is `level`; nothing is sent until the gesture
- * ends, and then at most one `cars` frame (040 AC-2).
+ * One finger on a fader, from `pointerdown` to `pointerup`. The knob follows
+ * `position` live and the fader reads `level` (the nearest detent); nothing is
+ * sent until the gesture ends, and then at most one `cars` frame (040 AC-2).
  */
 export interface CarDrag {
   readonly row: 0 | 1 | 2;
   /** The triple when the finger went down; only `row` can change. */
   readonly base: Readonly<Cars>;
+  /** 0..1 along the track, bottom to top. */
+  readonly position: number;
   readonly level: CarLevel;
-  /** The segment last under the finger (0 = below the bottom segment). */
-  readonly over: CarLevel;
 }
 
-/**
- * Finger down on segment `segment`: the same decision as a tap — that level,
- * or 0 on the lit top segment.
- */
+/** Finger down at `position` on fader `row`: the knob jumps under it. */
 export function startCarDrag(
   current: Readonly<Cars>,
   row: 0 | 1 | 2,
-  segment: CarLevel,
+  position: number,
 ): CarDrag {
+  return moveCarDrag(
+    { row, base: [current[0], current[1], current[2]], position: 0, level: 0 },
+    position,
+  );
+}
+
+/** The finger moved to `position` on the same track (pointer capture keeps
+ * every move on the fader it went down on). */
+export function moveCarDrag(drag: CarDrag, position: number): CarDrag {
+  const clamped = Math.max(0, Math.min(1, position));
   return {
-    row,
-    base: [current[0], current[1], current[2]],
-    level: nextCarLevel(current[row], segment),
-    over: segment,
+    ...drag,
+    position: clamped,
+    level: Math.round(clamped * CAR_LEVEL_MAX) as CarLevel,
   };
 }
 
-/**
- * The finger moved over `segment` of slider `row` (0 = the label under the
- * bottom segment: no car). Another slider is ignored, and so is wobble inside
- * the segment the finger is already on — that is what keeps a tap on the lit
- * top segment at 0 instead of re-lighting it.
- */
-export function moveCarDrag(
-  drag: CarDrag,
-  row: 0 | 1 | 2,
-  segment: CarLevel,
-): CarDrag {
-  if (row !== drag.row || segment === drag.over) {
-    return drag;
-  }
-
-  return { ...drag, level: segment, over: segment };
-}
-
-/** What the sliders show while the finger is down. */
+/** What the faders read while the finger is down. */
 export function dragCars(drag: CarDrag): Cars {
-  return withRow(drag.base, drag.row, drag.level);
+  const next: Cars = [drag.base[0], drag.base[1], drag.base[2]];
+  next[drag.row] = drag.level;
+  return next;
 }
 
-/** Finger up: the one triple to send, or `null` when the row did not change. */
+/** Finger up: the one triple to send, or `null` when the fader did not change. */
 export function endCarDrag(drag: CarDrag): Cars | null {
-  return drag.level === drag.base[drag.row] ? null : dragCars(drag);
+  return nextCars(drag.base, drag.row, drag.level);
 }
 
 /** Row levels the spotter tapped while no replayed room state backed them. */

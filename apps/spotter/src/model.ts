@@ -52,8 +52,11 @@ export interface Model {
   latencyAt: number | null;
   optimisticLane: OptimisticLane | null;
   optimisticCars: OptimisticCars | null;
-  /** The sliders while a finger is down on one (nothing sent yet). */
+  /** The faders' levels while a finger is down on one (nothing sent yet). */
   dragCars: Cars | null;
+  /** Where the held fader's knob is (0 bottom … 1 top): it follows the
+   * finger between detents and snaps on release. */
+  dragKnob: { row: 0 | 1 | 2; position: number } | null;
   now: number;
   updateReady: boolean;
   showInstallHint: boolean;
@@ -75,6 +78,7 @@ export function createModel(overrides: Partial<Model> = {}): Model {
     optimisticLane: null,
     optimisticCars: null,
     dragCars: null,
+    dragKnob: null,
     now: 0,
     updateReady: false,
     showInstallHint: false,
@@ -98,11 +102,11 @@ export function selectedLane(model: Model): Lane | null {
 const NO_CARS: Readonly<Cars> = [0, 0, 0];
 
 /**
- * The room's cars triple as best this client knows it, and what the sliders
- * light: the finger's level while a slider is held, then the triple the
+ * The room's cars triple as best this client knows it, and what the faders
+ * show: the finger's detent while a fader is held, then the triple the
  * spotter just sent while its optimistic window is open, otherwise whatever
- * the relay last said. A tap is computed against this, so two quick taps on
- * different sliders compose instead of the second undoing the first.
+ * the relay last said. A gesture starts from this, so two quick changes on
+ * different faders compose instead of the second undoing the first.
  */
 export function selectedCars(model: Model): Readonly<Cars> {
   if (model.dragCars !== null) {

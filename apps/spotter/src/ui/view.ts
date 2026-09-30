@@ -5,7 +5,7 @@ import {
   type Lane,
 } from '@g2-race-spotter/protocol';
 
-import { BUILTIN_MESSAGES, CAR_ROWS, CAR_SEGMENTS } from '../intents.ts';
+import { BUILTIN_MESSAGES, CAR_DETENTS, CAR_ROWS } from '../intents.ts';
 import {
   isLatencyStale,
   isLive,
@@ -25,21 +25,26 @@ interface LaneButton {
   label: string;
 }
 
+/** U+FE0E: keep ◀ and ▶ as text glyphs; iOS may otherwise draw them as
+ * emoji buttons, which do not take the lane's colour. */
+const TEXT_STYLE = '\uFE0E';
+
 /**
  * Left to right as Maxx holds the phone (2026-09-25 design round 4): "Bottom
- * is the left most buttons, Middle is middle, and top is right."
+ * is the left most buttons, Middle is middle, and top is right." The glyphs
+ * match the glasses' lane icons (design round 5): ◀ bottom, ▲ middle, ▶ top.
  */
 export const LANES: readonly LaneButton[] = [
-  { lane: 'bot', glyph: '▼', label: 'BOTTOM' },
-  { lane: 'mid', glyph: '▬', label: 'MIDDLE' },
-  { lane: 'top', glyph: '▲', label: 'TOP' },
+  { lane: 'bot', glyph: `◀${TEXT_STYLE}`, label: 'BOTTOM' },
+  { lane: 'mid', glyph: '▲', label: 'MIDDLE' },
+  { lane: 'top', glyph: `▶${TEXT_STYLE}`, label: 'TOP' },
 ];
 
-/** A slider at this level turns red, mirroring the glasses' alert outline. */
+/** A fader at this level turns red, mirroring the glasses' alert outline. */
 export const CAR_HOT = CAR_LEVEL_MAX;
 
-/** Segments top to bottom in the DOM, so the meter fills bottom-up. */
-const SEGMENTS_TOP_DOWN = [...CAR_SEGMENTS].reverse();
+/** Detent marks top to bottom in the DOM (3 … 0). */
+const DETENTS_TOP_DOWN = [...CAR_DETENTS].reverse();
 
 function latencyText(model: Model): string {
   return model.latencyMs === null ? '— ms' : `${model.latencyMs} ms`;
@@ -170,78 +175,87 @@ function laneRow(model: Model): VNode {
 }
 
 /**
- * Three vertical 3-segment sliders, LEFT / MIDDLE / RIGHT (design round 4):
- * segment n calls level n, the lit top segment clears it, a drag across the
- * segments sets the level on release. Segments `1..level` are lit from the
- * bottom up, like a level meter.
+ * Three vertical faders, INSIDE / BEHIND / OUTSIDE (design round 5): a track
+ * with four detent marks (0 at the bottom … 3 on top) and a DJ-style knob.
+ * The whole track is the hit area; `main.ts` turns a pointer on it into a
+ * detent and sends one `cars` on release. The knob sits on the level's detent
+ * — or under the finger while the fader is held — via `--pos` (0..1).
  */
-function sliders(model: Model): VNode {
+function faders(model: Model): VNode {
   const cars = selectedCars(model);
+  const held = model.dragKnob;
 
   return h(
     'section',
     {
-      class: 'sliders',
+      class: 'faders',
       role: 'group',
       'aria-label': 'Cars behind',
-      'data-testid': 'car-rows',
+      'data-testid': 'car-faders',
     },
     CAR_ROWS.map((row) => {
       const level = cars[row.index];
-      const classes = ['slider'];
+      const position =
+        held !== null && held.row === row.index
+          ? held.position
+          : level / CAR_LEVEL_MAX;
+      const classes = ['fader'];
       if (level >= CAR_HOT) {
-        classes.push('slider--hot');
+        classes.push('fader--hot');
+      }
+      if (held !== null && held.row === row.index) {
+        classes.push('is-held');
       }
 
       return h(
         'div',
         {
           class: classes.join(' '),
-          role: 'group',
-          'aria-label': `${row.label} car behind`,
           'data-row': row.index,
           'data-level': level,
         },
         [
-          ...SEGMENTS_TOP_DOWN.map((segment) => {
-            const lit = segment <= level;
-            const segClasses = ['seg'];
-            if (lit) {
-              segClasses.push('is-lit');
-            }
-            if (segment === level) {
-              segClasses.push('is-top');
-            }
-
-            return h(
-              'button',
-              {
-                type: 'button',
-                class: segClasses.join(' '),
-                'data-act': 'car',
-                'data-arg': `${row.index}:${segment}`,
-                'data-seg': segment,
-                'aria-pressed': lit ? 'true' : 'false',
-                'aria-label': `${row.label} ${segment}`,
-              },
-              [String(segment)],
-            );
-          }),
           h(
-            'span',
+            'div',
             {
-              class: 'slider__label',
-              'data-act': 'car-zero',
-              'data-arg': `${row.index}:0`,
+              class: 'fader__track',
+              role: 'slider',
+              tabindex: 0,
+              'aria-label': `${row.label} car behind`,
+              'aria-orientation': 'vertical',
+              'aria-valuemin': 0,
+              'aria-valuemax': CAR_LEVEL_MAX,
+              'aria-valuenow': level,
+              'data-act': 'fader',
+              'data-arg': row.index,
+              style: `--pos:${position.toFixed(3)}`,
             },
-            [row.label],
+            [
+              ...DETENTS_TOP_DOWN.map((detent) =>
+                h(
+                  'span',
+                  {
+                    class:
+                      detent === level ? 'fader__tick is-at' : 'fader__tick',
+                    'data-detent': detent,
+                    'aria-hidden': 'true',
+                  },
+                  [String(detent)],
+                ),
+              ),
+              h('span', { class: 'fader__fill', 'aria-hidden': 'true' }, []),
+              h('span', { class: 'fader__knob', 'aria-hidden': 'true' }, []),
+            ],
           ),
+          h('span', { class: 'fader__label' }, [row.label]),
         ],
       );
     }),
   );
 }
 
+/** Five equal buttons (design round 5: "Make them all the same size"); SPIN
+ * keeps the alert colour, not a bigger box. */
 function builtinMessages(): VNode {
   return h(
     'div',
@@ -251,7 +265,7 @@ function builtinMessages(): VNode {
         'button',
         {
           type: 'button',
-          class: 'say',
+          class: text === 'SPIN' ? 'say say--alert' : 'say',
           'data-act': 'say',
           'data-arg': text,
         },
@@ -416,7 +430,7 @@ function consoleView(model: Model): VNode {
     h('main', { class: 'console__body' }, [
       h('section', { class: 'half half--top', 'data-testid': 'top-half' }, [
         laneRow(model),
-        sliders(model),
+        faders(model),
       ]),
       h(
         'section',
