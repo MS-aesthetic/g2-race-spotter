@@ -6,6 +6,7 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      'site/**',
       '**/node_modules/**',
       '**/.wrangler/**',
       '**/*.js.map',

@@ -23,6 +23,35 @@ function withCors(response: Response): Response {
   });
 }
 
+/**
+ * The glasses app the driver sideloads by QR (T058). It is a separate app
+ * with its own `index.html`, so a miss under it must stay a 404: handing the
+ * Even app's WebView the spotter shell for a missing script would fail
+ * silently instead of loudly.
+ */
+function isGlassesPath(pathname: string): boolean {
+  return pathname === '/glasses' || pathname.startsWith('/glasses/');
+}
+
+/**
+ * Static assets with the spotter's single-page fallback done here rather than
+ * by `not_found_handling`, because that setting is one policy for the whole
+ * site and `/glasses/*` needs the opposite one.
+ */
+async function serveAsset(request: Request, env: Env): Promise<Response> {
+  const response = await env.ASSETS.fetch(request);
+  const url = new URL(request.url);
+  if (
+    response.status !== 404 ||
+    isGlassesPath(url.pathname) ||
+    (request.method !== 'GET' && request.method !== 'HEAD')
+  ) {
+    return response;
+  }
+
+  return env.ASSETS.fetch(new Request(new URL('/', url), request));
+}
+
 function withoutInternalDebugHeader(request: Request): Request {
   const headers = new Headers(request.headers);
   headers.delete(INTERNAL_DEBUG_HEADER);
@@ -62,7 +91,7 @@ export default {
 
     const match = ROOM_PATH.exec(url.pathname);
     if (match === null) {
-      return withCors(await env.ASSETS.fetch(request));
+      return withCors(await serveAsset(request, env));
     }
 
     if (

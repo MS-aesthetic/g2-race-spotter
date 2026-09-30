@@ -13,6 +13,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:site": "node scripts/build-site.mjs",
+    "deploy": "npm run typecheck && npm run build:site && npm exec -w services/relay -- wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint . && prettier --check \"{apps,packages,services,scripts}/**/*.{ts,js,mjs,json}\" \"*.{js,mjs,json,yml,yaml}\" \".github/**/*.{yml,yaml}\"",

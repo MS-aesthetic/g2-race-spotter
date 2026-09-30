@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import WebSocket from 'ws';
@@ -60,16 +60,25 @@ async function stopProcess(worker: ReturnType<typeof spawn>): Promise<void> {
   await exited;
 }
 
+/** Site-relative path → contents, written into the temporary assets dir. */
+export type AssetFiles = Readonly<Record<string, string>>;
+
+const DEFAULT_ASSETS: AssetFiles = {
+  'index.html': '<!doctype html><title>Spotter</title>',
+};
+
 export async function startWorker(
   persistenceDirectory?: string,
+  assets: AssetFiles = DEFAULT_ASSETS,
 ): Promise<RunningWorker> {
   const persistence =
     persistenceDirectory ?? (await createPersistenceDirectory());
   const assetDirectory = await mkdtemp(join(tmpdir(), 'g2rs-assets-'));
-  await writeFile(
-    join(assetDirectory, 'index.html'),
-    '<!doctype html><title>Spotter</title>',
-  );
+  for (const [path, contents] of Object.entries(assets)) {
+    const file = join(assetDirectory, path);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, contents);
+  }
 
   const port = await reservePort();
   const worker = spawn(
