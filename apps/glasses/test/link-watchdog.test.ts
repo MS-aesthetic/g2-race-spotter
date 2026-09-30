@@ -105,20 +105,13 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
-    // A new call opens with the blink's hollow phase …
-    expect(shownImages(bridge)).toEqual(
-      packContainers({ lane: 'top', cars: [1, 1, 1] }, true, 'outline'),
-    );
-    // … and ends filled.
-    const blinkMs = LANE_BLINK_MS * (LANE_BLINK_PHASES.length - 1);
-    await clock.advance(blinkMs);
-    await queue.whenIdle();
+    // The first snapshot is shown as is: no lane-call blink.
     expect(shownImages(bridge)).toEqual(
       packContainers({ lane: 'top', cars: [1, 1, 1] }, true),
     );
     const beforeNoLink = images(bridge).length;
 
-    await clock.advance(DRIVER_NO_LINK_MS + 1 - blinkMs);
+    await clock.advance(DRIVER_NO_LINK_MS + 1);
     driver.checkLink();
     await queue.whenIdle();
 
@@ -261,16 +254,14 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     socket.receive(stateFrame({ lane: 'mid', cars: [0, 2, 3] }));
     await queue.whenIdle();
-    // The call opens with the lane blink's hollow phase.
     expect(shownImages(bridge)).toEqual(
-      packContainers({ lane: 'mid', cars: [0, 2, 3] }, true, 'outline'),
+      packContainers({ lane: 'mid', cars: [0, 2, 3] }, true),
     );
 
     // The relay's stale clear is an ordinary `state`: blank lanes and empty
     // bars, still at full intensity (the link is fine) — one send for each
     // container whose pixels it changes (here all four: the ▲ straddles the
-    // top seam, the middle bar the bottom one). Arriving mid-blink, it also
-    // cancels the blink: no phase is drawn after it.
+    // top seam, the middle bar the bottom one) — and nothing after it.
     const before = images(bridge).length;
     socket.receive(stateFrame({ seq: 2, lane: null, cars: [0, 0, 0] }));
     await queue.whenIdle();

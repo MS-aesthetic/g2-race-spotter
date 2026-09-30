@@ -135,10 +135,12 @@ describe('image send failure fallback', () => {
   });
 
   it('counts failures across containers but not across a success', async () => {
-    // First frame: TL fails, TR fails, BL succeeds, BR fails — never three in
-    // a row, so image mode survives.
+    // First frame (T060a: a failed container is retried once at once; a car
+    // container after the other half of its flush): TL fails, TL retry
+    // fails, TR succeeds, BL fails, BR succeeds, BL retry fails — never three
+    // in a row, so image mode survives.
     const { bridge, queue } = failingQueue((index) =>
-      index === 2 ? 'success' : 'sendFailed',
+      index === 2 || index === 4 ? 'success' : 'sendFailed',
     );
 
     queue.push({
@@ -148,7 +150,20 @@ describe('image send failure fallback', () => {
     });
     await queue.whenIdle();
 
-    expect(bridge.callsNamed('updateImageRawData')).toHaveLength(4);
+    expect(
+      bridge
+        .callsNamed('updateImageRawData')
+        .map(
+          (entry) => (entry.payload as { containerName: string }).containerName,
+        ),
+    ).toEqual([
+      'stripTL',
+      'stripTL',
+      'stripTR',
+      'stripBL',
+      'stripBR',
+      'stripBL',
+    ]);
     expect(bridge.callsNamed('rebuildPageContainer')).toHaveLength(0);
     expect(queue.mode).toBe('image');
     expect(queue.consecutiveSendFailures).toBe(1);

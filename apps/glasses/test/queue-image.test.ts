@@ -408,9 +408,11 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     const { bridge, queue } = await primed({ lane: 'top', cars: [0, 0, 0] });
     bridge.imageResult = () => 'imageException';
 
+    // T060a: each failed container is retried ONCE at once (2 → 4 calls), and
+    // then left alone until the next push — no loop.
     expect(
       names(await sendsFor(bridge, queue, { lane: 'bot', cars: [0, 0, 0] })),
-    ).toEqual(['stripTL', 'stripTR']);
+    ).toEqual(['stripTL', 'stripTL', 'stripTR', 'stripTR']);
 
     // The next state re-sends both, although the lane did not change again.
     bridge.imageResult = () => 'success';
@@ -420,6 +422,92 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     expect(
       await sendsFor(bridge, queue, { lane: 'bot', cars: [0, 0, 0] }),
     ).toHaveLength(0);
+  });
+
+  it('re-sends a failed final blink frame once, ending at the wanted bytes (T060a)', async () => {
+    const { bridge, queue } = await primed({ lane: 'top', cars: [0, 0, 0] });
+    const start = images(bridge).length;
+    // The outline phase lands; the closing `filled` phase fails once.
+    bridge.imageResult = (index) =>
+      index === start + 1 ? 'sendFailed' : 'success';
+
+    queue.push({
+      ...hud({ lane: 'top', cars: [0, 0, 0] }),
+      laneStyle: 'outline',
+    });
+    await queue.whenIdle();
+    queue.push(hud({ lane: 'top', cars: [0, 0, 0] }));
+    await queue.whenIdle();
+
+    const filled = packContainers({ lane: 'top', cars: [0, 0, 0] }, true);
+    const outline = packContainers(
+      { lane: 'top', cars: [0, 0, 0] },
+      true,
+      'outline',
+    );
+    const sent = images(bridge).slice(start);
+    expect(names(sent)).toEqual(['stripTR', 'stripTR', 'stripTR']);
+    expect(sent.map((payload) => payload.imageData)).toEqual([
+      outline.get(CONTAINER_STRIP_TR),
+      filled.get(CONTAINER_STRIP_TR),
+      filled.get(CONTAINER_STRIP_TR),
+    ]);
+    expect(shownImages(bridge)).toEqual(filled);
+    expect(queue.consecutiveSendFailures).toBe(0);
+  });
+
+  it('retries a failed car container at once, inside its flush (T060a)', async () => {
+    const { bridge, clock, queue } = await primed({
+      lane: null,
+      cars: [0, 0, 0],
+    });
+    const start = images(bridge).length;
+    bridge.imageResult = (index) =>
+      index === start ? 'sendFailed' : 'success';
+
+    const sent = await sendsFor(bridge, queue, { lane: null, cars: [2, 0, 0] });
+    expect(names(sent)).toEqual(['stripBL', 'stripBL']);
+    expect(clock.ms).toBe(HUD_GAP_FLUSH_MS * 2);
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: null, cars: [2, 0, 0] }, true),
+    );
+  });
+
+  it('retries at most once per push when every send fails (T060a)', async () => {
+    // Deliberate count change: a lane change used to cost exactly TL + TR
+    // failing sends; with the one immediate retry it is TL, TL, TR — and the
+    // third consecutive `sendFailed` still falls back to text as before.
+    const failing = await primed({ lane: 'bot', cars: [0, 0, 0] });
+    const start = images(failing.bridge).length;
+    failing.bridge.imageResult = () => 'sendFailed';
+
+    await sendsFor(failing.bridge, failing.queue, {
+      lane: 'top',
+      cars: [0, 0, 0],
+    });
+    expect(names(images(failing.bridge).slice(start))).toEqual([
+      'stripTL',
+      'stripTL',
+      'stripTR',
+    ]);
+    expect(failing.queue.mode).toBe('text');
+    expect(failing.bridge.callsNamed('rebuildPageContainer')).toHaveLength(1);
+
+    // A bridge that fails without `sendFailed` never falls back — and never
+    // spins either: one retry each, then nothing until the next push.
+    const stuck = await primed({ lane: 'bot', cars: [0, 0, 0] });
+    const before = images(stuck.bridge).length;
+    stuck.bridge.imageResult = () => 'imageException';
+    await sendsFor(stuck.bridge, stuck.queue, { lane: 'top', cars: [0, 0, 0] });
+    await stuck.clock.advance(10_000);
+    await stuck.queue.whenIdle();
+    expect(names(images(stuck.bridge).slice(before))).toEqual([
+      'stripTL',
+      'stripTL',
+      'stripTR',
+      'stripTR',
+    ]);
+    expect(stuck.queue.mode).toBe('image');
   });
 
   it('logs {call, ms, result, container} for every image send', async () => {

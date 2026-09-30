@@ -320,6 +320,27 @@ describe('lane-call blink', () => {
     );
   });
 
+  it('does not blink the first snapshot after launch, even with a lane up (T060a)', async () => {
+    const h = await harness();
+    const start = images(h.bridge).length;
+
+    await h.state('top', [0, 0, 0]);
+    expect(shownImages(h.bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [0, 0, 0] }, true),
+    );
+    const afterSnapshot = images(h.bridge).length;
+    expect(afterSnapshot).toBeGreaterThan(start);
+
+    await h.advance(LANE_BLINK_MS * LANE_BLINK_PHASES.length + 500);
+    expect(images(h.bridge).length).toBe(afterSnapshot);
+
+    // The next change between two applied states is a call, and blinks.
+    await h.state('bot', [0, 0, 0]);
+    expect(shownImages(h.bridge).get(TL)).toEqual(
+      packContainers({ lane: 'bot', cars: [0, 0, 0] }, true, 'outline').get(TL),
+    );
+  });
+
   it('does not restart for a state that repeats the same lane', async () => {
     const h = await settled('mid', [0, 0, 0]);
     const before = images(h.bridge).length;

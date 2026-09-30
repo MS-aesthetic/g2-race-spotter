@@ -206,6 +206,12 @@ export class RenderQueue {
   private readonly dirty = new Set<number>();
   /** Bytes the host last accepted (`success`) per container. */
   private readonly lastSent = new Map<number, Uint8Array>();
+  /**
+   * Containers that already spent their one immediate retry since the last
+   * `hud` push. Bounds the retry: a bridge that keeps failing gets exactly one
+   * extra call per container per push, never a loop.
+   */
+  private readonly retried = new Set<number>();
   /** Bottom-strip containers taken into the flush that is going out now. */
   private readonly bottomFlush = new Set<number>();
   private bottomImmediate = false;
@@ -277,6 +283,8 @@ export class RenderQueue {
    */
   private pushImages(job: HudJob): void {
     const packed = packContainers(job.state, job.linkOk, job.laneStyle);
+    // A new push re-arms the one immediate retry for every container.
+    this.retried.clear();
 
     for (const [containerID, bytes] of packed) {
       this.desired.set(containerID, bytes);
@@ -463,6 +471,7 @@ export class RenderQueue {
     );
 
     if (outcome.value === 'success') {
+      this.retried.delete(containerID);
       this.lastSent.set(containerID, bytes);
       // A push during the flight that went back to the OLD bytes was dropped
       // as "already shown"; now that these bytes landed, it is not.
@@ -475,6 +484,8 @@ export class RenderQueue {
         // cars debounce. Drop it.
         this.dirty.delete(containerID);
       }
+    } else {
+      this.retryOnce(container, bytes);
     }
 
     // Only `sendFailed` counts toward the fallback: an oversize or malformed
@@ -488,6 +499,32 @@ export class RenderQueue {
     }
 
     this.sendFailures = 0;
+  }
+
+  /**
+   * After a failed (or throwing) send: if the container still should show
+   * something other than what the host last accepted, send it again right
+   * away — once. Without this, a failed final frame (the blink's last
+   * `filled`, say) would leave the glasses wrong until an unrelated change.
+   * A second failure waits for the next `hud` push, which re-marks it dirty.
+   * A bottom container rejoins the flush under way (after its other half),
+   * so the retry skips the cars debounce like the send it repeats.
+   */
+  private retryOnce(container: StripContainer, failed: Uint8Array): void {
+    const { containerID } = container;
+    const wanted = this.desired.get(containerID) ?? failed;
+    if (
+      this.retried.has(containerID) ||
+      sameBytes(this.lastSent.get(containerID), wanted)
+    ) {
+      return;
+    }
+
+    this.retried.add(containerID);
+    this.dirty.add(containerID);
+    if (container.strip === 'bottom') {
+      this.bottomFlush.add(containerID);
+    }
   }
 
   private async sendHudText(job: HudJob): Promise<void> {

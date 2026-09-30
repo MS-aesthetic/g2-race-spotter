@@ -269,8 +269,10 @@ export function startDriver(options: DriverOptions): Driver {
       applyingState = true;
       try {
         watchdog.check();
-        const shownLane = app.currentState?.lane ?? null;
-        if (state.lane !== shownLane) {
+        const previous = app.currentState;
+        // Only a change between two applied states is a call. The first
+        // snapshot after launch (a lane may already be up) is shown as is.
+        if (previous !== undefined && state.lane !== previous.lane) {
           // A new call blinks (its first phase rides on this very render); a
           // clear — the spotter's or the relay's stale clear — cancels.
           if (state.lane === null) {
