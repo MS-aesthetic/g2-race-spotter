@@ -41,10 +41,14 @@ function isGlassesPath(pathname: string): boolean {
 async function serveAsset(request: Request, env: Env): Promise<Response> {
   const response = await env.ASSETS.fetch(request);
   const url = new URL(request.url);
+  const lastSegment = url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
   if (
     response.status !== 404 ||
     isGlassesPath(url.pathname) ||
-    (request.method !== 'GET' && request.method !== 'HEAD')
+    (request.method !== 'GET' && request.method !== 'HEAD') ||
+    // An asset-like miss (`/assets/main-OLD.js` from a stale tab) must stay a
+    // 404: a 200 HTML "script" would be cached by the service worker.
+    lastSegment.includes('.')
   ) {
     return response;
   }

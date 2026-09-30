@@ -100,6 +100,13 @@ describe('relay serves the glasses app next to the spotter', () => {
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*');
     }
 
+    // An asset-like miss from a stale tab must not receive the shell as a
+    // 200 "script" — the service worker would cache the HTML under that URL.
+    for (const miss of ['/assets/main-OLD.js', '/nope.png']) {
+      const response = await fetch(`${origin}${miss}`);
+      expect(response.status, miss).toBe(404);
+    }
+
     const sw = await fetch(`${origin}/sw.js`);
     expect(sw.status).toBe(200);
     expect(sw.headers.get('Content-Type')).toMatch(/javascript/);

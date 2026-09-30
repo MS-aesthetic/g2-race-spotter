@@ -13,7 +13,6 @@ Verify against current docs before relying on any flag here — fetch https://de
 wrangler.jsonc
 src/index.ts        Worker: routes /health, /room/:id (upgrade), /room/:id/debug, assets (+ spotter SPA fallback outside /glasses/)
 src/race-room.ts    RaceRoom Durable Object (hibernation API)
-src/cors.ts         helper adding Access-Control-* headers
 test/               integration tests using `ws` against wrangler dev (site.test.ts: /glasses/ hosting)
 ```
 

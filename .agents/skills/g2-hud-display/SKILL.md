@@ -48,7 +48,7 @@ Layout (Maxx, 2026-09-25 design round 4; shapes and sizes unchanged from round 3
 - Bottom strip (canvas y 240–287): three hollow bars, one per `cars[i]` (left / middle / right), each 86×28 at strip y 10–37 (canvas y 250–277), x 8 / 245 / 482 — each centred under the lane icon of the same side (x 51 / 288 / 525). LEFT sits wholly in `stripBL`, RIGHT wholly in `stripBR`, MIDDLE straddles the seam (its middle cell is cut by it).
   - Each bar: 2 px outline at level 6, split into three 26-px cells by two 2-px dividers (same level as the outline).
   - `cars[i]` cells are solid-filled **left-to-right** (`DESIGN.cars.fillDirection`), each fill inset 1 px from its cell walls.
-  - Level 3 (`alertLevel`) swaps the bar to outline 15 and the dimmer alert fill `{8,3}` — the bright outline is the "on the bumper" cue.
+  - Level 3 (`alertLevel`) swaps the bar to outline 15 and the solid alert fill (`DESIGN.alertFill`, 8) — the bright outline is the "on the bumper" cue.
   - Level 0 → a hollow bar with its dividers.
 - Stale (`linkOk === false`): after drawing, halve every pixel of every strip (`v >> 1`) — all four image containers dim. Shapes remain, obviously dim.
 - The relay clears lane, cars and message `HUD_STALE_CLEAR_MS` (6 s) after the spotter's last call (a driver ack does not postpone it); the glasses just draw that `state` like any other (constitution §2 — no local timer decides it).
