@@ -6,6 +6,7 @@ import {
   BUILTIN_MESSAGES,
   CAR_DETENTS,
   CAR_ROWS,
+  detentAt,
   detentFromPointer,
   dragCars,
   endCarDrag,
@@ -41,6 +42,22 @@ describe('AC-2 car faders (design round 5)', () => {
     expect(at(174)).toBe(2);
     expect(at(126)).toBe(2);
     expect(at(124)).toBe(3);
+  });
+
+  it('has one snap rule: detentAt(position), shared by detentFromPointer and a drag', () => {
+    expect([0, 0.16, 0.17, 0.5, 0.83, 0.84, 1].map(detentAt)).toEqual([
+      0, 0, 1, 2, 2, 3, 3,
+    ]);
+    expect(detentAt(-1)).toBe(0);
+    expect(detentAt(2)).toBe(3);
+    for (const position of [0, 0.1, 0.2, 0.49, 0.51, 0.7, 0.9, 1]) {
+      expect(moveCarDrag(startCarDrag([0, 0, 0], 0, 0), position).level).toBe(
+        detentAt(position),
+      );
+      expect(detentFromPointer(100 + 150 * (1 - position), 100, 150)).toBe(
+        detentAt(position),
+      );
+    }
   });
 
   it('clamps a finger past either end of the track, and survives a zero-size box', () => {

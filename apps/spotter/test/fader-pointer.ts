@@ -14,10 +14,18 @@ export function yAt(position: number): number {
   return TRACK_TOP + TRACK_HEIGHT * (1 - position);
 }
 
-export function track(row: 0 | 1 | 2): HTMLElement {
+/** The fader's panel: the pointer target (`data-act="fader"`). */
+export function panel(row: 0 | 1 | 2): HTMLElement {
   const el = document.querySelector<HTMLElement>(
     `[data-act="fader"][data-arg="${row}"]`,
   );
+  expect(el).not.toBeNull();
+  return el!;
+}
+
+/** The inner track: the knob's travel, whose box the finger is measured on. */
+export function track(row: 0 | 1 | 2): HTMLElement {
+  const el = panel(row).querySelector<HTMLElement>('.fader__track');
   expect(el).not.toBeNull();
   return el!;
 }

@@ -2,7 +2,10 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
+  panel,
   pointer,
+  TRACK_HEIGHT,
+  TRACK_TOP,
   stubTrackBoxes,
   tapFader,
   track,
@@ -188,6 +191,21 @@ describe('fader pointer gestures (main.ts, jsdom)', () => {
 
     pointer('pointerup', window, 900, 7);
     expect(carsSent().slice(before)).toEqual([{ t: 'cars', cars: [2, 0, 0] }]);
+  });
+
+  it('a press on the panel outside the travel still lands: 10 px above detent 3 is 3, 10 px below detent 0 is 0', async () => {
+    await settle([1, 1, 1]);
+    const before = carsSent().length;
+
+    pointer('pointerdown', panel(0), TRACK_TOP - 10);
+    pointer('pointerup', panel(0), TRACK_TOP - 10);
+    pointer('pointerdown', panel(2), TRACK_TOP + TRACK_HEIGHT + 10);
+    pointer('pointerup', panel(2), TRACK_TOP + TRACK_HEIGHT + 10);
+
+    expect(carsSent().slice(before)).toEqual([
+      { t: 'cars', cars: [3, 1, 1] },
+      { t: 'cars', cars: [3, 1, 0] },
+    ]);
   });
 
   it('a pointercancel commits the detent the knob was showing, once', async () => {

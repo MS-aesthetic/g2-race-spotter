@@ -288,13 +288,13 @@ function sendCars(next: Cars, row: 0 | 1 | 2): void {
   window.setTimeout(() => update({}), OPTIMISTIC_LANE_MS);
 }
 
-/** `data-arg="<row>"` on a fader track. */
+/** `data-arg="<row>"` on a fader panel. */
 function faderRow(arg: string): 0 | 1 | 2 | null {
   return /^[0-2]$/.test(arg) ? (Number(arg) as 0 | 1 | 2) : null;
 }
 
 /**
- * The finger on a fader (design round 5): `pointerdown` anywhere on the track
+ * The finger on a fader (design round 5): `pointerdown` anywhere on the panel
  * captures the pointer and puts the knob under the finger, `pointermove`
  * drags it live, and `pointerup` snaps it to the nearest detent and sends one
  * `cars` frame if that fader changed (040 AC-2). A tap is a drag that never
@@ -457,9 +457,12 @@ root.addEventListener('pointerdown', (event) => {
     return;
   }
 
-  const box = action.el.getBoundingClientRect();
+  // The panel takes the press; the travel is the inner track's box.
+  const box = (
+    action.el.querySelector('.fader__track') ?? action.el
+  ).getBoundingClientRect();
   try {
-    // Every move and the release land on this track, wherever the finger goes.
+    // Every move and the release land on this panel, wherever the finger goes.
     action.el.setPointerCapture?.(event.pointerId);
   } catch {
     // Not an active pointer (synthetic event): window listeners still end it.

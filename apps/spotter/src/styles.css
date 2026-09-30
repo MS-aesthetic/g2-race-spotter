@@ -359,10 +359,14 @@ button {
   }
 }
 
+/* The whole panel is the pointer target, so the bands the knob overhangs
+   into (above 3, below 0) and the label still move the knob. */
 .fader {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  touch-action: none;
+  cursor: grab;
   padding: 2px 0 4px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -373,8 +377,6 @@ button {
   position: relative;
   height: var(--track);
   margin: calc(var(--knob-h) / 2) 0;
-  touch-action: none;
-  cursor: grab;
 }
 
 .fader__track:focus-visible {

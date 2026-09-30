@@ -55,15 +55,19 @@ export function faderPosition(
   return Math.max(0, Math.min(1, fraction));
 }
 
+/** The snap rule: the detent nearest a 0..1 track position (clamped). */
+export function detentAt(position: number): CarLevel {
+  const clamped = Math.max(0, Math.min(1, position));
+  return Math.round(clamped * CAR_LEVEL_MAX) as CarLevel;
+}
+
 /** The detent nearest a finger at `y` on the track (0 bottom … 3 top). */
 export function detentFromPointer(
   y: number,
   trackTop: number,
   trackHeight: number,
 ): CarLevel {
-  return Math.round(
-    faderPosition(y, trackTop, trackHeight) * CAR_LEVEL_MAX,
-  ) as CarLevel;
+  return detentAt(faderPosition(y, trackTop, trackHeight));
 }
 
 /**
@@ -114,11 +118,10 @@ export function startCarDrag(
 /** The finger moved to `position` on the same track (pointer capture keeps
  * every move on the fader it went down on). */
 export function moveCarDrag(drag: CarDrag, position: number): CarDrag {
-  const clamped = Math.max(0, Math.min(1, position));
   return {
     ...drag,
-    position: clamped,
-    level: Math.round(clamped * CAR_LEVEL_MAX) as CarLevel,
+    position: Math.max(0, Math.min(1, position)),
+    level: detentAt(position),
   };
 }
 

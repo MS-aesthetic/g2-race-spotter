@@ -177,8 +177,9 @@ function laneRow(model: Model): VNode {
 /**
  * Three vertical faders, INSIDE / BEHIND / OUTSIDE (design round 5): a track
  * with four detent marks (0 at the bottom … 3 on top) and a DJ-style knob.
- * The whole track is the hit area; `main.ts` turns a pointer on it into a
- * detent and sends one `cars` on release. The knob sits on the level's detent
+ * The whole panel is the hit area (a thumb above detent 3 or on the label
+ * still lands); `main.ts` measures the finger against the inner track, turns
+ * it into a detent and sends one `cars` on release. The knob sits on the level's detent
  * — or under the finger while the fader is held — via `--pos` (0..1).
  */
 function faders(model: Model): VNode {
@@ -211,6 +212,8 @@ function faders(model: Model): VNode {
         'div',
         {
           class: classes.join(' '),
+          'data-act': 'fader',
+          'data-arg': row.index,
           'data-row': row.index,
           'data-level': level,
         },
@@ -226,8 +229,6 @@ function faders(model: Model): VNode {
               'aria-valuemin': 0,
               'aria-valuemax': CAR_LEVEL_MAX,
               'aria-valuenow': level,
-              'data-act': 'fader',
-              'data-arg': row.index,
               style: `--pos:${position.toFixed(3)}`,
             },
             [

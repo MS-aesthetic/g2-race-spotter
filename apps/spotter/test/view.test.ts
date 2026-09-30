@@ -252,14 +252,15 @@ describe('AC-2 vertical car faders (design round 5)', () => {
     expect(
       [...root.querySelectorAll('.fader__label')].map((el) => el.textContent),
     ).toEqual(['INSIDE', 'BEHIND', 'OUTSIDE']);
-    // One slider track per fader; detent marks top to bottom (3 … 0), then
-    // the lit fill and the knob.
+    // The whole panel is the pointer target; inside it one slider track with
+    // detent marks top to bottom (3 … 0), then the lit fill and the knob.
     expect(
-      [...root.querySelectorAll('.fader__track')].map((track) => [
-        track.getAttribute('data-act'),
-        track.getAttribute('data-arg'),
-        track.getAttribute('role'),
-        ...[...track.children].map(
+      [...root.querySelectorAll('.fader')].map((fader) => [
+        fader.getAttribute('data-act'),
+        fader.getAttribute('data-arg'),
+        [...fader.children].map((el) => el.className),
+        fader.querySelector('.fader__track')!.getAttribute('role'),
+        ...[...fader.querySelector('.fader__track')!.children].map(
           (el) => el.getAttribute('data-detent') ?? el.className,
         ),
       ]),
@@ -267,6 +268,7 @@ describe('AC-2 vertical car faders (design round 5)', () => {
       [0, 1, 2].map((row) => [
         'fader',
         String(row),
+        ['fader__track', 'fader__label'],
         'slider',
         '3',
         '2',
