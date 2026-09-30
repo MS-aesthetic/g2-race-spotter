@@ -21,7 +21,7 @@
  * make middle a triangle pointing up": ◀ at the far left (bottom lane), ▲
  * centred on the seam (middle lane), ▶ at the far right (top lane); the called
  * one solid-filled, the other two thin outlines; round 5b made them larger
- * (42 px along the pointing axis, 44 across). On a new call the called icon
+ * (42 px along the pointing axis, 42 across (43 lit rows)). On a new call the called icon
  * blinks outline → filled → outline → filled (`LaneStyle`, driven by
  * `blink.ts`).
  *
