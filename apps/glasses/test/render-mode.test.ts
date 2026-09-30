@@ -76,7 +76,7 @@ describe('startup page per render mode', () => {
       containerID: 2,
       containerName: 'hud',
       xPosition: 144,
-      yPosition: 8,
+      yPosition: 192,
       width: 288,
       height: 96,
       content: 'o',

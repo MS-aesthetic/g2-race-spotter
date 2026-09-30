@@ -91,7 +91,11 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     const expected = packContainers({ lane: 'top', cars: [1, 2, 3] }, true);
     expect(names(sent)).toEqual(['stripTL', 'stripTR', 'stripBL', 'stripBR']);
     for (const payload of sent) {
-      expect(payload).toMatchObject({ imageWidth: 288, imageHeight: 48 });
+      // 288×48 lane images on top, 288×96 car images below.
+      expect(payload).toMatchObject({
+        imageWidth: 288,
+        imageHeight: payload.containerName.startsWith('stripT') ? 48 : 96,
+      });
       expect(payload.imageData).toEqual(expected.get(payload.containerID));
     }
     expect(sent.map((payload) => payload.containerID)).toEqual([
@@ -108,28 +112,28 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
       cars: [1, 2, 3],
     });
 
-    // ▼ → ▲: one corner goes hollow, the other fills.
+    // ◀ → ▶: one side icon goes hollow, the other fills.
     const botToTop = await sendsFor(bridge, queue, {
       lane: 'top',
       cars: [1, 2, 3],
     });
     expect(names(botToTop)).toEqual(['stripTL', 'stripTR']);
 
-    // ▲ → ▬: the dash straddles the seam, so both halves change.
+    // ▶ → ▲: the ▲ straddles the seam, so both halves change.
     const topToMid = await sendsFor(bridge, queue, {
       lane: 'mid',
       cars: [1, 2, 3],
     });
     expect(names(topToMid)).toEqual(['stripTL', 'stripTR']);
 
-    // ▬ → none: still both halves of the dash.
+    // ▲ → none: still both halves of the ▲.
     const midToNull = await sendsFor(bridge, queue, {
       lane: null,
       cars: [1, 2, 3],
     });
     expect(names(midToNull)).toEqual(['stripTL', 'stripTR']);
 
-    // none → ▼: only the top-left corner changes.
+    // none → ◀: only the top-left image changes.
     const nullToBot = await sendsFor(bridge, queue, {
       lane: 'bot',
       cars: [1, 2, 3],
@@ -181,7 +185,7 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     expect(before).toBe(4);
 
     // …when the relay clears lane and cars: ▲ goes hollow (TR), the middle bar
-    // empties (BL + BR). ▼ and the dash did not change, so TL is not sent.
+    // empties (BL + BR). ◀ and the ▲ did not change, so TL is not sent.
     const sent = await sendsFor(bridge, queue, { lane: null, cars: [0, 0, 0] });
 
     expect(names(sent)).toEqual(['stripTR', 'stripBL', 'stripBR']);
@@ -340,7 +344,7 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     bridge.paused = true;
     queue.push(hud({ lane: null, cars: [0, 0, 0] }));
     await flush();
-    // stripTL (▼ going hollow) is in flight; ▼ comes straight back.
+    // stripTL (◀ going hollow) is in flight; ◀ comes straight back.
     queue.push(hud({ lane: 'bot', cars: [0, 0, 0] }));
     bridge.paused = false;
     bridge.release();

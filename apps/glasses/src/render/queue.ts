@@ -1,9 +1,10 @@
 /**
  * The single writer to the glasses. One bridge call in flight, ever.
  *
- * Image mode (Maxx design round 4): a `hud` job is drawn as the two HUD
- * strips, split into the four image containers and packed; from there every
- * image container is its own job, keyed by container id:
+ * Image mode (Maxx design rounds 4–5): a `hud` job is drawn as the two HUD
+ * strips (576×48 lanes, 576×96 cars), split into the four image containers
+ * (288×48 ×2, 288×96 ×2) and packed; from there every image container is its
+ * own job, keyed by container id:
  *
  * - a new job for a container REPLACES its pending job (latest wins);
  * - a container whose packed bytes equal the last bytes the glasses accepted
@@ -16,7 +17,10 @@
  *   for a debounce window — except that a link-state change, the first frame
  *   and any change to an all-empty HUD (the relay's stale clear) flush it now;
  * - image sends go before text sends; the lane strip before the car strip,
- *   unless a car-strip flush is half done.
+ *   unless a car-strip flush is half done;
+ * - a lane-call blink phase (`laneStyle`, round 5) is just another `hud` job:
+ *   it changes the top strip only, so it costs lane-immediate top sends and
+ *   nothing on the cars strip. In text mode it changes nothing and is dropped.
  *
  * Text mode: the whole HUD is one `renderText` string on container 2 with the
  * same replace/debounce rules as before (a lane, link-state or to-blank change
@@ -49,8 +53,9 @@ import {
   drawStrips,
   HALF_WIDTH,
   splitStrip,
-  STRIP_HEIGHT,
+  STRIP_HEIGHTS,
   type HudState,
+  type LaneStyle,
 } from './draw-hud.ts';
 import { pack } from './gray4.ts';
 import type { RenderMode } from './mode.ts';
@@ -62,6 +67,16 @@ export const SEND_FAILED_LIMIT = 3;
 /** Nothing to draw but the empty slots: no lane, no car behind. */
 function isBlank(state: HudState): boolean {
   return state.lane === null && state.cars.every((level) => level === 0);
+}
+
+/** Two HUD jobs the text HUD would draw identically (the blink is image-only). */
+function sameTextHud(a: HudJob | undefined, b: HudJob): boolean {
+  return (
+    a !== undefined &&
+    a.linkOk === b.linkOk &&
+    a.state.lane === b.state.lane &&
+    a.state.cars.every((level, index) => level === b.state.cars[index])
+  );
 }
 
 function sameBytes(a: Uint8Array | undefined, b: Uint8Array): boolean {
@@ -85,8 +100,9 @@ function sameBytes(a: Uint8Array | undefined, b: Uint8Array): boolean {
 export function packContainers(
   state: HudState,
   linkOk: boolean,
+  laneStyle: LaneStyle = 'filled',
 ): Map<number, Uint8Array> {
-  const strips = drawStrips(state, { linkOk });
+  const strips = drawStrips(state, { linkOk, laneStyle });
   const halves = {
     top: splitStrip(strips.top),
     bottom: splitStrip(strips.bottom),
@@ -98,7 +114,7 @@ export function packContainers(
       container.containerID,
       pack(halves[container.strip][container.half], {
         width: HALF_WIDTH,
-        height: STRIP_HEIGHT,
+        height: STRIP_HEIGHTS[container.strip],
       }),
     );
   }
@@ -121,6 +137,12 @@ export interface HudJob {
   readonly kind: 'hud';
   readonly state: HudState;
   readonly linkOk: boolean;
+  /**
+   * How the called lane icon is drawn — a phase of the lane-call blink
+   * (`blink.ts`); absent = filled. Only the top strip depends on it, so a
+   * blink frame costs top-strip sends only and never flushes the cars strip.
+   */
+  readonly laneStyle?: LaneStyle;
 }
 
 export interface MessageJob {
@@ -216,7 +238,12 @@ export class RenderQueue {
 
   push(job: RenderJob): void {
     if (job.kind === 'hud') {
+      const previous = this.latestHud;
       this.latestHud = job;
+      if (this.currentMode === 'text' && sameTextHud(previous, job)) {
+        // A blink phase changes nothing the text HUD shows: no call.
+        return;
+      }
       if (this.currentMode === 'image') {
         this.pushImages(job);
       } else {
@@ -249,7 +276,7 @@ export class RenderQueue {
    * success is skipped at send time instead).
    */
   private pushImages(job: HudJob): void {
-    const packed = packContainers(job.state, job.linkOk);
+    const packed = packContainers(job.state, job.linkOk, job.laneStyle);
 
     for (const [containerID, bytes] of packed) {
       this.desired.set(containerID, bytes);
@@ -426,7 +453,7 @@ export class RenderQueue {
       containerName: container.containerName,
       imageData: bytes,
       imageWidth: HALF_WIDTH,
-      imageHeight: STRIP_HEIGHT,
+      imageHeight: STRIP_HEIGHTS[container.strip],
     });
 
     const outcome = await this.timed(

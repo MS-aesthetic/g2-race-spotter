@@ -13,17 +13,28 @@ import {
   drawBottomStripDesign,
   drawTopStripDesign,
   HALF_WIDTH,
-  STRIP_HEIGHT,
+  STRIP_HEIGHTS,
   STRIP_WIDTH,
   type HudState,
+  type LaneStyle,
+  type StripId,
 } from './hud-design.ts';
 import { createCanvas, dim, type Canvas } from './primitives.ts';
 
-export { HALF_WIDTH, STRIP_HEIGHT, STRIP_WIDTH, type HudState };
+export {
+  HALF_WIDTH,
+  STRIP_HEIGHTS,
+  STRIP_WIDTH,
+  type HudState,
+  type LaneStyle,
+  type StripId,
+};
 
 export interface DrawHudOptions {
   /** `false` renders the stale variant (every pixel `>> 1`). */
   readonly linkOk: boolean;
+  /** How the called lane icon is drawn (the lane-call blink); default filled. */
+  readonly laneStyle?: LaneStyle;
 }
 
 function finish(canvas: Canvas, options: DrawHudOptions): Uint8Array {
@@ -39,17 +50,17 @@ export function drawTopStrip(
   lane: Lane | null,
   options: DrawHudOptions,
 ): Uint8Array {
-  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHT);
-  drawTopStripDesign(canvas, lane);
+  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.top);
+  drawTopStripDesign(canvas, lane, options.laneStyle ?? 'filled');
   return finish(canvas, options);
 }
 
-/** The bottom strip, `Uint8Array(576*48)`: the three car-behind bars. */
+/** The bottom strip, `Uint8Array(576*96)`: the three car-behind bars. */
 export function drawBottomStrip(
   cars: Readonly<Cars>,
   options: DrawHudOptions,
 ): Uint8Array {
-  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHT);
+  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.bottom);
   drawBottomStripDesign(canvas, cars);
   return finish(canvas, options);
 }
@@ -70,7 +81,7 @@ export function drawStrips(state: HudState, options: DrawHudOptions): Strips {
 /**
  * Splits a 576-px-wide strip down x 288 into its left and right image
  * containers (`288*height` each). The halves are pixel-adjacent on the glasses,
- * so a shape drawn across the seam (▬, the middle bar) shows as one shape.
+ * so a shape drawn across the seam (▲, the middle bar) shows as one shape.
  */
 export function splitStrip(
   strip: Uint8Array,
@@ -96,5 +107,8 @@ export function splitStrip(
   return [left, right];
 }
 
-/** One image container's worth of pixels: `Uint8Array(288*48)`. */
-export const HALF_PIXELS = HALF_WIDTH * STRIP_HEIGHT;
+/** One image container's worth of pixels: 288×48 on top, 288×96 below. */
+export const HALF_PIXELS: Readonly<Record<StripId, number>> = {
+  top: HALF_WIDTH * STRIP_HEIGHTS.top,
+  bottom: HALF_WIDTH * STRIP_HEIGHTS.bottom,
+};

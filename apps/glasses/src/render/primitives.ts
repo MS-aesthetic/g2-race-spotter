@@ -374,6 +374,158 @@ export function strokeCircle(
 }
 
 /**
+ * A slice of an annulus: every point between `innerRadius` and `outerRadius`
+ * of `centre` whose direction lies between `startAngle` and `endAngle`.
+ *
+ * Angles are in degrees in the usual maths sense on a y-DOWN raster: 0 points
+ * right (+x), 90 points UP (-y), counter-clockwise; `endAngle` > `startAngle`
+ * and the sweep is at most 180. `edgeInset` moves both straight edges that many
+ * pixels inward, parallel to themselves — half of a constant-width gap between
+ * neighbouring segments, so a 2 px gap is `edgeInset: 1` on each side.
+ */
+export interface RingSector {
+  readonly centre: Point;
+  readonly innerRadius: number;
+  readonly outerRadius: number;
+  readonly startAngle: number;
+  readonly endAngle: number;
+  readonly edgeInset?: number;
+}
+
+/** The same sector with all four edges moved `inset` pixels inward. */
+export function insetRingSector(sector: RingSector, inset: number): RingSector {
+  return {
+    ...sector,
+    innerRadius: sector.innerRadius + inset,
+    outerRadius: sector.outerRadius - inset,
+    edgeInset: (sector.edgeInset ?? 0) + inset,
+  };
+}
+
+/** `cos`/`sin` in degrees, snapped so 0/90/180 come out exact (no 6e-17). */
+function unit(degrees: number): Point {
+  const radians = (degrees * Math.PI) / 180;
+  const snap = (value: number): number =>
+    Math.abs(value - Math.round(value)) < 1e-12 ? Math.round(value) : value;
+  return { x: snap(Math.cos(radians)), y: snap(Math.sin(radians)) };
+}
+
+interface SectorTest {
+  readonly start: Point;
+  readonly end: Point;
+  readonly inner2: number;
+  readonly outer2: number;
+  readonly edge: number;
+  readonly centre: Point;
+}
+
+function sectorTest(sector: RingSector): SectorTest | undefined {
+  const sweep = sector.endAngle - sector.startAngle;
+  if (
+    !(sweep > 0 && sweep <= 180) ||
+    sector.outerRadius <= Math.max(0, sector.innerRadius)
+  ) {
+    return undefined;
+  }
+
+  const inner = Math.max(0, sector.innerRadius);
+  return {
+    start: unit(sector.startAngle),
+    end: unit(sector.endAngle),
+    inner2: inner * inner,
+    outer2: sector.outerRadius * sector.outerRadius,
+    edge: sector.edgeInset ?? 0,
+    centre: sector.centre,
+  };
+}
+
+/**
+ * Whether pixel (x, y) belongs to the sector, judged at the pixel CENTRE
+ * (x + 0.5, y + 0.5). Sampling at centres makes a shape and its mirror image
+ * about any integer x rasterise to exact mirror pixels, and no pixel can be
+ * claimed twice or missed on a shared edge.
+ */
+function inSector(test: SectorTest, x: number, y: number): boolean {
+  const px = x + 0.5 - test.centre.x;
+  // Maths orientation: up is +.
+  const py = test.centre.y - (y + 0.5);
+  const r2 = px * px + py * py;
+  if (r2 < test.inner2 || r2 > test.outer2) {
+    return false;
+  }
+
+  // Signed distance to each straight edge, positive on the inside. For a sweep
+  // of at most 180 the wedge is exactly where both are non-negative.
+  const fromStart = test.start.x * py - test.start.y * px;
+  const fromEnd = px * test.end.y - py * test.end.x;
+  return fromStart >= test.edge && fromEnd >= test.edge;
+}
+
+function sectorBox(
+  canvas: Canvas,
+  sector: RingSector,
+): { x0: number; y0: number; x1: number; y1: number } {
+  const r = Math.ceil(sector.outerRadius) + 1;
+  return {
+    x0: Math.max(0, Math.floor(sector.centre.x - r)),
+    y0: Math.max(0, Math.floor(sector.centre.y - r)),
+    x1: Math.min(canvas.width - 1, Math.ceil(sector.centre.x + r)),
+    y1: Math.min(canvas.height - 1, Math.ceil(sector.centre.y + r)),
+  };
+}
+
+/** Solid ring sector (see {@link RingSector}); clips to the canvas. */
+export function fillRingSector(
+  canvas: Canvas,
+  sector: RingSector,
+  paint: Paint,
+): void {
+  const test = sectorTest(sector);
+  if (test === undefined) {
+    return;
+  }
+
+  const box = sectorBox(canvas, sector);
+  for (let y = box.y0; y <= box.y1; y += 1) {
+    for (let x = box.x0; x <= box.x1; x += 1) {
+      if (inSector(test, x, y)) {
+        canvas.data[y * canvas.width + x] = levelAt(paint, x, y);
+      }
+    }
+  }
+}
+
+/**
+ * Ring-sector outline `thickness` pixels wide: the sector minus its copy inset
+ * by `thickness` on all four edges. Like the other strokes it leaves the
+ * interior untouched; a sector too thin for a hole is filled.
+ */
+export function strokeRingSector(
+  canvas: Canvas,
+  sector: RingSector,
+  paint: Paint,
+  thickness: number,
+): void {
+  const outer = sectorTest(sector);
+  if (outer === undefined) {
+    return;
+  }
+
+  const hole = sectorTest(insetRingSector(sector, Math.max(1, thickness)));
+  const box = sectorBox(canvas, sector);
+  for (let y = box.y0; y <= box.y1; y += 1) {
+    for (let x = box.x0; x <= box.x1; x += 1) {
+      if (
+        inSector(outer, x, y) &&
+        (hole === undefined || !inSector(hole, x, y))
+      ) {
+        canvas.data[y * canvas.width + x] = levelAt(paint, x, y);
+      }
+    }
+  }
+}
+
+/**
  * Halves every pixel (`v >> 1`). The stale/NO LINK rendering: the shape stays,
  * the intensity obviously does not.
  */

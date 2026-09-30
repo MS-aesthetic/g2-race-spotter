@@ -1,14 +1,16 @@
 /**
  * The page the glasses show, created exactly once (constitution §6). Layout is
- * the table in the `g2-hud-display` skill (Maxx, 2026-09-25 design round 4).
+ * the table in the `g2-hud-display` skill (Maxx, 2026-09-30 design round 5).
  *
- * Image mode, 7 containers: the full-canvas `bg`, FOUR 288×48 image containers
- * along the top and bottom edges (the two HUD strips, each split at x 288), the
- * `msg` text in the centre band and the `status` text on the right border. The
- * pinned SDK (0.0.12) caps a page at 4 image / 8 text / 12 containers.
+ * Image mode, 7 containers: the full-canvas `bg`, FOUR image containers along
+ * the top and bottom edges (the two HUD strips, each split at x 288: 288×48 on
+ * top, 288×96 below), the `msg` text upper-middle directly under the ▲ and the
+ * `status` text on the right border. The pinned SDK (0.0.12) caps a page at
+ * 4 image / 8 text / 12 containers.
  *
- * Text mode, 4 containers: `bg`, one `hud` text container in slot 2, `msg`,
- * `status` — the page the mid-session fallback rebuilds to. Slot 2 is `stripTL`
+ * Text mode, 4 containers: `bg`, one `hud` text container in slot 2 (bottom
+ * centre, where the car strip is in image mode), `msg`, `status` — the page
+ * the mid-session fallback rebuilds to. Slot 2 is `stripTL`
  * in image mode and `hud` in text mode, so both pages number their containers
  * 1..n without gaps.
  */
@@ -25,7 +27,7 @@ import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   HALF_WIDTH,
-  STRIP_HEIGHT,
+  STRIP_HEIGHTS,
   STRIP_Y,
   type StripId,
 } from './render/hud-design.ts';
@@ -65,7 +67,7 @@ export interface StripContainer {
 
 /**
  * The four image containers, in send priority order: the lane strip first.
- * Rects come from `hud-design.ts` (`STRIP_Y`, `HALF_WIDTH`, `STRIP_HEIGHT`).
+ * Rects come from `hud-design.ts` (`STRIP_Y`, `HALF_WIDTH`, `STRIP_HEIGHTS`).
  */
 export const STRIP_CONTAINERS: readonly StripContainer[] = [
   {
@@ -104,21 +106,24 @@ export const SDK_MAX_TEXT_CONTAINERS = 8;
 export const SDK_MAX_CONTAINERS = 12;
 
 /**
- * Text-mode HUD: two short lines at the top centre, clear of the message band.
+ * Text-mode HUD: two short lines at the bottom centre — where the car strip
+ * is in image mode — because the message now owns the upper middle.
  */
 const HUD_TEXT_X = 144;
-const HUD_TEXT_Y = 8;
+const HUD_TEXT_Y = STRIP_Y.bottom;
 const HUD_TEXT_WIDTH = 288;
-const HUD_TEXT_HEIGHT = 96;
+const HUD_TEXT_HEIGHT = STRIP_HEIGHTS.bottom;
 
 /**
- * Message in the centre band (a message is meant to be read). It stops at
- * x 520 so it clears the status strip on the right border.
+ * Message upper-middle, directly under the ▲ (Maxx, design round 5: "Put text
+ * upper middle below the top rectangle"): starts 4 px below the top strip and
+ * is centred on the seam, so it clears the strips, the corner rings and the
+ * status strip on the right border.
  */
-const MSG_X = 16;
-const MSG_Y = 112;
-const MSG_WIDTH = 504;
-const MSG_HEIGHT = 64;
+const MSG_WIDTH = 288;
+const MSG_X = HALF_WIDTH - MSG_WIDTH / 2;
+const MSG_Y = STRIP_HEIGHTS.top + 4;
+const MSG_HEIGHT = 48;
 
 /** `L`/`S`, small, on the right border at mid-height. */
 const STATUS_X = 528;
@@ -191,7 +196,7 @@ function stripImage(container: StripContainer): ImageContainer {
     xPosition: container.half * HALF_WIDTH,
     yPosition: STRIP_Y[container.strip],
     width: HALF_WIDTH,
-    height: STRIP_HEIGHT,
+    height: STRIP_HEIGHTS[container.strip],
     zOrderIndex: container.zOrderIndex,
   };
 }

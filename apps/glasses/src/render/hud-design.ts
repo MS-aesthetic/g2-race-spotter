@@ -9,55 +9,73 @@
  * language. The golden ASCII snapshots in `test/draw-hud.test.ts` pin whatever
  * design is current — a deliberate change updates them in the same commit.
  *
- * Layout (Maxx, 2026-09-25 design round 4 — "I want the icons to be close to
- * the perimeter so it's not directly in line of sight. Separate the bars on
- * the glasses. Use corners on the glasses, then the top border and bottom
- * borders for the 'middle' icons."): the HUD is two 576×48 STRIPS, one
- * along the top edge of the glasses canvas and one along the bottom edge, and
- * the centre of the screen stays empty. The pinned SDK caps a page at four
- * image containers of at most 288×144, so each strip is drawn once on a
- * virtual 576-px-wide canvas and split down the middle (x 288) into two
- * pixel-adjacent 288×48 image containers (`splitStrip` in `draw-hud.ts`).
+ * Layout (Maxx, 2026-09-30 design round 5, on the round-4 perimeter layout):
+ * the HUD is two STRIPS the full 576-px canvas width — a 576×48 one along the
+ * top edge and a 576×96 one along the bottom edge — and the centre of the
+ * screen holds only the message. The pinned SDK caps a page at four image
+ * containers of at most 288×144, so each strip is drawn once on a virtual
+ * canvas and split down the middle (x 288) into two pixel-adjacent image
+ * containers (`splitStrip` in `draw-hud.ts`): 288×48 on top, 288×96 below.
  *
- * Top strip: the three lane icons in track order — ▼ in the top-left corner,
- * ▬ centred on the seam, ▲ in the top-right corner — the called one
- * solid-filled, the other two thin outlines. Bottom strip: three hollow
- * car-behind bars — LEFT in the bottom-left corner, MIDDLE centred on the
- * seam, RIGHT in the bottom-right corner — each split into three segments that
- * fill LEFT-TO-RIGHT with `cars[i]`; a bar at level 3 gets the bright alert
- * outline. Every filled area is a solid level (`DESIGN.fill`, `DESIGN.alertFill`);
- * both are `Paint`s, so a dither can be re-enabled by editing those two
- * values. Coordinates below are strip coordinates
- * (x 0..575, y 0..47); the strips' place on the canvas is `STRIP_Y`.
+ * Top strip — "make left triangle point left, right triangle point right,
+ * make middle a triangle pointing up": ◀ at the far left (bottom lane), ▲
+ * centred on the seam (middle lane), ▶ at the far right (top lane); the called
+ * one solid-filled, the other two thin outlines. On a new call the called icon
+ * blinks outline → filled → outline → filled (`LaneStyle`, driven by
+ * `blink.ts`).
+ *
+ * Bottom strip — "bars on the corners with rounded edges … a mix between a
+ * banana and an L; middle still a bar but vertical; segments instead of
+ * dynamic sliders": LEFT = a quarter ring hugging the bottom-left corner,
+ * RIGHT = its mirror in the bottom-right corner, MIDDLE = a vertical bar on
+ * the seam. Each is three outlined segments with 2 px gaps that fill from the
+ * BOTTOM EDGE UP with `cars[i]` (the corner rings from their horizontal end
+ * towards their vertical end — the same direction as the spotter's faders);
+ * a bar at level 3 gets the bright alert outline and the dimmer alert fill.
+ *
+ * Every filled area is a solid level (`DESIGN.fill`, `DESIGN.alertFill`); both
+ * are `Paint`s, so a dither can be re-enabled by editing those two values.
+ * Coordinates below are STRIP coordinates (x 0..575, y 0..height-1); the
+ * strips' place on the canvas is `STRIP_Y`.
  */
 
 import { CAR_LEVEL_MAX, type Cars, type Lane } from '@g2-race-spotter/protocol';
 
 import {
   fillRect,
+  fillRingSector,
   fillTriangle,
+  insetRingSector,
   strokeRect,
+  strokeRingSector,
   strokeTriangle,
   type Canvas,
   type Paint,
+  type Point,
+  type RingSector,
 } from './primitives.ts';
 
 /** The glasses canvas. */
 export const CANVAS_WIDTH = 576;
 export const CANVAS_HEIGHT = 288;
 
-/** One strip spans the whole canvas width; it is split into two images. */
+/** Both strips span the whole canvas width; each is split into two images. */
 export const STRIP_WIDTH = CANVAS_WIDTH;
-export const STRIP_HEIGHT = 48;
-/** Each image container is one half of a strip: 288×48. */
+/** Each image container is one half of a strip: 288 wide. */
 export const HALF_WIDTH = STRIP_WIDTH / 2;
 
 export type StripId = 'top' | 'bottom';
 
+/** Strip heights: the lane icons need 48 px, the corner rings 96. */
+export const STRIP_HEIGHTS: Readonly<Record<StripId, number>> = {
+  top: 48,
+  bottom: 96,
+};
+
 /** Where each strip sits on the canvas (its image containers' `yPosition`). */
 export const STRIP_Y: Readonly<Record<StripId, number>> = {
   top: 0,
-  bottom: CANVAS_HEIGHT - STRIP_HEIGHT,
+  bottom: CANVAS_HEIGHT - STRIP_HEIGHTS.bottom,
 };
 
 export interface HudState {
@@ -65,6 +83,13 @@ export interface HudState {
   /** Cars behind `[left, mid, right]`, each 0..3 (0 = none, 3 = bumper). */
   readonly cars: Readonly<Cars>;
 }
+
+/**
+ * How the CALLED lane icon is drawn: `filled` normally, `outline` during the
+ * hollow phases of the lane-call blink (a bright outline, so the called icon
+ * still stands out from the two dim uncalled ones).
+ */
+export type LaneStyle = 'filled' | 'outline';
 
 export const DESIGN = {
   /**
@@ -78,146 +103,242 @@ export const DESIGN = {
    * what the eye catches. Same one-object switch to a dither as `fill`. */
   alertFill: 8 as Paint,
   /**
-   * Lane call along the TOP strip: three fixed positions so the driver always
-   * sees where a call could be, left to right as ▼ ▬ ▲. ▼ and ▲ sit in the
-   * corners, ▬ is centred on the seam at x 288 (half in each image). Same size
-   * as design round 3: triangles 30 px tall and 34 px wide, the middle a 40×10
-   * dash.
+   * Lane call along the TOP strip (48 tall): three fixed positions so the
+   * driver always sees where a call could be. ◀ (bottom lane) and ▶ (top lane)
+   * point outwards from the far left and far right, ▲ (middle lane) sits on
+   * the seam at x 288, half in each image. Round-3 size: 30 px along the
+   * direction the triangle points, 34 px across it.
    */
   lanes: {
     slots: [
-      { lane: 'bot', centreX: 51 },
-      { lane: 'mid', centreX: 288 },
-      { lane: 'top', centreX: 525 },
+      { lane: 'bot', centreX: 51, points: 'left' },
+      { lane: 'mid', centreX: 288, points: 'up' },
+      { lane: 'top', centreX: 525, points: 'right' },
     ],
-    topY: 9,
-    bottomY: 39,
-    /** Triangles: half the base width. */
+    centreY: 24,
+    /** Apex to base. */
+    length: 30,
+    /** Half the base. */
     halfWidth: 17,
-    /** `mid` is a dash, so it can never be mistaken for either arrow. */
-    dashWidth: 40,
-    dashHeight: 10,
     /** The two lanes that were not called: thin, faint, still legible. */
     outlineThickness: 2,
     outlineLevel: 4,
+    /** The called lane during an `outline` blink phase: hollow but bright. */
+    blinkOutlineLevel: 15,
   },
   /**
-   * Cars behind along the BOTTOM strip: one hollow bar per `cars` slot, each
-   * under the lane icon of the same side (x centres 51 / 288 / 525) — LEFT in
-   * the corner, MIDDLE straddling the seam, RIGHT in the other corner. Each bar
-   * is three `segmentWidth` cells between 2 px dividers; `cars[i]` fills that
-   * many cells LEFT-TO-RIGHT (the same direction as the spotter's segments).
+   * Cars behind along the BOTTOM strip (96 tall). LEFT and RIGHT are quarter
+   * rings centred on the strip's bottom corners (local (0, 96) and
+   * (576, 96)), 28 px thick, swept 90° from straight up to straight
+   * right (left) / straight left (right) and cut into three angular segments
+   * with 2 px parallel-sided gaps. MIDDLE is a vertical bar on the seam, three
+   * stacked segments with the same gaps. Every segment is its own 2 px outline
+   * (level 6) with a 1 px dark gap around its fill.
    */
   cars: {
-    xs: [8, 245, 482],
-    y: 10,
-    /** 2 + 3 × 26 + 2 × 2 + 2: outline, three cells, two dividers. */
-    width: 86,
-    height: 28,
+    corner: {
+      innerRadius: 60,
+      outerRadius: 88,
+    },
+    middle: {
+      /** Centred on the seam: 14 px in each image. */
+      width: 28,
+      /** 3 × 27 + 2 × 2. */
+      segmentHeight: 27,
+      /** Last row of the bottom segment (same 1 px margin as the rings). */
+      bottomY: 94,
+    },
+    /** Between two segments; the rings also keep half of it off the canvas edge. */
+    gap: 2,
     outlineThickness: 2,
     outlineLevel: 6,
-    segmentWidth: 26,
-    /** Dark gap between a cell's walls and its fill. */
+    /** Dark gap between a segment's outline and its fill. */
     fillInset: 1,
-    fillDirection: 'left-to-right',
+    fillDirection: 'bottom-up',
     /** At this level the bar swaps to the bright outline and dimmer fill. */
     alertLevel: CAR_LEVEL_MAX,
     alertOutlineLevel: 15,
   },
 } as const;
 
-const LANE_SLOTS: ReadonlyArray<{
-  readonly lane: Lane;
-  readonly centreX: number;
-}> = DESIGN.lanes.slots;
+type Direction = (typeof DESIGN.lanes.slots)[number]['points'];
 
-function laneShape(
-  canvas: Canvas,
-  lane: Lane,
+/** The three vertices of a lane triangle pointing `direction`. */
+function laneTriangle(
   centreX: number,
-  active: boolean,
-): void {
-  const { topY, bottomY, halfWidth, dashWidth, dashHeight, outlineThickness } =
-    DESIGN.lanes;
-  const paint: Paint = active ? DESIGN.fill : DESIGN.lanes.outlineLevel;
+  direction: Direction,
+): [Point, Point, Point] {
+  const { centreY, length, halfWidth } = DESIGN.lanes;
+  const half = length / 2;
 
-  if (lane === 'mid') {
-    const x = centreX - dashWidth / 2;
-    const y = Math.round((topY + bottomY - dashHeight) / 2);
-    if (active) {
-      fillRect(canvas, x, y, dashWidth, dashHeight, paint);
-    } else {
-      strokeRect(canvas, x, y, dashWidth, dashHeight, paint, outlineThickness);
-    }
-    return;
+  if (direction === 'up') {
+    return [
+      { x: centreX, y: centreY - half },
+      { x: centreX - halfWidth, y: centreY + half },
+      { x: centreX + halfWidth, y: centreY + half },
+    ];
   }
 
-  // `top` points up (apex at the top row), `bot` points down.
-  const apex =
-    lane === 'top' ? { x: centreX, y: topY } : { x: centreX, y: bottomY };
-  const baseY = lane === 'top' ? bottomY : topY;
-  const left = { x: centreX - halfWidth, y: baseY };
-  const right = { x: centreX + halfWidth, y: baseY };
-
-  if (active) {
-    fillTriangle(canvas, apex, left, right, paint);
-    return;
-  }
-
-  strokeTriangle(canvas, apex, left, right, paint, outlineThickness);
+  const sign = direction === 'left' ? -1 : 1;
+  return [
+    { x: centreX + sign * half, y: centreY },
+    { x: centreX - sign * half, y: centreY - halfWidth },
+    { x: centreX - sign * half, y: centreY + halfWidth },
+  ];
 }
 
-function drawLanes(canvas: Canvas, lane: Lane | null): void {
+function drawLanes(
+  canvas: Canvas,
+  lane: Lane | null,
+  laneStyle: LaneStyle,
+): void {
+  const { outlineThickness, outlineLevel, blinkOutlineLevel } = DESIGN.lanes;
+
   // Every slot is drawn on every frame: an empty position would be read as "no
   // call there", which is exactly the same picture as "no call at all".
-  for (const slot of LANE_SLOTS) {
-    laneShape(canvas, slot.lane, slot.centreX, slot.lane === lane);
+  for (const slot of DESIGN.lanes.slots) {
+    const [a, b, c] = laneTriangle(slot.centreX, slot.points);
+    if (slot.lane !== lane) {
+      strokeTriangle(canvas, a, b, c, outlineLevel, outlineThickness);
+    } else if (laneStyle === 'filled') {
+      fillTriangle(canvas, a, b, c, DESIGN.fill);
+    } else {
+      strokeTriangle(canvas, a, b, c, blinkOutlineLevel, outlineThickness);
+    }
   }
 }
 
-function drawCarBar(canvas: Canvas, x: number, level: number): void {
+interface Look {
+  readonly outline: number;
+  readonly fill: Paint;
+}
+
+function barLook(level: number): { readonly filled: number } & Look {
   const bar = DESIGN.cars;
   const filled = Math.max(0, Math.min(CAR_LEVEL_MAX, Math.round(level)));
   const alert = filled >= bar.alertLevel;
-  const outline = alert ? bar.alertOutlineLevel : bar.outlineLevel;
-  const fill: Paint = alert ? DESIGN.alertFill : DESIGN.fill;
-  const wall = bar.outlineThickness;
-
-  strokeRect(canvas, x, bar.y, bar.width, bar.height, outline, wall);
-
-  const innerY = bar.y + wall;
-  const innerHeight = bar.height - 2 * wall;
-  for (let cell = 0; cell < CAR_LEVEL_MAX; cell += 1) {
-    const cellX = x + wall + cell * (bar.segmentWidth + wall);
-    if (cell > 0) {
-      // The divider in front of this cell is part of the outline.
-      fillRect(canvas, cellX - wall, innerY, wall, innerHeight, outline);
-    }
-    if (cell < filled) {
-      fillRect(
-        canvas,
-        cellX + bar.fillInset,
-        innerY + bar.fillInset,
-        bar.segmentWidth - 2 * bar.fillInset,
-        innerHeight - 2 * bar.fillInset,
-        fill,
-      );
-    }
-  }
+  return {
+    filled,
+    outline: alert ? bar.alertOutlineLevel : bar.outlineLevel,
+    fill: alert ? DESIGN.alertFill : DESIGN.fill,
+  };
 }
 
-function drawCars(canvas: Canvas, cars: Readonly<Cars>): void {
-  DESIGN.cars.xs.forEach((x, index) => {
-    drawCarBar(canvas, x, cars[index] ?? 0);
+/**
+ * The three segments of a corner ring, bottom first. `side` 'left' is centred
+ * on the bottom-left corner and sweeps 0°→90° (right → up); 'right' is its
+ * mirror, 180°→90°.
+ */
+export function cornerSegments(
+  side: 'left' | 'right',
+  stripHeight: number = STRIP_HEIGHTS.bottom,
+): RingSector[] {
+  const { corner, gap } = DESIGN.cars;
+  const step = 90 / CAR_LEVEL_MAX;
+  const centre: Point = {
+    x: side === 'left' ? 0 : STRIP_WIDTH,
+    y: stripHeight,
+  };
+
+  return Array.from({ length: CAR_LEVEL_MAX }, (_, index) => {
+    // Angle measured from the bottom edge up.
+    const from = index * step;
+    const to = from + step;
+    return {
+      centre,
+      innerRadius: corner.innerRadius,
+      outerRadius: corner.outerRadius,
+      startAngle: side === 'left' ? from : 180 - to,
+      endAngle: side === 'left' ? to : 180 - from,
+      edgeInset: gap / 2,
+    };
   });
 }
 
-/** Paints the lane icons onto a 576×48 top-strip canvas. Pure apart from it. */
-export function drawTopStripDesign(canvas: Canvas, lane: Lane | null): void {
-  drawLanes(canvas, lane);
+export interface Rect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
-/** Paints the three car bars onto a 576×48 bottom-strip canvas. */
+/** The three segments of the vertical middle bar, bottom first. */
+export function middleSegments(): Rect[] {
+  const { middle, gap } = DESIGN.cars;
+  const x = HALF_WIDTH - middle.width / 2;
+
+  return Array.from({ length: CAR_LEVEL_MAX }, (_, index) => ({
+    x,
+    y: middle.bottomY + 1 - (index + 1) * middle.segmentHeight - index * gap,
+    width: middle.width,
+    height: middle.segmentHeight,
+  }));
+}
+
+function drawCorner(
+  canvas: Canvas,
+  side: 'left' | 'right',
+  level: number,
+): void {
+  const bar = DESIGN.cars;
+  const look = barLook(level);
+
+  cornerSegments(side, canvas.height).forEach((segment, index) => {
+    strokeRingSector(canvas, segment, look.outline, bar.outlineThickness);
+    if (index < look.filled) {
+      fillRingSector(
+        canvas,
+        insetRingSector(segment, bar.outlineThickness + bar.fillInset),
+        look.fill,
+      );
+    }
+  });
+}
+
+function drawMiddle(canvas: Canvas, level: number): void {
+  const bar = DESIGN.cars;
+  const look = barLook(level);
+  const inset = bar.outlineThickness + bar.fillInset;
+
+  middleSegments().forEach((segment, index) => {
+    strokeRect(
+      canvas,
+      segment.x,
+      segment.y,
+      segment.width,
+      segment.height,
+      look.outline,
+      bar.outlineThickness,
+    );
+    if (index < look.filled) {
+      fillRect(
+        canvas,
+        segment.x + inset,
+        segment.y + inset,
+        segment.width - 2 * inset,
+        segment.height - 2 * inset,
+        look.fill,
+      );
+    }
+  });
+}
+
+function drawCars(canvas: Canvas, cars: Readonly<Cars>): void {
+  drawCorner(canvas, 'left', cars[0] ?? 0);
+  drawMiddle(canvas, cars[1] ?? 0);
+  drawCorner(canvas, 'right', cars[2] ?? 0);
+}
+
+/** Paints the lane icons onto a 576×48 top-strip canvas. Pure apart from it. */
+export function drawTopStripDesign(
+  canvas: Canvas,
+  lane: Lane | null,
+  laneStyle: LaneStyle = 'filled',
+): void {
+  drawLanes(canvas, lane, laneStyle);
+}
+
+/** Paints the three car bars onto a 576×96 bottom-strip canvas. */
 export function drawBottomStripDesign(
   canvas: Canvas,
   cars: Readonly<Cars>,

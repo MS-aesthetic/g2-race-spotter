@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { HALF_WIDTH, STRIP_HEIGHT, STRIP_Y } from '../src/render/hud-design.ts';
+import {
+  HALF_WIDTH,
+  STRIP_HEIGHTS,
+  STRIP_Y,
+} from '../src/render/hud-design.ts';
 import {
   buildPage,
   createStartupPage,
@@ -67,9 +71,9 @@ describe('startup page', () => {
     ]).toEqual([4, 8, 12]);
   });
 
-  it('lays the HUD out as four edge strips, message in the centre, status on the right border', () => {
-    // The layout table in the g2-hud-display skill (Maxx design round 4,
-    // 2026-09-25).
+  it('lays the HUD out as four edge strips, message upper-middle, status on the right border', () => {
+    // The layout table in the g2-hud-display skill (Maxx design round 5,
+    // 2026-09-30).
     const page = buildPage({ mode: 'image', status: 'L S', message: 'BOX' });
     const byName = new Map(
       [...page.textObject, ...(page.imageObject ?? [])].map((container) => [
@@ -90,9 +94,10 @@ describe('startup page', () => {
     expect(rect('bg')).toEqual([0, 0, 576, 288]);
     expect(rect('stripTL')).toEqual([0, 0, 288, 48]);
     expect(rect('stripTR')).toEqual([288, 0, 288, 48]);
-    expect(rect('stripBL')).toEqual([0, 240, 288, 48]);
-    expect(rect('stripBR')).toEqual([288, 240, 288, 48]);
-    expect(rect('msg')).toEqual([16, 112, 504, 64]);
+    expect(rect('stripBL')).toEqual([0, 192, 288, 96]);
+    expect(rect('stripBR')).toEqual([288, 192, 288, 96]);
+    // Upper middle, directly under the ▲, clear of the strips.
+    expect(rect('msg')).toEqual([144, 52, 288, 48]);
     expect(rect('status')).toEqual([528, 124, 40, 28]);
     expect(byName.get('msg')).toMatchObject({ content: 'BOX' });
     expect(byName.get('status')).toMatchObject({ content: 'L S' });
@@ -103,9 +108,28 @@ describe('startup page', () => {
         strip.half * HALF_WIDTH,
         STRIP_Y[strip.strip],
         HALF_WIDTH,
-        STRIP_HEIGHT,
+        STRIP_HEIGHTS[strip.strip],
       ]);
     }
+    expect(page.imageObject!.map((image) => image.zOrderIndex)).toEqual([
+      6, 7, 8, 9,
+    ]);
+  });
+
+  it('puts the text-mode HUD bottom centre, clear of the upper-middle message', () => {
+    const page = buildPage({ mode: 'text', status: 'L S', hud: 'x' });
+    const hud = page.textObject.find(
+      (container) => container.containerName === 'hud',
+    )!;
+    expect([hud.xPosition, hud.yPosition, hud.width, hud.height]).toEqual([
+      144, 192, 288, 96,
+    ]);
+    const msg = page.textObject.find(
+      (container) => container.containerName === 'msg',
+    )!;
+    expect([msg.xPosition, msg.yPosition, msg.width, msg.height]).toEqual([
+      144, 52, 288, 48,
+    ]);
   });
 
   it('keeps every container on the canvas, apart from bg overlapping nothing, with unique zOrder', () => {

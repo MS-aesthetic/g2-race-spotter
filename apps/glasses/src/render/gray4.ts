@@ -8,12 +8,18 @@
  * below is the one thing to flip.
  */
 
-import { HALF_WIDTH, STRIP_HEIGHT } from './hud-design.ts';
+import { HALF_WIDTH, STRIP_HEIGHTS, type StripId } from './hud-design.ts';
 
 export const NIBBLE_ORDER: 'high-left' | 'high-right' = 'high-left';
 
-/** One image container (half a strip, 288×48) packed: 6 912 bytes. */
-export const PACKED_BYTE_LENGTH = (HALF_WIDTH * STRIP_HEIGHT) / 2;
+/**
+ * One image container (half a strip) packed: 288×48 → 6 912 bytes on top,
+ * 288×96 → 13 824 bytes below.
+ */
+export const PACKED_BYTE_LENGTHS: Readonly<Record<StripId, number>> = {
+  top: (HALF_WIDTH * STRIP_HEIGHTS.top) / 2,
+  bottom: (HALF_WIDTH * STRIP_HEIGHTS.bottom) / 2,
+};
 
 export interface PackOptions {
   readonly width?: number;
@@ -23,7 +29,7 @@ export interface PackOptions {
 /** Packs a one-byte-per-pixel frame of 0..15 values into gray4 bytes. */
 export function pack(frame: Uint8Array, options: PackOptions = {}): Uint8Array {
   const width = options.width ?? HALF_WIDTH;
-  const height = options.height ?? STRIP_HEIGHT;
+  const height = options.height ?? STRIP_HEIGHTS.top;
 
   if (frame.length !== width * height) {
     throw new Error(
