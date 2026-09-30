@@ -24,6 +24,8 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
+- [ ] T062 (owner: g2-glasses-dev) (Maxx 2026-09-30: "Flip the corners — I want the rounded side down towards the corners. Also make triangles larger.") [stream:glasses-render; lock:glasses-render; depends:T060 integrated] Design-only change in `hud-design.ts` (+ goldens, skill, 050 Decision). (a) Corner bars become **rounded-L shapes whose curve sits IN the corner**: the quarter ring is centred inside the strip at local (R, 96−R) for the left bar (mirror for the right), R = outerRadius ≈ 88, so the outer arc is tangent to the left edge and the bottom edge at the corner and the arms point up the left edge and along the bottom edge; inner radius ≈ 60 (28 px thick); still three angular segments with 2 px gaps; fill order unchanged (from the bottom-edge arm towards the vertical arm); level-3 alert unchanged; middle vertical bar unchanged. (b) Lane triangles larger: ≈ 42 px along the pointing axis and ≈ 44 across (from 30×34), still inside the 48 px strip with ≥ 2 px margins; blink outline thickness unchanged. Re-record goldens (four lanes; cars `[0,0,0]`, `[1,2,3]`, `[3,3,3]`; dim; seam; mirror test), update the skill's geometry paragraph, append a 050 Decision "2026-09-30 (Maxx) design round 5b". Verifiers: `draw-hud.test.ts`, `primitives.test.ts`, `blink.test.ts` (send counts unchanged). Extra gates: every root gate, glasses build.
+
 
 
 
