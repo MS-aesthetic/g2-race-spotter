@@ -164,7 +164,10 @@ describe('RaceRoom driver eviction', () => {
       );
       try {
         await hello(spotter, 'spotter');
-        const laneForFirstDriver = nextMessage(first);
+        const laneForFirstDriver = nextMessageMatching(
+          first,
+          (frame) => frame['t'] === 'state' && frame['lane'] === 'mid',
+        );
         spotter.send(JSON.stringify({ t: 'lane', lane: 'mid' }));
         await expect(within(laneForFirstDriver, 500)).resolves.toMatchObject({
           t: 'state',
