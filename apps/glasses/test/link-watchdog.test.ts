@@ -6,6 +6,7 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ImageRawData, TextUpgrade } from '../src/bridge.ts';
+import { LANE_BLINK_MS, LANE_BLINK_PHASES } from '../src/blink.ts';
 import { startDriver, type Driver } from '../src/driver.ts';
 import { statusStrip, STATUS_BLINK_MS, STATUS_NO_ROOM } from '../src/link.ts';
 import { packContainers, RenderQueue } from '../src/render/queue.ts';
@@ -104,12 +105,20 @@ describe('NO LINK watchdog (030 AC-4)', () => {
 
     socket.receive(stateFrame({ lane: 'top', cars: [1, 1, 1] }));
     await queue.whenIdle();
+    // A new call opens with the blink's hollow phase …
+    expect(shownImages(bridge)).toEqual(
+      packContainers({ lane: 'top', cars: [1, 1, 1] }, true, 'outline'),
+    );
+    // … and ends filled.
+    const blinkMs = LANE_BLINK_MS * (LANE_BLINK_PHASES.length - 1);
+    await clock.advance(blinkMs);
+    await queue.whenIdle();
     expect(shownImages(bridge)).toEqual(
       packContainers({ lane: 'top', cars: [1, 1, 1] }, true),
     );
     const beforeNoLink = images(bridge).length;
 
-    await clock.advance(DRIVER_NO_LINK_MS + 1);
+    await clock.advance(DRIVER_NO_LINK_MS + 1 - blinkMs);
     driver.checkLink();
     await queue.whenIdle();
 
@@ -248,18 +257,20 @@ describe('NO LINK watchdog (030 AC-4)', () => {
   });
 
   it('draws the cars carried by the room state and the relay stale clear (T055)', async () => {
-    const { bridge, socket, queue } = await harness();
+    const { bridge, clock, socket, queue } = await harness();
 
     socket.receive(stateFrame({ lane: 'mid', cars: [0, 2, 3] }));
     await queue.whenIdle();
+    // The call opens with the lane blink's hollow phase.
     expect(shownImages(bridge)).toEqual(
-      packContainers({ lane: 'mid', cars: [0, 2, 3] }, true),
+      packContainers({ lane: 'mid', cars: [0, 2, 3] }, true, 'outline'),
     );
 
     // The relay's stale clear is an ordinary `state`: blank lanes and empty
     // bars, still at full intensity (the link is fine) — one send for each
-    // container whose pixels it changes (here all four: the dash straddles the
-    // top seam, the middle bar the bottom one).
+    // container whose pixels it changes (here all four: the ▲ straddles the
+    // top seam, the middle bar the bottom one). Arriving mid-blink, it also
+    // cancels the blink: no phase is drawn after it.
     const before = images(bridge).length;
     socket.receive(stateFrame({ seq: 2, lane: null, cars: [0, 0, 0] }));
     await queue.whenIdle();
@@ -267,6 +278,9 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(shownImages(bridge)).toEqual(
       packContainers({ lane: null, cars: [0, 0, 0] }, true),
     );
+    await clock.advance(LANE_BLINK_MS * LANE_BLINK_PHASES.length);
+    await queue.whenIdle();
+    expect(images(bridge).length).toBe(before + 4);
   });
 
   it('shows ROOM ? until a room is configured', async () => {

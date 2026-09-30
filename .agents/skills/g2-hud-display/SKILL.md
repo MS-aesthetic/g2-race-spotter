@@ -1,6 +1,6 @@
 ---
 name: g2-hud-display
-description: Project-specific G2 glasses rendering rules for the Race Spotter HUD — container layout and IDs, the two 576x48 HUD strips (lane icons on top, car bars on the bottom) split into four 288x48 image containers, gray4 packing, text-mode fallback, the per-container update queue, stale/NO LINK rendering, the 5 s message auto-clear, and glasses input mapping. Use when writing or changing anything in apps/glasses/src/render or the page setup.
+description: Project-specific G2 glasses rendering rules for the Race Spotter HUD — container layout and IDs, the two HUD strips (576x48 lane icons on top, 576x96 corner-ring and middle car bars on the bottom) split into four image containers (288x48 / 288x96), gray4 packing, the lane-call blink, text-mode fallback, the per-container update queue, stale/NO LINK rendering, the 5 s message auto-clear, and glasses input mapping. Use when writing or changing anything in apps/glasses/src/render or the page setup.
 ---
 
 # G2 Race Spotter HUD rendering
@@ -9,23 +9,23 @@ This skill encodes the *project's* display decisions. For generic SDK mechanics 
 
 ## Page layout (created once with `createStartUpPageContainer`)
 
-Canvas 576×288, 4-bit grey (0 off … 15 brightest). `zOrderIndex` must be set on every container if set on any; values unique. Maxx, 2026-09-25 design round 4: "I want the icons to be close to the perimeter so it's not directly in line of sight. Separate the bars on the glasses. Use corners on the glasses, then the top border and bottom borders for the 'middle' icons." The centre of the screen stays empty apart from the message.
+Canvas 576×288, 4-bit grey (0 off … 15 brightest). `zOrderIndex` must be set on every container if set on any; values unique. Maxx, 2026-09-25 design round 4: "I want the icons to be close to the perimeter so it's not directly in line of sight. Separate the bars on the glasses. Use corners on the glasses, then the top border and bottom borders for the 'middle' icons." Maxx, 2026-09-30 design round 5: "Put text upper middle below the top rectangle on glasses. For bottom sliders, is it possible to do bars on the corners with rounded edges? Kinda look like a mix between a banana and an L. Then for middle still be a bar but it can be vertical instead of horizontal. Can use segments instead of dynamic sliders on the glasses. For the top bars, make the left triangle point left, right triangle point right, make middle a triangle pointing up. For those, when the user presses the app button on the phone make the glasses image blink. Empty outline then filled outline." The centre of the screen stays empty apart from the message.
 
 Image mode — 7 containers:
 
 | containerID | containerName | type | x | y | w | h | zOrder | notes |
 |---|---|---|---|---|---|---|---|---|
 | 1 | `bg` | text | 0 | 0 | 576 | 288 | 1 | `content: ' '`, `isEventCapture: 1`, `textColor: 0`, no border. The only event-capture container; the only container that overlaps others (it is behind them all). |
-| 2 | `stripTL` | image | 0 | 0 | 288 | 48 | 6 | Left half of the TOP strip: ▼ in the corner, left half of ▬. |
-| 5 | `stripTR` | image | 288 | 0 | 288 | 48 | 7 | Right half of the TOP strip: right half of ▬, ▲ in the corner. |
-| 3 | `msg` | text | 16 | 112 | 504 | 64 | 4 | `textColor: 4`. `''` when no message. Centre band — a message is meant to be read. Ends at x 520 so it clears `status`. |
+| 2 | `stripTL` | image | 0 | 0 | 288 | 48 | 6 | Left half of the TOP strip: ◀ at the far left, left half of ▲. |
+| 5 | `stripTR` | image | 288 | 0 | 288 | 48 | 7 | Right half of the TOP strip: right half of ▲, ▶ at the far right. |
+| 3 | `msg` | text | 144 | 52 | 288 | 48 | 4 | `textColor: 4`. `''` when no message. Upper middle, directly under the ▲ (round 5), 4 px below the top strip; centred on the seam, so it clears the strips, the corner rings and `status`. |
 | 4 | `status` | text | 528 | 124 | 40 | 28 | 5 | `textColor: 2`, `paddingLength: 2`. Right border, mid-height; `L`/`S` only. (The "4 when NO LINK" idea is not implemented: `textContainerUpgrade` carries content only and the app never rebuilds for text — the blinking `L` plus the dimmed HUD is the NO LINK cue.) |
-| 6 | `stripBL` | image | 0 | 240 | 288 | 48 | 8 | Left half of the BOTTOM strip: LEFT bar in the corner, left part of the MIDDLE bar. |
-| 7 | `stripBR` | image | 288 | 240 | 288 | 48 | 9 | Right half of the BOTTOM strip: right part of the MIDDLE bar, RIGHT bar in the corner. |
+| 6 | `stripBL` | image | 0 | 192 | 288 | 96 | 8 | Left half of the BOTTOM strip: LEFT quarter ring in the corner, left half of the vertical MIDDLE bar. |
+| 7 | `stripBR` | image | 288 | 192 | 288 | 96 | 9 | Right half of the BOTTOM strip: right half of the MIDDLE bar, RIGHT quarter ring in the corner. |
 
-Text mode (startup override or the mid-session fallback) — 4 containers: `bg` (1), `hud` (2, text, 144,8 288×96, `textColor: 4`, zOrder 3), `msg` (3) and `status` (4) with the rects above. Slot 2 is `stripTL` in image mode and `hud` in text mode, so both pages number their containers 1..n with no gaps; `msg` is always 3 and `status` always 4. `startup-page.test.ts` pins all of this: rects on the canvas, no overlaps apart from `bg`, unique zOrder, and the SDK caps below.
+Text mode (startup override or the mid-session fallback) — 4 containers: `bg` (1), `hud` (2, text, 144,192 288×96, `textColor: 4`, zOrder 3 — bottom centre, where the car strip is in image mode, because the message owns the upper middle since round 5), `msg` (3) and `status` (4) with the rects above. Slot 2 is `stripTL` in image mode and `hud` in text mode, so both pages number their containers 1..n with no gaps; `msg` is always 3 and `status` always 4. `startup-page.test.ts` pins all of this: rects on the canvas, no overlaps apart from `bg`, unique zOrder, and the SDK caps below.
 
-**Four image containers, not one (supersedes the design-round-3 "exactly one image container" rule; constitution §3 still says "one image container" and is the planner's to reconcile).** The rule existed because each image update is its own serialised bridge call (~100 ms per update, `docs/RESEARCH_NOTES.md`), so one image was cheapest. Maxx's perimeter layout cannot be reached with one image: an image container is at most 288×144, and the icons and bars have to span the full 576-px width at both the top and the bottom edges. The pinned SDK 0.0.12 caps a page at **4 image containers, 8 text containers and 12 containers in total** (`CreateStartUpPageContainer` / `RebuildPageContainer`: `Image_Object (max_count 4)`, `Text_Object (max_count 8)`, `containerTotalNum 1~12`; also `docs/RESEARCH_NOTES.md` §2). Six separate icon/bar images are therefore impossible; four edge strips are the design that fits. To keep the cost down, the queue only sends the containers whose pixels changed (see *Update queue*). **The per-call hardware cost of four 288×48 images is not verified** — the simulator does not model it; `[HW]` T109/T110 measure it on glasses. Until then, treat every number in *Costs to plan around* as an estimate.
+**Four image containers, not one (supersedes the design-round-3 "exactly one image container" rule; constitution §3 still says "one image container" and is the planner's to reconcile).** The rule existed because each image update is its own serialised bridge call (~100 ms per update, `docs/RESEARCH_NOTES.md`), so one image was cheapest. Maxx's perimeter layout cannot be reached with one image: an image container is at most 288×144, and the icons and bars have to span the full 576-px width at both the top and the bottom edges. The pinned SDK 0.0.12 caps a page at **4 image containers, 8 text containers and 12 containers in total** (`CreateStartUpPageContainer` / `RebuildPageContainer`: `Image_Object (max_count 4)`, `Text_Object (max_count 8)`, `containerTotalNum 1~12`; also `docs/RESEARCH_NOTES.md` §2). Six separate icon/bar images are therefore impossible; four edge strips are the design that fits. To keep the cost down, the queue only sends the containers whose pixels changed (see *Update queue*). **The per-call hardware cost of the four images (2 × 288×48 + 2 × 288×96 since round 5) is not verified** — the simulator does not model it; `[HW]` T109/T110 measure it on glasses. Until then, treat every number in *Costs to plan around* as an estimate.
 
 Startup sequence:
 
@@ -34,30 +34,43 @@ Startup sequence:
 3. `createStartUpPageContainer({...})` once. Check the `StartUpPageCreateResult`; on failure log and show the phone-side companion error. Do **not** retry in a loop (a failed retry blocks ~2.1 s and drops input).
 4. Only after the room's first `state` frame: render HUD bitmap and message.
 
-## HUD strips (two 576×48 strips → four 288×48 images)
+## HUD strips (576×48 + 576×96 → four images)
 
-Each strip is drawn into a `Uint8Array(576*48)` of values 0–15 (one byte per pixel, simple to test) as ONE virtual canvas, then `splitStrip` cuts it at x 288 into the two image containers, and each half is packed. Drawing the whole strip first means a shape that crosses the seam (▬, the middle bar) is drawn once and lands half in each image; the halves are pixel-adjacent on the canvas, and the seam is at an even x, so a 2×2 dither (if one is re-enabled) stays in phase across it. Positions and levels live in `DESIGN` (`src/render/hud-design.ts`) in strip coordinates (x 0–575, y 0–47); where the strips sit on the canvas is `STRIP_Y` (top 0, bottom 240). It is the only file to edit for a look change; `primitives.ts` is the generic drawing library and knows nothing about racing.
+Each strip is drawn into a `Uint8Array(576*h)` of values 0–15 (one byte per pixel, simple to test) as ONE virtual canvas — the top strip is 576×48, the bottom strip 576×96 (`STRIP_HEIGHTS`) — then `splitStrip` cuts it at x 288 into the two image containers, and each half is packed. Drawing the whole strip first means a shape that crosses the seam (▲, the middle bar) is drawn once and lands half in each image; the halves are pixel-adjacent on the canvas, and the seam is at an even x, so a 2×2 dither (if one is re-enabled) stays in phase across it. Positions and levels live in `DESIGN` (`src/render/hud-design.ts`) in strip coordinates (x 0–575, y 0–47 / 0–95); where the strips sit on the canvas is `STRIP_Y` (top 0, bottom 192). It is the only file to edit for a look change; `primitives.ts` is the generic drawing library and knows nothing about racing (round 5 added `fillRingSector` / `strokeRingSector` / `insetRingSector`: an annulus slice rasterised at pixel centres, so a sector and its mirror about an integer x come out pixel-exact, every value stays 0–15, and a 2 px outline is closed — `test/primitives.test.ts`).
 
-**Fills are solid.** Every *filled* area is a flat level — `DESIGN.fill = 15`, `DESIGN.alertFill = 8` — because Maxx turned dithering off on 2026-09-30 after seeing the simulator (it had been a 2×2 checkerboard `{on:15, off:6}` / `{on:8, off:3}` since 2026-09-04, an unverified guess about waveguide glare). Both are `Paint`s (`number | {on, off}` in `primitives.ts`), so **to re-enable a dither, edit those two values in the `DESIGN` object** (e.g. `fill: { on: 15, off: 6 }`) — nothing else in the renderer changes; the seam stays in phase because it is at an even x. Outlines and dividers are flat levels either way.
+**Fills are solid.** Every *filled* area is a flat level — `DESIGN.fill = 15`, `DESIGN.alertFill = 8` — because Maxx turned dithering off on 2026-09-30 after seeing the simulator (it had been a 2×2 checkerboard `{on:15, off:6}` / `{on:8, off:3}` since 2026-09-04, an unverified guess about waveguide glare). Both are `Paint`s (`number | {on, off}` in `primitives.ts`), so **to re-enable a dither, edit those two values in the `DESIGN` object** (e.g. `fill: { on: 15, off: 6 }`) — nothing else in the renderer changes; the seam stays in phase because it is at an even x. Outlines are flat levels either way.
 
-Layout (Maxx, 2026-09-25 design round 4; shapes and sizes unchanged from round 3):
+Layout (Maxx, 2026-09-30 design round 5, on the round-4 perimeter layout):
 
-- Top strip (canvas y 0–47): three fixed lane slots — ▼ at x 51 (top-left corner), ▬ at x 288 (centred on the seam), ▲ at x 525 (top-right corner), mirror-symmetric. Icons span y 9–39. Triangles are isosceles, 30 px tall, half-width 17 (34 wide); the middle is a 40×10 dash (y 19–28).
-  - The called lane is filled solid (`DESIGN.fill`); **the other two are always drawn as 2 px outlines at level 4** (the dash as a hollow rectangle), so the driver sees all three positions and reads which one is lit.
-  - `lane: null` → three outlines, nothing filled.
-- Bottom strip (canvas y 240–287): three hollow bars, one per `cars[i]` (left / middle / right), each 86×28 at strip y 10–37 (canvas y 250–277), x 8 / 245 / 482 — each centred under the lane icon of the same side (x 51 / 288 / 525). LEFT sits wholly in `stripBL`, RIGHT wholly in `stripBR`, MIDDLE straddles the seam (its middle cell is cut by it).
-  - Each bar: 2 px outline at level 6, split into three 26-px cells by two 2-px dividers (same level as the outline).
-  - `cars[i]` cells are solid-filled **left-to-right** (`DESIGN.cars.fillDirection`), each fill inset 1 px from its cell walls.
-  - Level 3 (`alertLevel`) swaps the bar to outline 15 and the solid alert fill (`DESIGN.alertFill`, 8) — the bright outline is the "on the bumper" cue.
-  - Level 0 → a hollow bar with its dividers.
+- Top strip (canvas y 0–47), three fixed lane slots, round-3 size (30 px from apex to base, 34 px across), all centred on strip y 24:
+  - `◀` (bottom lane) at x 51, pointing left (apex x 36, base x 66, y 7–41); `▲` (middle lane) on the seam at x 288, pointing up (apex y 9, base y 39, x 271–305 — half in each image); `▶` (top lane) at x 525, pointing right (apex x 540, base x 510). Mirror-symmetric in design coordinates.
+  - The called lane is filled solid (`DESIGN.fill`); **the other two are always drawn as 2 px outlines at level 4**, so the driver sees all three positions and reads which one is lit. `lane: null` → three outlines.
+  - During the hollow phases of the lane-call blink (below) the called icon is a 2 px outline at **level 15** (`blinkOutlineLevel`) — bright, so it never looks like the two dim uncalled icons.
+- Bottom strip (canvas y 192–287), one bar per `cars[i]` (left / middle / right), each three segments with **2 px dark gaps**; every segment is its own 2 px outline at level 6 with its fill inset 1 px inside the outline:
+  - LEFT = the "banana / L": a quarter ring centred on the strip's bottom-left corner (local (0, 96)), radii 60–88 (28 px thick), swept 90° from straight up to straight right and cut into three 30° sectors; the gaps are parallel-sided (`edgeInset` 1 on each side of a boundary ray), and the ring keeps the same 1 px off the canvas edges. Lit pixels span x 1–87, y 8–94, wholly in `stripBL`.
+  - RIGHT = its exact mirror on the bottom-right corner (local (576, 96)), wholly in `stripBR`.
+  - MIDDLE = a vertical bar on the seam: x 274–301 (28 wide, 14 px in each image), y 10–94 (85 tall) — three 27-px segments stacked with 2 px gaps.
+  - `cars[i]` segments fill **from the bottom edge up** (`DESIGN.cars.fillDirection: 'bottom-up'`): the middle bar bottom segment first; a corner ring from its horizontal end along the bottom edge (0°–30°) towards its vertical end up the side (60°–90°) — the same direction as the spotter's faders.
+  - Level 3 (`alertLevel`) swaps the whole bar to outline 15 and the solid alert fill (`DESIGN.alertFill`, 8) — the bright outline is the "on the bumper" cue. Level 0 → three hollow segments.
 - Stale (`linkOk === false`): after drawing, halve every pixel of every strip (`v >> 1`) — all four image containers dim. Shapes remain, obviously dim.
 - The relay clears lane, cars and message `HUD_STALE_CLEAR_MS` (6 s) after the spotter's last call (a driver ack does not postpone it); the glasses just draw that `state` like any other (constitution §2 — no local timer decides it).
 
-Keep `drawTopStrip(lane, {linkOk})`, `drawBottomStrip(cars, {linkOk})` and `splitStrip(strip)` pure and unit-tested (`test/draw-hud.test.ts`) with ASCII snapshots of each whole strip (render `#` for ≥8, `+` for 1–7, `.` for 0, downsampled 4× — 144×12 characters, the seam at column 72) so a reviewer can eyeball the shapes in a test file, plus a seam test proving the two halves re-join to the strip byte for byte. `toAscii(frame, { sample: 'min' })` (brightest → dimmest pixel per block) exists to reveal a dither; with solid fills no golden needs it, but use it if a dither is re-enabled.
+Keep `drawTopStrip(lane, {linkOk, laneStyle})`, `drawBottomStrip(cars, {linkOk})` and `splitStrip(strip)` pure and unit-tested (`test/draw-hud.test.ts`) with ASCII snapshots of each whole strip (render `#` for ≥8, `+` for 1–7, `.` for 0, downsampled 4× — 144×12 characters for the top strip, 144×24 for the bottom strip, the seam at column 72) so a reviewer can eyeball the shapes in a test file, plus a seam test proving the two halves re-join to the strip byte for byte. Goldens: the four lanes, the blink's outline phase, cars `[0,0,0]` / `[1,2,3]` / `[3,3,3]`, and the dim variants. `toAscii(frame, { sample: 'min' })` (brightest → dimmest pixel per block) exists to reveal a dither; with solid fills no golden needs it, but use it if a dither is re-enabled.
+
+## Lane-call blink (`src/blink.ts`, `LANE_BLINK_MS` = 300)
+
+"When the user presses the app button on the phone make the glasses image blink. Empty outline then filled outline." When an applied `state.lane` differs from the lane on screen and is not `null`, `driver.ts` starts the blink: the called icon is drawn **outline → filled → outline → filled**, one phase per `LANE_BLINK_MS` on the injected timer, ending filled. The first phase rides on the render that applies the new state (no extra frame); each later phase is `app.setLaneStyle(style)` → a normal `hud` job carrying `laneStyle`, which changes only the top strip — so every phase is a lane-immediate top-strip send and never touches the car strip.
+
+- Cancelled (icon left filled) by: a newer state with a different lane (a non-null one restarts the blink for the new icon), a clear (`lane: null` — the spotter's or the relay's stale clear), NO LINK (the watchdog's `linkOk → false`: a dimmed hollow icon would read as "no call") and `stop()`.
+- A cars-only state mid-blink does not disturb it: every phase re-renders the *current* state, and the cars change is drawn with whatever phase is showing.
+- A state that repeats the lane on screen does not restart it (only a lane *change* blinks; re-pressing the same lane button on the spotter does not blink — the relay state is unchanged).
+- Text mode: `renderText` ignores `laneStyle` and the queue drops a `hud` job that differs from the newest one only in `laneStyle`, so a call costs one text send, as before.
+- Constitution §2 still holds: which lane is lit comes only from `state`; the blink only changes how the called icon is drawn for 900 ms.
+- Verified by `test/blink.test.ts` (phase sequence and timing, send counts per call, every cancellation path, cars-only state mid-blink, text mode).
 
 ## gray4 packing
 
-The SDK accepts `number[] | Uint8Array | ArrayBuffer | base64`. Pack two pixels per byte, **verify the nibble order on hardware in Phase 4** (the docs do not state it; community encoders from the `image` template pack high nibble = left pixel — start there, and confirm with a test bitmap that has a single bright column at x=0). Row stride = width/2 bytes, rows top to bottom. Each image container is packed on its own: 288×48 → 6 912 bytes, with `imageWidth: 288`, `imageHeight: 48` as required by `ImageRawDataUpdate`. If the pinned SDK version needs a `compressMode` workaround (0.0.12 with Even App < 2.2.7), apply it in one place: `src/render/sdk-quirks.ts`.
+The SDK accepts `number[] | Uint8Array | ArrayBuffer | base64`. Pack two pixels per byte, **verify the nibble order on hardware in Phase 4** (the docs do not state it; community encoders from the `image` template pack high nibble = left pixel — start there, and confirm with a test bitmap that has a single bright column at x=0). Row stride = width/2 bytes, rows top to bottom. Each image container is packed on its own: 288×48 → 6 912 bytes (top), 288×96 → 13 824 bytes (bottom, `PACKED_BYTE_LENGTHS`), with `imageWidth: 288` and `imageHeight` 48 / 96 as required by `ImageRawDataUpdate`. If the pinned SDK version needs a `compressMode` workaround (0.0.12 with Even App < 2.2.7), apply it in one place: `src/render/sdk-quirks.ts`.
 
 If hardware shows a mirrored/garbled image, the first two things to flip are nibble order and row stride.
 
@@ -67,11 +80,11 @@ If hardware shows a mirrored/garbled image, the first two things to flip are nib
 
 1. `?render=text` or `?render=image` in the page URL → that.
 2. Bridge KV `g2rs:v1:render` set → that (manual override from the phone companion UI).
-3. Otherwise `image` — **on hardware and in the simulator alike**. The simulator (≥ 0.9.x; 0.9.5 is what the project pins) accepted the round-3 page (one 288×144 image, 4 containers); the round-4 page (four 288×48 images, 7 containers) still needs its `[SIM]` re-run (050 AC-5b) before that is claimed for it. Image mode is the normal simulator path. Do not detect the simulator to change rendering; `import.meta.env.MODE === 'simulator'` (set by the `dev:sim` script) may only affect logging verbosity and the relay URL default.
+3. Otherwise `image` — **on hardware and in the simulator alike**. The simulator (≥ 0.9.x; 0.9.5 is what the project pins) accepted the round-3 page (one 288×144 image, 4 containers); the round-5 page (2 × 288×48 + 2 × 288×96 images, 7 containers) still needs its `[SIM]` re-run (050 AC-5b) before that is claimed for it. Image mode is the normal simulator path. Do not detect the simulator to change rendering; `import.meta.env.MODE === 'simulator'` (set by the `dev:sim` script) may only affect logging verbosity and the relay URL default.
 
 Simulator success is **functional** evidence only: the simulator explicitly does not enforce on-device image-size limits, does not decode LZ4, and is faster than hardware. Anything about size limits, nibble order, pacing, or `sendFailed` behaviour is still proven on glasses (`[HW]` criteria in specs 030/050).
 
-In **text mode the startup page is built with one text container in slot 2 instead of the four image containers** (`hud`, 144,8 288×96, `textColor: 4`). `rebuildPageContainer` is only used for the *mid-session* fallback described next. Text mode exists for the exit-dialogue wedge defect and as a manual override — it is no longer needed to run in the simulator, but it must keep working there (the harness runs every scenario in both modes).
+In **text mode the startup page is built with one text container in slot 2 instead of the four image containers** (`hud`, 144,192 288×96, `textColor: 4`). `rebuildPageContainer` is only used for the *mid-session* fallback described next. Text mode exists for the exit-dialogue wedge defect and as a manual override — it is no longer needed to run in the simulator, but it must keep working there (the harness runs every scenario in both modes).
 
 ## Text-mode fallback (`renderText(state): string`)
 
@@ -80,11 +93,11 @@ Mid-session trigger: three consecutive `sendFailed` from `updateImageRawData` (t
 A single text container (`hud`, slot 2) replaces the four image containers on a `rebuildPageContainer` (this is the only rebuild the app performs; flicker is acceptable once). The rebuilt page is the text-mode page above, drawn from the newest HUD state:
 
 ```
-. . ^
+  <     ^    [>]
 [#  ] [## ] [###]
 ```
 
-Line 1 is the lane row in track order `v - ^`: the called lane shows its marker, the other two a `.` (`. . .` when no lane is called). Line 2 is the three car-behind bars `[left] [mid] [right]`, three cells each, `#` filled left to right and a space empty. Both lines keep a fixed width (5 and 17 characters) so nothing jumps. ASCII only.
+Line 1 is the lane row, matching the image icons: `<` (bottom lane) left, `^` (middle) centre, `>` (top lane) right — **always all three, the called one bracketed** (`[<]`; ASCII has no filled/hollow pair and `<` has no upper case, so brackets are the "filled" marker). Each marker sits in a 5-character slot centred over the bar of the same side. Line 2 is the three car-behind bars `[left] [mid] [right]`, three cells each, `#` per car level and a space empty. Both lines are a fixed 17 characters so nothing jumps (the font is proportional, so the column alignment is approximate on the glasses). ASCII only.
 
 **Glyph policy.** Research verified ▲ ▶ ▼ ◀ ● ○ and box-drawing characters on hardware. `█ ░` (Block Elements) and `·` `…` are *not* yet verified — the firmware silently drops unsupported glyphs, which would hollow out the bar. Phase 2 exit includes a hardware render of every non-ASCII glyph the app uses (`▲ ● ▼ █ ░ · …`); anything that fails is swapped for its ASCII fallback in `src/render/glyphs.ts`: `█`→`#`, `░`→`-`, `·`→`|`, `…`→`...`. Keep every non-ASCII character behind that one module.
 
@@ -92,13 +105,13 @@ After switching to text mode mid-session, stay there until app restart (the imag
 
 ## Update queue (`src/render/queue.ts`)
 
-Single async worker, **one bridge call in flight, ever**. Inputs: `{kind:'hud', state, linkOk}`, `{kind:'msg', text}`, `{kind:'status', text}`.
+Single async worker, **one bridge call in flight, ever**. Inputs: `{kind:'hud', state, linkOk, laneStyle?}`, `{kind:'msg', text}`, `{kind:'status', text}`.
 
 Image mode — a `hud` input is drawn as both strips, split and packed straight away (`packContainers`), and from there **each image container is its own job, keyed by container id**:
 
 - A new job for a container **replaces** its pending job (latest wins; never a queue of stale frames).
-- **Skip unchanged:** a container whose packed bytes equal the bytes the host last accepted for it (`success`) is not sent. The comparison is only ever against the last *successful* send, never against a send still in flight — if that flight fails, a same-bytes job pushed meanwhile must still go out (hud-qa, T057a); after a successful flight the same-bytes job is skipped at send time. So a lane change costs ≤ 2 sends (▼↔▲: TL + TR; to/from ▬: TL + TR, the dash straddles the seam; none→▼: TL only), a left or right car change 1, a middle car change up to 2 (1 when only its left cell changes), the relay's stale clear only the containers it changes, and a state that changes nothing costs nothing. A failed send is not recorded as shown, so the next `hud` input re-sends that container — never an automatic retry loop. Until that re-send, one failed send can leave a seam-straddling shape (▬, the middle bar) half-updated. Failures are counted per container send, so three failed sends inside one frame's fan-out already trigger text mode — `[HW]` T109/T110 to confirm that is not too eager.
-- **Top (lane) strip: immediate.** **Bottom (cars) strip: debounced per strip** to one flush per `HUD_GAP_FLUSH_MS` (250 ms); a flush sends both of its pending halves back to back, so the middle bar never shows half old, half new for a debounce window. A link-state change, the first frame and any change to an all-empty HUD (the relay's stale clear, with or without a lane up) flush it at once.
+- **Skip unchanged:** a container whose packed bytes equal the bytes the host last accepted for it (`success`) is not sent. The comparison is only ever against the last *successful* send, never against a send still in flight — if that flight fails, a same-bytes job pushed meanwhile must still go out (hud-qa, T057a); after a successful flight the same-bytes job is skipped at send time. So a lane change costs ≤ 2 sends before its blink (◀↔▶: TL + TR; to/from ▲: TL + TR, the ▲ straddles the seam; none→◀: TL only), a left or right car change 1, a middle car change up to 2 (1 when only its left cell changes), the relay's stale clear only the containers it changes, and a state that changes nothing costs nothing. A failed send is not recorded as shown, so the next `hud` input re-sends that container — never an automatic retry loop. Until that re-send, one failed send can leave a seam-straddling shape (▲, the middle bar) half-updated. Failures are counted per container send, so three failed sends inside one frame's fan-out already trigger text mode — `[HW]` T109/T110 to confirm that is not too eager.
+- **Top (lane) strip: immediate** — every lane-blink phase included. **Bottom (cars) strip: debounced per strip** to one flush per `HUD_GAP_FLUSH_MS` (250 ms); a flush sends both of its pending halves back to back, so the middle bar never shows half old, half new for a debounce window. A link-state change, the first frame and any change to an all-empty HUD (the relay's stale clear, with or without a lane up) flush it at once.
 - Order: a half-done bottom flush finishes first, then the top strip, then a due bottom flush, then text jobs.
 - Three consecutive `sendFailed` on any image containers → the one `rebuildPageContainer` to the text-mode page, drawn from the newest HUD state; text mode until restart.
 
@@ -173,4 +186,12 @@ Two letters in fixed columns (Maxx, 2026-09-04), on the right border at mid-heig
 
 ## Costs to plan around
 
-Unverified estimates (`[HW]` T109/T110 measure them). Round 3 estimated a full 288×144 gray4 frame (~20.7 KB) at ~104 ms + 3.9 ms/KB ≈ 185 ms per image send. A 288×48 half is 6.9 KB → ≈ 131 ms per send by the same formula, so a lane change (≤ 2 sends) ≈ 260 ms, a middle-car flush ≈ 260 ms, a NO-LINK dim (4 sends) ≈ 525 ms, while a left/right car change stays ≈ 131 ms. If the fixed per-call cost dominates on hardware, the skip-unchanged rule is what keeps this layout affordable; do not lower the 250 ms cars flush below 200 ms without measuring.
+**Hardware cost unverified** — every number here is an estimate until `[HW]` T109/T110 measure it. Round 3 estimated a full 288×144 gray4 frame (~20.7 KB) at ~104 ms + 3.9 ms/KB ≈ 185 ms per image send. By the same formula a 288×48 top half (6.9 KB) ≈ 131 ms and a 288×96 bottom half (13.8 KB) ≈ 158 ms. So a left/right car change (1 send) ≈ 158 ms, a middle-car flush (≤ 2) ≈ 316 ms, a NO-LINK dim (4 sends) ≈ 580 ms, and a lane change (≤ 2 top sends) ≈ 260 ms **plus its blink**:
+
+| Lane call | Top-strip sends (call frame + 3 blink phases) | ≈ ms of bridge time over the 900 ms blink |
+|---|---|---|
+| none → ◀ or ▶ | 4 (one image, every phase) | 525 |
+| ◀ → ▶ (or back) | 5 (both images on the call frame, then one) | 655 |
+| any → ▲ | 8 (▲ straddles the seam: both images, every phase) | 1 050 |
+
+The blink therefore costs up to 3 (side icons) or 6 (▲) extra sends per call. A ▲ phase needs two sends (≈ 262 ms) inside a 300 ms phase, so on a slower link the queue's latest-wins rule merges phases: a half of the ▲ can skip a phase (a brief seam tear) and a car flush waits behind the lane sends. If hardware shows that, lengthen `LANE_BLINK_MS` or drop to one outline phase before touching the queue. If the fixed per-call cost dominates, the skip-unchanged rule is what keeps this layout affordable; do not lower the 250 ms cars flush below 200 ms without measuring.

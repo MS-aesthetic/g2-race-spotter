@@ -22,7 +22,7 @@ import {
   type StatusInput,
   type TerminalClose,
 } from './link.ts';
-import type { HudState } from './render/draw-hud.ts';
+import type { HudState, LaneStyle } from './render/draw-hud.ts';
 import type { RenderJob } from './render/queue.ts';
 
 export interface RenderSink {
@@ -69,7 +69,11 @@ export class HudApp {
   /** Phase of the NO-LINK `L` blink; the driver's timer flips it. */
   private blinkOn = true;
 
-  private lastHud: (HudState & { linkOk: boolean }) | undefined;
+  /** Phase of the lane-call blink (`blink.ts`); `filled` when none runs. */
+  private laneStyle: LaneStyle = 'filled';
+
+  private lastHud:
+    (HudState & { linkOk: boolean; laneStyle: LaneStyle }) | undefined;
   /** The startup page always carries an empty message container. */
   private lastMessage: string | undefined = '';
   private lastStatus: string | undefined;
@@ -138,6 +142,17 @@ export class HudApp {
     }
   }
 
+  /**
+   * How the called lane icon is drawn — set by the lane-call blink. `render:
+   * false` when the caller renders next anyway (see `setLinkOk`).
+   */
+  setLaneStyle(style: LaneStyle, options: { render?: boolean } = {}): void {
+    this.laneStyle = style;
+    if (options.render !== false) {
+      this.render();
+    }
+  }
+
   /** True while the status strip is a phase of the NO-LINK blink. */
   get statusBlinking(): boolean {
     return statusBlinks(this.statusInput());
@@ -199,19 +214,23 @@ export class HudApp {
       lane: this.state?.lane ?? null,
       cars: this.state?.cars ?? NO_CARS,
       linkOk: this.linkOkFlag,
-    };
+      // With no lane called there is no icon to blink.
+      laneStyle: this.state?.lane == null ? 'filled' : this.laneStyle,
+    } as const;
 
     if (
       this.lastHud === undefined ||
       this.lastHud.lane !== hud.lane ||
       !sameCars(this.lastHud.cars, hud.cars) ||
-      this.lastHud.linkOk !== hud.linkOk
+      this.lastHud.linkOk !== hud.linkOk ||
+      this.lastHud.laneStyle !== hud.laneStyle
     ) {
       this.lastHud = hud;
       this.queue.push({
         kind: 'hud',
         state: { lane: hud.lane, cars: hud.cars },
         linkOk: hud.linkOk,
+        ...(hud.laneStyle === 'filled' ? {} : { laneStyle: hud.laneStyle }),
       });
     }
 

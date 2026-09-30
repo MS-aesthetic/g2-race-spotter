@@ -13,6 +13,7 @@ import type {
 } from '@g2-race-spotter/protocol';
 
 import { HudApp, MSG_AUTO_ACK_MS, type RenderSink } from './app.ts';
+import { createLaneBlink } from './blink.ts';
 import type { Bridge, BridgeLogger } from './bridge.ts';
 import { createInputHandler } from './input.ts';
 import { createLinkWatchdog, STATUS_BLINK_MS } from './link.ts';
@@ -216,10 +217,26 @@ export function startDriver(options: DriverOptions): Driver {
     }, remaining);
   };
 
+  // The lane-call blink: outline → filled → outline → filled on a new call.
+  // Every phase is a re-render of the CURRENT state, so a cars change that
+  // lands mid-blink is drawn with whatever phase is showing and the blink
+  // carries on; only the lane, NO LINK, a clear or `stop()` ends it.
+  const laneBlink = createLaneBlink({
+    timers,
+    setStyle: (style, render) => {
+      app.setLaneStyle(style, { render });
+    },
+  });
+
   const watchdog = createLinkWatchdog({
     now: options.now,
     lastFrameAt: () => client.lastFrameAt,
     onChange: (linkOk) => {
+      if (!linkOk) {
+        // A dimmed HUD with a hollow icon would read as "no call": stop on
+        // filled; the render just below draws it.
+        laneBlink.cancel();
+      }
       app.setLinkOk(linkOk, { render: !applyingState });
     },
   });
@@ -252,6 +269,16 @@ export function startDriver(options: DriverOptions): Driver {
       applyingState = true;
       try {
         watchdog.check();
+        const shownLane = app.currentState?.lane ?? null;
+        if (state.lane !== shownLane) {
+          // A new call blinks (its first phase rides on this very render); a
+          // clear — the spotter's or the relay's stale clear — cancels.
+          if (state.lane === null) {
+            laneBlink.cancel();
+          } else {
+            laneBlink.start();
+          }
+        }
         app.applyState(state);
       } finally {
         applyingState = false;
@@ -307,6 +334,7 @@ export function startDriver(options: DriverOptions): Driver {
       }
       clearMsgTimer();
       clearRetryTimer();
+      laneBlink.cancel();
       for (const off of unsubscribe) {
         off();
       }
