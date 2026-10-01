@@ -44,7 +44,7 @@ npx tsx scripts/fake-spotter.ts --url ws://localhost:8787 --room QA01 --scenario
 
 - Message shapes, constants and timings come from `packages/protocol`. Never redefine them. `RoomClient` is the only socket client.
 - The driver never sees stale data as live (NO LINK + dim HUD after 5 s of silence). The glasses render only `state` frames.
-- One image container; gap updates coalesce at 250 ms; messages use `textContainerUpgrade`; `createStartUpPageContainer` exactly once.
+- At most four edge-strip image containers (constitution §3); car updates coalesce at 250 ms; the image-mode message is a bitmap in the top strip, text mode uses `textContainerUpgrade`; `createStartUpPageContainer` exactly once.
 - Bridge KV on the glasses side, `localStorage` only on the spotter; keys `g2rs:v1:*`.
 - Pin SDK/CLI/simulator versions (`docs/ENVIRONMENT.md`); bumping is its own task.
 - SDK mechanics come from the official plugin `even-realities/everything-evenhub` (Claude: `/plugin marketplace add even-realities/everything-evenhub` then `/plugin install everything-evenhub@everything-evenhub`; Codex: `codex plugin marketplace add even-realities/everything-evenhub`). Its skills are written here as bare names (`sdk-reference`, `glasses-ui`, …); in Claude Code they may be namespaced (`/everything-evenhub:sdk-reference`), in Codex `$sdk-reference`. Project skills cover project decisions only.

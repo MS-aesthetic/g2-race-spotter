@@ -11,10 +11,10 @@ Work in `C:\Users\maxx\Documents\EVEN G2 HUD`, the local Git repository outside 
 
 - Branch `master`; plan status `BUILDING` (consolidated plan since 2026-09-04); no active lease; remote `origin` = https://github.com/MS-aesthetic/g2-race-spotter (public, `master`). Push after every integration; the OneDrive bundle hand-off is retired.
 - **Both apps exist now.** Glasses app (`apps/glasses`, image-first HUD drawn from primitives; edit `src/render/hud-design.ts` to change the look) and spotter PWA (`apps/spotter`, 6 KB gz) are integrated with the relay and the shared `RoomClient`. Automated criteria met: 010 AC-1/2/6/7; 020 AC-1–6, 8; 030 AC-1–6; 040 AC-1–5; 050 AC-1–5.
-- Main passes on Node 22: typecheck, **205/205** tests (33 files, live `wrangler dev`), lint (0 errors, 2 pre-existing generated-d.ts warnings) + prettier, `check:pins`, `sync:agents:check`, both app builds, `wrangler deploy --dry-run` with the real spotter assets. Read gate exit codes, never grep their output.
-- Reviews for every application commit live under `docs/reviews/` (`2026-09-04-repair-iteration.md`, `-round-2-T009-T017.md`, `-round-3-T030-T040.md`; `ralph/last-review.md` is git-ignored scratch). HUD preview: `docs/reviews/hud-design-preview.png`.
+- Main passes on Node 22 (2026-10-01, design round 6 integrated): typecheck, **425/425** tests (49 files, live `wrangler dev`), lint (0 errors, 2 pre-existing generated-d.ts warnings) + prettier, `check:pins`, `sync:agents:check`, both app builds, `wrangler deploy --dry-run` with the real spotter assets. Read gate exit codes, never grep their output.
+- Reviews for every application commit live under `docs/reviews/` (latest: `2026-10-01-round-11-T063-T064.md`; `ralph/last-review.md` is git-ignored scratch). Current look: `docs/reviews/hud-design-round6.png` (glasses) and `spotter-round6.png` (phone) — Maxx approves a rendered mock BEFORE a design round is coded.
 - Three untracked `.claude/agents/cavecrew-*.md` files are Maxx's and are preserved; never delete, commit, or regenerate over them.
-- No human decision is pending. Human decisions recorded today in the specs: image-first HUD; ASCII-only text fallback (030 AC-9 dropped); rate limiting dropped (020 R4); fake-spotter, T018, 060, 070 deferred to after the first hardware session.
+- No human decision is pending. Design round 6 (2026-10-01) is in specs 050/040 Decisions; the glasses image page is now 6 containers (4 image strips 288×96 / 288×144 + status; the message is a bitmap in the top strip). Earlier human decisions recorded in the specs: image-first HUD; ASCII-only text fallback (030 AC-9 dropped); rate limiting dropped (020 R4); fake-spotter, T018, 060, 070 deferred to after the first hardware session.
 
 ## Next work
 

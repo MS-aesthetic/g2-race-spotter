@@ -6,7 +6,7 @@ The invariants every spec, plan, task, and review is measured against. If a task
 
 1. **The driver never sees stale data as live.** If the glasses app has heard nothing from the room for `DRIVER_NO_LINK_MS` (5 s) it shows `NO LINK` and renders the HUD at half intensity. No exception, no setting.
 2. **The glasses render only room state.** Nothing on the glasses is drawn from a spotter intent that has not come back as a `state` frame from the relay. No optimistic rendering on the driver side.
-3. **One image container.** Symbol and bar share one 288×144 image; messages and status are text containers updated in place. Gap updates coalesce at `HUD_GAP_FLUSH_MS` (250 ms); lane changes flush immediately.
+3. **Four edge-strip image containers, at most.** The HUD is bitmaps along the top and bottom edges (two 288×96 images on top, two 288×144 below — the SDK caps a page at 4 images of ≤ 288×144); in image mode the message is drawn into the top strip, in text mode it is a text container; status is a text container updated in place. Car updates coalesce at `HUD_GAP_FLUSH_MS` (250 ms); lane changes and message phases flush immediately and never send the car strip. (Reworded 2026-10-01 after the round-4/round-6 human decisions; the text-mode page keeps one `hud` text container.)
 4. **Message shapes come from `packages/protocol`.** No app redefines a wire type, constant, or timing. The shared `RoomClient` is the only socket client.
 5. **Persistence on the glasses side uses the bridge KV**, never browser `localStorage`. The spotter PWA uses `localStorage`. Keys are namespaced `g2rs:v1:`.
 6. **`createStartUpPageContainer` is called exactly once per session** and never retried in a loop.
