@@ -19,8 +19,8 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Active stream leases (interactive coordinator only)
 
-- L021 — T063 — base `BASE_COMMIT` — write scope: `apps/glasses/**`, `.agents/skills/g2-hud-display/SKILL.md` (+ `.claude/skills` mirror via `npm run sync:agents`), `docs/reviews/hud-design-round6.png` read-only reference — lock: glasses — worker: g2-glasses-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
-- L022 — T064 — base `BASE_COMMIT` — write scope: `apps/spotter/**`, `.agents/skills/spotter-ui/SKILL.md` (+ mirror), `docs/reviews/spotter-round6.png` read-only reference — lock: spotter — worker: spotter-pwa-dev (Opus 5 @ high) — reviewer: protocol-keeper (Opus 5 @ high) — auditor: Fable 5.1. Runs in parallel with L021 (disjoint scopes).
+- L021 — T063 — base `a352a09` — write scope: `apps/glasses/**`, `.agents/skills/g2-hud-display/SKILL.md` (+ `.claude/skills` mirror via `npm run sync:agents`), `docs/reviews/hud-design-round6.png` read-only reference — lock: glasses — worker: g2-glasses-dev (Opus 5 @ high) — reviewer: hud-qa (Opus 5 @ high) — auditor: Fable 5.1.
+- L022 — T064 — base `a352a09` — write scope: `apps/spotter/**`, `.agents/skills/spotter-ui/SKILL.md` (+ mirror), `docs/reviews/spotter-round6.png` read-only reference — lock: spotter — worker: spotter-pwa-dev (Opus 5 @ high) — reviewer: protocol-keeper (Opus 5 @ high) — auditor: Fable 5.1. Runs in parallel with L021 (disjoint scopes).
 - Closed: L019 (T052), L020 (T053) and the round 3–5b leases — see `ralph/PROGRESS.md`.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
