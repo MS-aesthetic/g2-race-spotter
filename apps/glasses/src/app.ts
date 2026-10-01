@@ -73,12 +73,18 @@ export class HudApp {
   private laneStyle: LaneStyle = 'filled';
 
   private lastHud:
-    (HudState & { linkOk: boolean; laneStyle: LaneStyle }) | undefined;
-  /** The startup page always carries an empty message container. */
-  private lastMessage: string | undefined = '';
+    | (HudState & {
+        linkOk: boolean;
+        laneStyle: LaneStyle;
+        message: string;
+        msgVisible: boolean;
+      })
+    | undefined;
   private lastStatus: string | undefined;
   /** Message the auto-clear timer has already taken off the screen. */
   private hiddenMessageId: string | undefined;
+  /** Message in a hidden phase of the message blink (`msg-blink.ts`). */
+  private blinkHiddenMessageId: string | undefined;
 
   constructor(options: HudAppOptions) {
     this.queue = options.queue;
@@ -153,6 +159,27 @@ export class HudApp {
     }
   }
 
+  /**
+   * A phase of the message blink for message `msgId`. Keyed on the id, so a
+   * phase can never hide a newer message. `render: false` as in `setLinkOk`.
+   */
+  setMessageVisible(
+    msgId: string,
+    visible: boolean,
+    options: { render?: boolean } = {},
+  ): void {
+    if (visible) {
+      if (this.blinkHiddenMessageId === msgId) {
+        this.blinkHiddenMessageId = undefined;
+      }
+    } else {
+      this.blinkHiddenMessageId = msgId;
+    }
+    if (options.render !== false) {
+      this.render();
+    }
+  }
+
   /** True while the status strip is a phase of the NO-LINK blink. */
   get statusBlinking(): boolean {
     return statusBlinks(this.statusInput());
@@ -208,14 +235,22 @@ export class HudApp {
     this.ackFrame(msgId);
   }
 
-  /** Pushes whatever changed since the last render. Safe to call at any time. */
+  /**
+   * Pushes whatever changed since the last render. Safe to call at any time.
+   * The message travels in the `hud` job (round 6: image mode draws it into
+   * the top strip), so one `state` frame is one HUD job.
+   */
   render(): void {
+    const message = this.messageText();
     const hud = {
       lane: this.state?.lane ?? null,
       cars: this.state?.cars ?? NO_CARS,
       linkOk: this.linkOkFlag,
       // With no lane called there is no icon to blink.
       laneStyle: this.state?.lane == null ? 'filled' : this.laneStyle,
+      message,
+      msgVisible:
+        message === '' || this.state?.msg?.id !== this.blinkHiddenMessageId,
     } as const;
 
     if (
@@ -223,7 +258,9 @@ export class HudApp {
       this.lastHud.lane !== hud.lane ||
       !sameCars(this.lastHud.cars, hud.cars) ||
       this.lastHud.linkOk !== hud.linkOk ||
-      this.lastHud.laneStyle !== hud.laneStyle
+      this.lastHud.laneStyle !== hud.laneStyle ||
+      this.lastHud.message !== hud.message ||
+      this.lastHud.msgVisible !== hud.msgVisible
     ) {
       this.lastHud = hud;
       this.queue.push({
@@ -231,13 +268,9 @@ export class HudApp {
         state: { lane: hud.lane, cars: hud.cars },
         linkOk: hud.linkOk,
         ...(hud.laneStyle === 'filled' ? {} : { laneStyle: hud.laneStyle }),
+        ...(hud.message === '' ? {} : { message: hud.message }),
+        ...(hud.msgVisible ? {} : { msgVisible: false }),
       });
-    }
-
-    const message = this.messageText();
-    if (message !== this.lastMessage) {
-      this.lastMessage = message;
-      this.queue.push({ kind: 'msg', text: message });
     }
 
     // The skill asks for status `textColor: 4` while NO LINK; `textContainerUpgrade`

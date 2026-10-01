@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  blitBitmap,
   createCanvas,
+  fillRegion,
   fillRingSector,
   insetRingSector,
+  regionArea,
+  strokeRegion,
   strokeRingSector,
   type Canvas,
+  type Region,
   type RingSector,
 } from '../src/render/primitives.ts';
 
@@ -319,5 +324,110 @@ describe('ring-sector primitives', () => {
       2,
     );
     expect(levels(canvas)).toEqual(new Set([0]));
+  });
+});
+
+/**
+ * The generic helpers behind the round-6 HUD: a predicate `Region` (the corner
+ * L segments) and a 1-bit bitmap blit (the message font). Neither knows what
+ * it draws.
+ */
+describe('regions and bitmaps', () => {
+  /** A disc of radius `r` about (cx, cy), shrinkable by `inset`. */
+  function disc(cx: number, cy: number, r: number): Region {
+    return {
+      x0: cx - r - 1,
+      y0: cy - r - 1,
+      x1: cx + r + 1,
+      y1: cy + r + 1,
+      inside: (px, py, inset) => Math.hypot(px - cx, py - cy) <= r - inset,
+    };
+  }
+
+  /** An axis-aligned box [x0, x1) × [y0, y1), shrinkable by `inset`. */
+  function box(x0: number, y0: number, x1: number, y1: number): Region {
+    return {
+      x0: x0 - 2,
+      y0: y0 - 2,
+      x1: x1 + 2,
+      y1: y1 + 2,
+      inside: (px, py, inset) =>
+        px >= x0 + inset &&
+        px <= x1 - inset &&
+        py >= y0 + inset &&
+        py <= y1 - inset,
+    };
+  }
+
+  it('fills exactly the pixels whose centres the predicate accepts', () => {
+    const canvas = createCanvas(W, H);
+    fillRegion(canvas, box(10, 20, 40, 30), 7);
+    for (let y = 0; y < H; y += 1) {
+      for (let x = 0; x < W; x += 1) {
+        const inside = x >= 10 && x < 40 && y >= 20 && y < 30;
+        expect(canvas.data[y * W + x]).toBe(inside ? 7 : 0);
+      }
+    }
+    expect(regionArea(box(10, 20, 40, 30), W, H)).toBe(300);
+    expect(regionArea(box(10, 20, 40, 30), W, H, 1)).toBe(28 * 8);
+  });
+
+  it('strokes the region minus its inset copy and leaves the interior alone', () => {
+    for (const region of [box(10, 20, 40, 30), disc(100, 60, 30)]) {
+      const canvas = createCanvas(W, H);
+      canvas.data.fill(3);
+      strokeRegion(canvas, region, 9, 2);
+      for (let y = 0; y < H; y += 1) {
+        for (let x = 0; x < W; x += 1) {
+          const outer = region.inside(x + 0.5, y + 0.5, 0);
+          const hole = region.inside(x + 0.5, y + 0.5, 2);
+          expect(canvas.data[y * W + x]).toBe(outer && !hole ? 9 : 3);
+        }
+      }
+    }
+  });
+
+  it('clips to the canvas and clamps levels to 0..15', () => {
+    const canvas = createCanvas(W, H);
+    const offCanvas = disc(0, 0, 50);
+    fillRegion(canvas, offCanvas, 99);
+    strokeRegion(canvas, offCanvas, -4, 2);
+    expect(canvas.data.length).toBe(W * H);
+    expect(levels(canvas)).toEqual(new Set([0, 15]));
+    expect(regionArea(offCanvas, W, H)).toBeLessThan(Math.PI * 50 * 50);
+  });
+
+  it('rasterises a region and its mirror about an integer x to mirror pixels', () => {
+    const canvas = createCanvas(W, H);
+    fillRegion(canvas, disc(37.3, 50, 20), 5);
+    const mirror = createCanvas(W, H);
+    fillRegion(mirror, disc(W - 37.3, 50, 20), 5);
+    for (let y = 0; y < H; y += 1) {
+      for (let x = 0; x < W; x += 1) {
+        expect(mirror.data[y * W + (W - 1 - x)]).toBe(canvas.data[y * W + x]);
+      }
+    }
+  });
+
+  it('blits a 1-bit bitmap scaled into blocks, leaving dark pixels untouched', () => {
+    const canvas = createCanvas(W, H);
+    canvas.data.fill(2);
+    blitBitmap(canvas, 10, 5, ['#.', '.#'], 3, 12);
+    const at = (x: number, y: number): number => canvas.data[y * W + x]!;
+    for (let y = 5; y < 11; y += 1) {
+      for (let x = 10; x < 16; x += 1) {
+        const lit = x < 13 === y < 8;
+        expect(at(x, y), `${x},${y}`).toBe(lit ? 12 : 2);
+      }
+    }
+    expect(at(9, 5)).toBe(2);
+    expect(at(16, 10)).toBe(2);
+
+    // Clipped at the canvas edge, never written outside it.
+    const edge = createCanvas(4, 4);
+    blitBitmap(edge, 2, 2, ['##'], 3, 15);
+    expect([...edge.data]).toEqual([
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 15, 0, 0, 15, 15,
+    ]);
   });
 });

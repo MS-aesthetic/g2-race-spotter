@@ -17,6 +17,7 @@ import { createLaneBlink } from './blink.ts';
 import type { Bridge, BridgeLogger } from './bridge.ts';
 import { createInputHandler } from './input.ts';
 import { createLinkWatchdog, STATUS_BLINK_MS } from './link.ts';
+import { createMessageBlink } from './msg-blink.ts';
 
 /** How often the watchdog re-checks a quiet socket. */
 export const LINK_CHECK_MS = 1_000;
@@ -168,6 +169,32 @@ export function startDriver(options: DriverOptions): Driver {
     }, 0);
   };
 
+  // Blink phases do not render on their own: they record their style and ask
+  // for ONE render a turn later (0 ms). The lane blink (every 500 ms) and the
+  // message blink (every 1 s) have phases due at the same instant 1, 2 and
+  // 3 s after a frame that carries both; rendering each on its own would send
+  // a half-updated top strip before the whole one.
+  let blinkRenderTimer: number | undefined;
+  const renderBlinkSoon = (): void => {
+    blinkRenderTimer ??= timers.setTimeout(() => {
+      blinkRenderTimer = undefined;
+      app.render();
+    }, 0);
+  };
+
+  // The message blink (round 6): visible / hidden every second from the
+  // render that first showed the message — visible at 0, 2, 4 s — until the
+  // auto-clear below takes it off at 5 s. Keyed on the id like that timer.
+  const msgBlink = createMessageBlink({
+    timers,
+    setVisible: (msgId, visible, render) => {
+      app.setMessageVisible(msgId, visible, { render: false });
+      if (render) {
+        renderBlinkSoon();
+      }
+    },
+  });
+
   const clearMsgTimer = (): void => {
     if (msgTimer !== undefined) {
       timers.clearTimeout(msgTimer);
@@ -180,6 +207,7 @@ export function startDriver(options: DriverOptions): Driver {
     const msgId = app.unackedMessageId();
     if (msgId === undefined) {
       clearMsgTimer();
+      msgBlink.cancel();
       shownMsgId = undefined;
       return;
     }
@@ -187,6 +215,8 @@ export function startDriver(options: DriverOptions): Driver {
     if (msgId !== shownMsgId) {
       shownMsgId = msgId;
       shownAt = options.now();
+      // Its first (visible) phase is the render that just showed it.
+      msgBlink.start(msgId);
     }
 
     if (msgId === settledMsgId) {
@@ -208,6 +238,7 @@ export function startDriver(options: DriverOptions): Driver {
       msgTimerFor = undefined;
       const stillUnacked = app.unackedMessageId() === msgId;
       settledMsgId = msgId;
+      msgBlink.cancel();
       app.hideMessage(msgId);
       if (stillUnacked) {
         // Held until a `state` says `ackedAt`: this send may have gone nowhere.
@@ -217,14 +248,17 @@ export function startDriver(options: DriverOptions): Driver {
     }, remaining);
   };
 
-  // The lane-call blink: outline → filled → outline → filled on a new call.
+  // The lane-call blink: outline / filled × 4 (500 ms each) on a new call.
   // Every phase is a re-render of the CURRENT state, so a cars change that
   // lands mid-blink is drawn with whatever phase is showing and the blink
   // carries on; only the lane, NO LINK, a clear or `stop()` ends it.
   const laneBlink = createLaneBlink({
     timers,
     setStyle: (style, render) => {
-      app.setLaneStyle(style, { render });
+      app.setLaneStyle(style, { render: false });
+      if (render) {
+        renderBlinkSoon();
+      }
     },
   });
 
@@ -337,6 +371,11 @@ export function startDriver(options: DriverOptions): Driver {
       clearMsgTimer();
       clearRetryTimer();
       laneBlink.cancel();
+      msgBlink.cancel();
+      if (blinkRenderTimer !== undefined) {
+        timers.clearTimeout(blinkRenderTimer);
+        blinkRenderTimer = undefined;
+      }
       for (const off of unsubscribe) {
         off();
       }

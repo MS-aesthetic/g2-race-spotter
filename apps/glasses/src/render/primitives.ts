@@ -526,6 +526,121 @@ export function strokeRingSector(
 }
 
 /**
+ * A 1-bit bitmap given as rows of characters, `#` lit and anything else dark
+ * (e.g. a font glyph). Each source pixel is drawn as a `scale`×`scale` block
+ * with its top-left corner at (x + col·scale, y + row·scale); dark pixels are
+ * left untouched.
+ */
+export function blitBitmap(
+  canvas: Canvas,
+  x: number,
+  y: number,
+  rows: readonly string[],
+  scale: number,
+  paint: Paint,
+): void {
+  const size = Math.max(1, Math.round(scale));
+  rows.forEach((row, rowIndex) => {
+    for (let column = 0; column < row.length; column += 1) {
+      if (row[column] === '#') {
+        fillRect(
+          canvas,
+          x + column * size,
+          y + rowIndex * size,
+          size,
+          size,
+          paint,
+        );
+      }
+    }
+  });
+}
+
+/**
+ * Any shape, given as a membership test: `inside(px, py, inset)` says whether
+ * the point (px, py) lies inside the shape shrunk by `inset` pixels on every
+ * edge. The point is always a pixel CENTRE (x + 0.5, y + 0.5) — like the ring
+ * sectors, so a region and its mirror about an integer x rasterise to exact
+ * mirror pixels and two regions that share an edge never claim a pixel twice.
+ * The box (inclusive pixel bounds) only limits the scan.
+ */
+export interface Region {
+  readonly x0: number;
+  readonly y0: number;
+  readonly x1: number;
+  readonly y1: number;
+  readonly inside: (px: number, py: number, inset: number) => boolean;
+}
+
+function regionPixels(
+  region: Region,
+  width: number,
+  height: number,
+  visit: (x: number, y: number) => void,
+): void {
+  const x0 = Math.max(0, Math.floor(region.x0));
+  const y0 = Math.max(0, Math.floor(region.y0));
+  const x1 = Math.min(width - 1, Math.ceil(region.x1));
+  const y1 = Math.min(height - 1, Math.ceil(region.y1));
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      visit(x, y);
+    }
+  }
+}
+
+/** Solid region, optionally shrunk by `inset`; clips to the canvas. */
+export function fillRegion(
+  canvas: Canvas,
+  region: Region,
+  paint: Paint,
+  inset = 0,
+): void {
+  regionPixels(region, canvas.width, canvas.height, (x, y) => {
+    if (region.inside(x + 0.5, y + 0.5, inset)) {
+      canvas.data[y * canvas.width + x] = levelAt(paint, x, y);
+    }
+  });
+}
+
+/**
+ * Region outline `thickness` pixels wide: the region minus its copy shrunk by
+ * `thickness`. Like the other strokes it leaves the interior untouched.
+ */
+export function strokeRegion(
+  canvas: Canvas,
+  region: Region,
+  paint: Paint,
+  thickness: number,
+): void {
+  const t = Math.max(1, thickness);
+  regionPixels(region, canvas.width, canvas.height, (x, y) => {
+    if (
+      region.inside(x + 0.5, y + 0.5, 0) &&
+      !region.inside(x + 0.5, y + 0.5, t)
+    ) {
+      canvas.data[y * canvas.width + x] = levelAt(paint, x, y);
+    }
+  });
+}
+
+/** Pixels the region covers (shrunk by `inset`) inside a `width`×`height` canvas. */
+export function regionArea(
+  region: Region,
+  width: number,
+  height: number,
+  inset = 0,
+): number {
+  let area = 0;
+  regionPixels(region, width, height, (x, y) => {
+    if (region.inside(x + 0.5, y + 0.5, inset)) {
+      area += 1;
+    }
+  });
+  return area;
+}
+
+/**
  * Halves every pixel (`v >> 1`). The stale/NO LINK rendering: the shape stays,
  * the intensity obviously does not.
  */

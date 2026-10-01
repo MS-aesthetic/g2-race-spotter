@@ -162,15 +162,30 @@ describe('render queue', () => {
     );
   });
 
-  it('routes msg to container 3 and status to container 4', async () => {
+  it('routes the HUD job message to container 3 and status to container 4', async () => {
     const { bridge, queue } = textQueue();
 
-    queue.push({ kind: 'msg', text: 'BOX THIS LAP' });
+    queue.push({
+      kind: 'hud',
+      state: { lane: null, cars: [0, 0, 0] },
+      linkOk: true,
+    });
+    await queue.whenIdle();
+    const before = bridge.calls.length;
+
+    // Round 6: the message travels in the HUD job; text mode sends it to the
+    // `msg` container and, the HUD text being unchanged, nothing else.
+    queue.push({
+      kind: 'hud',
+      state: { lane: null, cars: [0, 0, 0] },
+      linkOk: true,
+      message: 'BOX THIS LAP',
+    });
     queue.push({ kind: 'status', text: 'NO LINK' });
     await queue.whenIdle();
 
-    const upgrades = bridge
-      .callsNamed('textContainerUpgrade')
+    const upgrades = bridge.calls
+      .slice(before)
       .map((entry) => entry.payload as TextUpgrade);
 
     expect(upgrades).toEqual([
@@ -186,6 +201,32 @@ describe('render queue', () => {
       },
     ]);
     expect(bridge.callsNamed('rebuildPageContainer')).toHaveLength(0);
+  });
+
+  it('sends a message once in text mode: blink phases cost nothing, a clear sends empty text', async () => {
+    const { bridge, queue } = textQueue();
+    const state = { lane: 'top', cars: [0, 0, 0] } as const;
+
+    queue.push({ kind: 'hud', state, linkOk: true, message: 'PIT' });
+    queue.push({
+      kind: 'hud',
+      state,
+      linkOk: true,
+      message: 'PIT',
+      msgVisible: false,
+    });
+    queue.push({ kind: 'hud', state, linkOk: true, message: 'PIT' });
+    await queue.whenIdle();
+    queue.push({ kind: 'hud', state, linkOk: true });
+    await queue.whenIdle();
+
+    const msgs = bridge
+      .callsNamed('textContainerUpgrade')
+      .map((entry) => entry.payload as TextUpgrade)
+      .filter((payload) => payload.containerID === CONTAINER_MSG)
+      .map((payload) => payload.content);
+    expect(msgs).toEqual(['PIT', '']);
+    expect(hudUpgrades(bridge)).toHaveLength(1);
   });
 
   it('keeps one bridge call in flight and coalesces what arrives meanwhile', async () => {
@@ -211,7 +252,12 @@ describe('render queue', () => {
       state: { lane: 'mid', cars: [2, 0, 0] },
       linkOk: true,
     });
-    queue.push({ kind: 'msg', text: 'PIT' });
+    queue.push({
+      kind: 'hud',
+      state: { lane: 'mid', cars: [2, 0, 0] },
+      linkOk: true,
+      message: 'PIT',
+    });
     await flush();
     expect(bridge.calls).toHaveLength(1);
 
@@ -256,7 +302,7 @@ describe('render queue', () => {
     };
 
     queue.push({ kind: 'status', text: 'NO LINK' });
-    queue.push({ kind: 'msg', text: 'still draining' });
+    queue.push({ kind: 'status', text: 'still draining' });
     await queue.whenIdle();
 
     expect(entries).toHaveLength(2);

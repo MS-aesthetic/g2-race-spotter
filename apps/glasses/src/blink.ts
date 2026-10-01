@@ -1,11 +1,12 @@
 /**
  * The lane-call blink (Maxx, 2026-09-30 design round 5: "when the user presses
  * the app button on the phone make the glasses image blink. Empty outline then
- * filled outline.").
+ * filled outline."; 2026-10-01 round 6: "pushing the button should make the
+ * glasses image blink every .5 seconds for 4 seconds").
  *
  * When the applied `state.lane` changes to a lane, the newly called icon is
- * drawn outline → filled → outline → filled, `LANE_BLINK_MS` per phase, and
- * ends filled. The first phase is drawn by the very render that applies the
+ * drawn outline, filled, outline, … — eight phases of `LANE_BLINK_MS`, 4 s in
+ * all — and ends filled. The first phase is drawn by the very render that applies the
  * new state (so the call itself costs no extra frame); each later phase is one
  * re-render, which the queue turns into top-strip sends only — lane-immediate,
  * and nothing at all for the cars strip. A newer lane, a clear, NO LINK or
@@ -18,10 +19,14 @@
 import type { LaneStyle } from './render/hud-design.ts';
 
 /** One phase of the blink. Unverified on hardware: each phase is ≥ 1 send. */
-export const LANE_BLINK_MS = 300;
+export const LANE_BLINK_MS = 500;
 
 /** The phases in order; the first is drawn with the state that started it. */
 export const LANE_BLINK_PHASES: readonly LaneStyle[] = [
+  'outline',
+  'filled',
+  'outline',
+  'filled',
   'outline',
   'filled',
   'outline',

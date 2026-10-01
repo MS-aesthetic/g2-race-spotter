@@ -35,6 +35,10 @@ export interface DrawHudOptions {
   readonly linkOk: boolean;
   /** How the called lane icon is drawn (the lane-call blink); default filled. */
   readonly laneStyle?: LaneStyle;
+  /** The message drawn in the top strip under the ▲; `null`/`''` = none. */
+  readonly message?: string | null;
+  /** `false` in the hidden phases of the message blink; default `true`. */
+  readonly msgVisible?: boolean;
 }
 
 function finish(canvas: Canvas, options: DrawHudOptions): Uint8Array {
@@ -45,17 +49,23 @@ function finish(canvas: Canvas, options: DrawHudOptions): Uint8Array {
   return canvas.data;
 }
 
-/** The top strip, `Uint8Array(576*48)`: the three lane icons. */
+/** The top strip, `Uint8Array(576*96)`: the three lane icons and the message. */
 export function drawTopStrip(
   lane: Lane | null,
   options: DrawHudOptions,
 ): Uint8Array {
   const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.top);
-  drawTopStripDesign(canvas, lane, options.laneStyle ?? 'filled');
+  drawTopStripDesign(
+    canvas,
+    lane,
+    options.laneStyle ?? 'filled',
+    options.message ?? null,
+    options.msgVisible ?? true,
+  );
   return finish(canvas, options);
 }
 
-/** The bottom strip, `Uint8Array(576*96)`: the three car-behind bars. */
+/** The bottom strip, `Uint8Array(576*144)`: the three car-behind bars. */
 export function drawBottomStrip(
   cars: Readonly<Cars>,
   options: DrawHudOptions,
@@ -107,7 +117,7 @@ export function splitStrip(
   return [left, right];
 }
 
-/** One image container's worth of pixels: 288×48 on top, 288×96 below. */
+/** One image container's worth of pixels: 288×96 on top, 288×144 below. */
 export const HALF_PIXELS: Readonly<Record<StripId, number>> = {
   top: HALF_WIDTH * STRIP_HEIGHTS.top,
   bottom: HALF_WIDTH * STRIP_HEIGHTS.bottom,

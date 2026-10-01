@@ -117,12 +117,14 @@ describe('image send failure fallback', () => {
     const { bridge, queue } = failingQueue(() => 'sendFailed');
 
     queue.push({ kind: 'status', text: 'LINK OK' });
-    queue.push({ kind: 'msg', text: 'BOX BOX' });
     await queue.whenIdle();
+    // Image mode draws the message into the top strip; the text page it falls
+    // back to carries it in its `msg` container.
     queue.push({
       kind: 'hud',
       state: { lane: 'top', cars: [0, 1, 0] },
       linkOk: true,
+      message: 'BOX BOX',
     });
     await queue.whenIdle();
 

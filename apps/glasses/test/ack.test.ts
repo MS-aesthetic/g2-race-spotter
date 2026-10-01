@@ -29,6 +29,13 @@ interface Harness {
   driver: Driver;
 }
 
+/**
+ * What the `msg` text container showed, in order. Round 6 drew the image-mode
+ * message into the top strip (no `msg` container there), so these driver-level
+ * ack/auto-clear tests run the TEXT-mode page, where the message is still one
+ * text container and its blink costs nothing; `msg-blink.test.ts` covers the
+ * same timeline in image mode.
+ */
 function messages(bridge: FakeBridge): string[] {
   return bridge
     .callsNamed('textContainerUpgrade')
@@ -48,7 +55,7 @@ async function harness(): Promise<Harness> {
   const clock = new FakeClock();
   const queue = new RenderQueue({
     bridge,
-    mode: 'image',
+    mode: 'text',
     timers: clock.timers,
     now: clock.now,
     log: () => undefined,

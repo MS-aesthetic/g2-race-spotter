@@ -13,8 +13,8 @@ import { HALF_WIDTH, STRIP_HEIGHTS, type StripId } from './hud-design.ts';
 export const NIBBLE_ORDER: 'high-left' | 'high-right' = 'high-left';
 
 /**
- * One image container (half a strip) packed: 288×48 → 6 912 bytes on top,
- * 288×96 → 13 824 bytes below.
+ * One image container (half a strip) packed: 288×96 → 13 824 bytes on top,
+ * 288×144 → 20 736 bytes below.
  */
 export const PACKED_BYTE_LENGTHS: Readonly<Record<StripId, number>> = {
   top: (HALF_WIDTH * STRIP_HEIGHTS.top) / 2,

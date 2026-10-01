@@ -91,11 +91,14 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     const expected = packContainers({ lane: 'top', cars: [1, 2, 3] }, true);
     expect(names(sent)).toEqual(['stripTL', 'stripTR', 'stripBL', 'stripBR']);
     for (const payload of sent) {
-      // 288×48 lane images on top, 288×96 car images below.
+      // 288×96 lane + message images on top, 288×144 car images below.
       expect(payload).toMatchObject({
         imageWidth: 288,
-        imageHeight: payload.containerName.startsWith('stripT') ? 48 : 96,
+        imageHeight: payload.containerName.startsWith('stripT') ? 96 : 144,
       });
+      expect(payload.imageData.length).toBe(
+        payload.containerName.startsWith('stripT') ? 13_824 : 20_736,
+      );
       expect(payload.imageData).toEqual(expected.get(payload.containerID));
     }
     expect(sent.map((payload) => payload.containerID)).toEqual([
@@ -549,11 +552,66 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     ]);
   });
 
+  it('draws the message into the top strip: a message or blink phase sends only the top halves it changes', async () => {
+    // Round 6: there is no `msg` container on the image page; the message is
+    // pixels under the ▲, straddling the seam.
+    const { bridge, clock, queue } = await primed({
+      lane: 'bot',
+      cars: [1, 2, 3],
+    });
+    const state: HudState = { lane: 'bot', cars: [1, 2, 3] };
+    const withMessage = (msgVisible: boolean) =>
+      ({
+        ...hud(state),
+        message: 'BOX',
+        ...(msgVisible ? {} : { msgVisible: false }),
+      }) as const;
+
+    const before = images(bridge).length;
+    queue.push(withMessage(true));
+    await queue.whenIdle();
+    expect(names(images(bridge).slice(before))).toEqual(['stripTL', 'stripTR']);
+    expect(shownImages(bridge)).toEqual(
+      packContainers(state, true, 'filled', 'BOX'),
+    );
+
+    // Hidden phase, then visible again: the top halves each time, at once.
+    for (const visible of [false, true]) {
+      const from = images(bridge).length;
+      queue.push(withMessage(visible));
+      await queue.whenIdle();
+      expect(names(images(bridge).slice(from))).toEqual(['stripTL', 'stripTR']);
+      expect(shownImages(bridge)).toEqual(
+        packContainers(state, true, 'filled', 'BOX', visible),
+      );
+    }
+    // A hidden phase is pixel-identical to no message at all.
+    expect(packContainers(state, true, 'filled', 'BOX', false)).toEqual(
+      packContainers(state, true),
+    );
+
+    // The same message again costs nothing; the clear costs the top halves.
+    const repeat = images(bridge).length;
+    queue.push(withMessage(true));
+    await queue.whenIdle();
+    expect(images(bridge).length).toBe(repeat);
+    expect(names(await sendsFor(bridge, queue, state))).toEqual([
+      'stripTL',
+      'stripTR',
+    ]);
+
+    // None of it ever touched the car strip.
+    await clock.advance(HUD_GAP_FLUSH_MS * 2);
+    await queue.whenIdle();
+    expect(names(images(bridge).slice(before))).not.toContain('stripBL');
+    expect(names(images(bridge).slice(before))).not.toContain('stripBR');
+  });
+
   it('never creates an image container of its own', async () => {
     const { bridge, clock, queue } = imageQueue();
 
     queue.push(hud({ lane: 'mid', cars: [0, 2, 0] }));
-    queue.push({ kind: 'msg', text: 'GO' });
+    queue.push({ ...hud({ lane: 'mid', cars: [0, 2, 0] }), message: 'GO' });
     await clock.advance(500);
     await queue.whenIdle();
 

@@ -89,7 +89,7 @@ describe('startup page per render mode', () => {
   it('builds the four strip image containers in image mode', () => {
     const page = buildPage({ mode: 'image', status: 'CONNECTING' });
 
-    expect(page.containerTotalNum).toBe(7);
+    expect(page.containerTotalNum).toBe(6);
     expect(page.imageObject).toHaveLength(4);
     expect(page.imageObject?.[0]).toMatchObject({
       containerID: 2,
@@ -97,11 +97,12 @@ describe('startup page per render mode', () => {
       xPosition: 0,
       yPosition: 0,
       width: 288,
-      height: 48,
+      height: 96,
       zOrderIndex: 6,
     });
+    // `bg` and `status`; the message is drawn into the top strip (round 6).
     expect(page.textObject.map((container) => container.containerID)).toEqual([
-      1, 3, 4,
+      1, 4,
     ]);
   });
 

@@ -28,9 +28,11 @@ import {
 } from './helpers.ts';
 
 /**
- * The lane-call blink (Maxx, 2026-09-30 design round 5): a new call draws the
- * called icon outline → filled → outline → filled, `LANE_BLINK_MS` apart,
- * through the real driver, store and queue against a fake bridge and clock.
+ * The lane-call blink (Maxx, 2026-09-30 design round 5; 2026-10-01 round 6:
+ * "blink every .5 seconds for 4 seconds"): a new call draws the called icon
+ * outline / filled four times over, `LANE_BLINK_MS` (500) apart, ending
+ * filled — through the real driver, store and queue against a fake bridge and
+ * clock.
  */
 
 const URL = 'ws://relay.test/room/QA01?role=driver';
@@ -140,14 +142,19 @@ describe('lane-call blink', () => {
     FakeWebSocket.reset();
   });
 
-  it('runs outline → filled → outline → filled, 300 ms per phase, ending filled', async () => {
-    expect(LANE_BLINK_MS).toBe(300);
+  it('runs outline / filled x 4, 500 ms per phase (4 s), ending filled', async () => {
+    expect(LANE_BLINK_MS).toBe(500);
     expect(LANE_BLINK_PHASES).toEqual([
       'outline',
       'filled',
       'outline',
       'filled',
+      'outline',
+      'filled',
+      'outline',
+      'filled',
     ]);
+    expect(LANE_BLINK_MS * LANE_BLINK_PHASES.length).toBe(4_000);
 
     const h = await settled(null, [0, 0, 0]);
     const cars: Cars = [0, 0, 0];
@@ -170,30 +177,32 @@ describe('lane-call blink', () => {
         packContainers({ lane: 'top', cars }, true, style).get(TR),
       ),
     );
-    // Four frames, each one top-strip send: ▶ lives wholly in stripTR.
-    expect(sentSince(h.bridge, start)).toEqual([TR, TR, TR, TR]);
+    // Eight frames, each one top-strip send: ▶ lives wholly in stripTR.
+    expect(sentSince(h.bridge, start)).toEqual(Array(8).fill(TR));
 
-    // And then it stops, filled.
-    await h.advance(LANE_BLINK_MS * 10);
-    expect(sentSince(h.bridge, start)).toHaveLength(4);
+    // And then it stops, filled (checked before the 5 s NO-LINK watchdog
+    // would dim the quiet HUD).
+    await h.advance(LANE_BLINK_MS * 2);
+    expect(sentSince(h.bridge, start)).toHaveLength(8);
     expect(shownImages(h.bridge)).toEqual(
       packContainers({ lane: 'top', cars }, true),
     );
   });
 
-  it('costs top-strip sends only: 4 for ◀ or ▶ from none, 8 for ▲, 5 for ◀ → ▶', async () => {
+  it('costs top-strip sends only: 8 for ◀ or ▶ from none, 16 for ▲, 9 for ◀ → ▶', async () => {
+    const both = Array.from({ length: 8 }, () => [TL, TR]).flat();
     const cases: Array<{
       from: Lane | null;
       to: Lane;
       sends: number[];
     }> = [
-      { from: null, to: 'bot', sends: [TL, TL, TL, TL] },
-      { from: null, to: 'top', sends: [TR, TR, TR, TR] },
+      { from: null, to: 'bot', sends: Array(8).fill(TL) },
+      { from: null, to: 'top', sends: Array(8).fill(TR) },
       // ▲ straddles the seam: every phase touches both halves.
-      { from: null, to: 'mid', sends: [TL, TR, TL, TR, TL, TR, TL, TR] },
+      { from: null, to: 'mid', sends: both },
       // The call frame also hollows ◀; the later phases touch ▶ only.
-      { from: 'bot', to: 'top', sends: [TL, TR, TR, TR, TR] },
-      { from: 'top', to: 'mid', sends: [TL, TR, TL, TR, TL, TR, TL, TR] },
+      { from: 'bot', to: 'top', sends: [TL, TR, ...Array(7).fill(TR)] },
+      { from: 'top', to: 'mid', sends: both },
     ];
 
     for (const { from, to, sends } of cases) {
@@ -231,8 +240,13 @@ describe('lane-call blink', () => {
     await h.advance(LANE_BLINK_MS - 100 - 1);
     expect(images(h.bridge).length).toBe(afterCall);
     await h.advance(LANE_BLINK_MS * LANE_BLINK_PHASES.length);
-    expect(sentSince(h.bridge, afterCall)).toEqual([TR, TR, TR]);
-    expect(sentSince(h.bridge, start)).toEqual([TL, TL, TL, TR, TR, TR, TR]);
+    expect(sentSince(h.bridge, afterCall)).toEqual(Array(7).fill(TR));
+    expect(sentSince(h.bridge, start)).toEqual([
+      TL,
+      TL,
+      TL,
+      ...Array(8).fill(TR),
+    ]);
     expect(shownImages(h.bridge)).toEqual(
       packContainers({ lane: 'top', cars: [0, 0, 0] }, true),
     );

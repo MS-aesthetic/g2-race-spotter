@@ -1,10 +1,10 @@
 /**
  * The single writer to the glasses. One bridge call in flight, ever.
  *
- * Image mode (Maxx design rounds 4–5): a `hud` job is drawn as the two HUD
- * strips (576×48 lanes, 576×96 cars), split into the four image containers
- * (288×48 ×2, 288×96 ×2) and packed; from there every image container is its
- * own job, keyed by container id:
+ * Image mode (Maxx design rounds 4–6): a `hud` job is drawn as the two HUD
+ * strips (576×96 lanes + message, 576×144 cars), split into the four image
+ * containers (288×96 ×2, 288×144 ×2) and packed; from there every image
+ * container is its own job, keyed by container id:
  *
  * - a new job for a container REPLACES its pending job (latest wins);
  * - a container whose packed bytes equal the last bytes the glasses accepted
@@ -18,16 +18,21 @@
  *   and any change to an all-empty HUD (the relay's stale clear) flush it now;
  * - image sends go before text sends; the lane strip before the car strip,
  *   unless a car-strip flush is half done;
- * - a lane-call blink phase (`laneStyle`, round 5) is just another `hud` job:
- *   it changes the top strip only, so it costs lane-immediate top sends and
- *   nothing on the cars strip. In text mode it changes nothing and is dropped.
+ * - a lane-call blink phase (`laneStyle`, round 5) and the message with its
+ *   blink phase (`message` / `msgVisible`, round 6 — the message is pixels in
+ *   the top strip, there is no `msg` container on the image page) are part of
+ *   the `hud` job: they change the top strip only, so they cost lane-immediate
+ *   top sends of just the halves whose bytes changed, and nothing on the cars
+ *   strip.
  *
  * Text mode: the whole HUD is one `renderText` string on container 2 with the
  * same replace/debounce rules as before (a lane, link-state or to-blank change
- * bypasses the cars debounce).
+ * bypasses the cars debounce). The `hud` job's message goes to the `msg`
+ * container (3) when its TEXT changes; the blink phases change nothing there
+ * and cost nothing, like the lane blink.
  *
- * Both modes: `msg` → container 3, `status` → container 4, both
- * `textContainerUpgrade`; every call is timed and logged
+ * Both modes: `status` → container 4 (`textContainerUpgrade`); every call is
+ * timed and logged
  * `{call, ms, result, container}` (030 R7); three consecutive `sendFailed`
  * (on any image container) rebuild the page with a text HUD and the app stays
  * in text mode until restart (050 R3).
@@ -50,12 +55,14 @@ import {
   type StripContainer,
 } from '../startup-page.ts';
 import {
-  drawStrips,
+  drawBottomStrip,
+  drawTopStrip,
   HALF_WIDTH,
   splitStrip,
   STRIP_HEIGHTS,
   type HudState,
   type LaneStyle,
+  type StripId,
 } from './draw-hud.ts';
 import { pack } from './gray4.ts';
 import type { RenderMode } from './mode.ts';
@@ -93,6 +100,46 @@ function sameBytes(a: Uint8Array | undefined, b: Uint8Array): boolean {
   return true;
 }
 
+/** One strip split at the seam and packed, keyed by container id. */
+function packStrip(strip: StripId, frame: Uint8Array): Map<number, Uint8Array> {
+  const halves = splitStrip(frame);
+  const packed = new Map<number, Uint8Array>();
+  for (const container of STRIP_CONTAINERS) {
+    if (container.strip === strip) {
+      packed.set(
+        container.containerID,
+        pack(halves[container.half], {
+          width: HALF_WIDTH,
+          height: STRIP_HEIGHTS[strip],
+        }),
+      );
+    }
+  }
+  return packed;
+}
+
+/** The two top-strip containers: lane icons and the message. */
+export function packTopContainers(
+  lane: HudState['lane'],
+  linkOk: boolean,
+  laneStyle: LaneStyle = 'filled',
+  message: string | null = null,
+  msgVisible = true,
+): Map<number, Uint8Array> {
+  return packStrip(
+    'top',
+    drawTopStrip(lane, { linkOk, laneStyle, message, msgVisible }),
+  );
+}
+
+/** The two bottom-strip containers: the car bars. */
+export function packBottomContainers(
+  cars: HudState['cars'],
+  linkOk: boolean,
+): Map<number, Uint8Array> {
+  return packStrip('bottom', drawBottomStrip(cars, { linkOk }));
+}
+
 /**
  * The packed gray4 bytes of each image container for one HUD state, keyed by
  * container id. Pure; exported so tests compare against exactly what is sent.
@@ -101,25 +148,13 @@ export function packContainers(
   state: HudState,
   linkOk: boolean,
   laneStyle: LaneStyle = 'filled',
+  message: string | null = null,
+  msgVisible = true,
 ): Map<number, Uint8Array> {
-  const strips = drawStrips(state, { linkOk, laneStyle });
-  const halves = {
-    top: splitStrip(strips.top),
-    bottom: splitStrip(strips.bottom),
-  };
-  const packed = new Map<number, Uint8Array>();
-
-  for (const container of STRIP_CONTAINERS) {
-    packed.set(
-      container.containerID,
-      pack(halves[container.strip][container.half], {
-        width: HALF_WIDTH,
-        height: STRIP_HEIGHTS[container.strip],
-      }),
-    );
-  }
-
-  return packed;
+  return new Map([
+    ...packTopContainers(state.lane, linkOk, laneStyle, message, msgVisible),
+    ...packBottomContainers(state.cars, linkOk),
+  ]);
 }
 
 export interface QueueTimers {
@@ -143,11 +178,16 @@ export interface HudJob {
    * blink frame costs top-strip sends only and never flushes the cars strip.
    */
   readonly laneStyle?: LaneStyle;
-}
-
-export interface MessageJob {
-  readonly kind: 'msg';
-  readonly text: string;
+  /**
+   * The message on screen; absent or `''` = none. Image mode draws it into
+   * the top strip, text mode sends it to the `msg` container.
+   */
+  readonly message?: string;
+  /**
+   * `false` in a hidden phase of the message blink (`msg-blink.ts`); absent =
+   * visible. Top strip only; text mode ignores it.
+   */
+  readonly msgVisible?: boolean;
 }
 
 export interface StatusJob {
@@ -155,7 +195,13 @@ export interface StatusJob {
   readonly text: string;
 }
 
-export type RenderJob = HudJob | MessageJob | StatusJob;
+export type RenderJob = HudJob | StatusJob;
+
+/** Text-container jobs: the status strip, and the message in text mode. */
+interface TextJob {
+  readonly kind: 'msg' | 'status';
+  readonly text: string;
+}
 
 export interface RenderQueueOptions {
   readonly bridge: Bridge;
@@ -187,7 +233,7 @@ export class RenderQueue {
   private readonly now: () => number;
   private readonly log: BridgeLogger;
   private readonly onModeChange: ((mode: RenderMode) => void) | undefined;
-  private readonly textJobs: Array<MessageJob | StatusJob> = [];
+  private readonly textJobs: TextJob[] = [];
 
   private currentMode: RenderMode;
   private timer: number | undefined;
@@ -195,7 +241,20 @@ export class RenderQueue {
   private wake = false;
   private sendFailures = 0;
   private lastStatus = '';
+  /**
+   * Text of the newest message pushed (`''` = none), whatever mode: what the
+   * text-mode `msg` container shows or is about to, and what the fallback
+   * page carries.
+   */
   private lastMessage = '';
+  /** The car strip last packed and what it was drawn from. */
+  private bottomPack:
+    | {
+        readonly cars: readonly number[];
+        readonly linkOk: boolean;
+        readonly packed: Map<number, Uint8Array>;
+      }
+    | undefined;
   /** The newest HUD job pushed, whatever mode — the fallback page draws it. */
   private latestHud: HudJob | undefined;
 
@@ -246,9 +305,21 @@ export class RenderQueue {
     if (job.kind === 'hud') {
       const previous = this.latestHud;
       this.latestHud = job;
-      if (this.currentMode === 'text' && sameTextHud(previous, job)) {
-        // A blink phase changes nothing the text HUD shows: no call.
-        return;
+      const message = job.message ?? '';
+      const messageChanged = message !== this.lastMessage;
+      this.lastMessage = message;
+      if (this.currentMode === 'text') {
+        if (messageChanged) {
+          this.textJobs.push({ kind: 'msg', text: message });
+        }
+        if (sameTextHud(previous, job)) {
+          // A blink phase (lane or message) changes nothing the text HUD
+          // shows: no HUD call.
+          if (messageChanged) {
+            this.schedule();
+          }
+          return;
+        }
       }
       if (this.currentMode === 'image') {
         this.pushImages(job);
@@ -282,11 +353,18 @@ export class RenderQueue {
    * success is skipped at send time instead).
    */
   private pushImages(job: HudJob): void {
-    const packed = packContainers(job.state, job.linkOk, job.laneStyle);
+    const top = packTopContainers(
+      job.state.lane,
+      job.linkOk,
+      job.laneStyle,
+      job.message ?? null,
+      job.msgVisible ?? true,
+    );
+    const bottom = this.packBottom(job);
     // A new push re-arms the one immediate retry for every container.
     this.retried.clear();
 
-    for (const [containerID, bytes] of packed) {
+    for (const [containerID, bytes] of [...top, ...bottom]) {
       this.desired.set(containerID, bytes);
       if (sameBytes(this.lastSent.get(containerID), bytes)) {
         this.dirty.delete(containerID);
@@ -298,6 +376,26 @@ export class RenderQueue {
     this.bottomImmediate =
       (this.bottomImmediate || this.isBottomImmediate(job)) &&
       this.pendingOf('bottom').length > 0;
+  }
+
+  /**
+   * The car strip for `job`, redrawn only when its inputs (cars, link) changed:
+   * a lane or message push (every blink phase) leaves it alone, and drawing
+   * the corner regions is the costly part of a frame.
+   */
+  private packBottom(job: HudJob): Map<number, Uint8Array> {
+    const cached = this.bottomPack;
+    if (
+      cached !== undefined &&
+      cached.linkOk === job.linkOk &&
+      cached.cars.every((level, index) => level === job.state.cars[index])
+    ) {
+      return cached.packed;
+    }
+
+    const packed = packBottomContainers(job.state.cars, job.linkOk);
+    this.bottomPack = { cars: [...job.state.cars], linkOk: job.linkOk, packed };
+    return packed;
   }
 
   private isBottomImmediate(job: HudJob): boolean {
@@ -543,11 +641,9 @@ export class RenderQueue {
     this.lastTextHudAt = this.now();
   }
 
-  private async sendTextJob(job: MessageJob | StatusJob): Promise<void> {
+  private async sendTextJob(job: TextJob): Promise<void> {
     const containerID = job.kind === 'msg' ? CONTAINER_MSG : CONTAINER_STATUS;
-    if (job.kind === 'msg') {
-      this.lastMessage = job.text;
-    } else {
+    if (job.kind === 'status') {
       this.lastStatus = job.text;
     }
 

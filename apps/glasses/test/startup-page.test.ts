@@ -17,7 +17,7 @@ import {
 const PAGE = buildPage({ mode: 'image', status: 'CONNECTING' });
 
 describe('startup page', () => {
-  it('creates the seven-container page through one guarded call', async () => {
+  it('creates the six-container page through one guarded call', async () => {
     const bridge = { createStartUpPageContainer: vi.fn(async () => 0) };
     const startPage = createStartupPage(bridge, PAGE, () => undefined);
 
@@ -26,8 +26,10 @@ describe('startup page', () => {
 
     expect(bridge.createStartUpPageContainer).toHaveBeenCalledOnce();
     expect(bridge.createStartUpPageContainer).toHaveBeenCalledWith(PAGE);
+    // Round 6: no `msg` text container in image mode — the message is drawn
+    // into the top strip — so the strips take slots 2, 3, 5, 6.
     expect(PAGE).toEqual({
-      containerTotalNum: 7,
+      containerTotalNum: 6,
       textObject: [
         expect.objectContaining({
           containerID: 1,
@@ -35,7 +37,6 @@ describe('startup page', () => {
           content: ' ',
           isEventCapture: 1,
         }),
-        expect.objectContaining({ containerID: 3, containerName: 'msg' }),
         expect.objectContaining({
           containerID: 4,
           containerName: 'status',
@@ -44,9 +45,9 @@ describe('startup page', () => {
       ],
       imageObject: [
         expect.objectContaining({ containerID: 2, containerName: 'stripTL' }),
-        expect.objectContaining({ containerID: 5, containerName: 'stripTR' }),
-        expect.objectContaining({ containerID: 6, containerName: 'stripBL' }),
-        expect.objectContaining({ containerID: 7, containerName: 'stripBR' }),
+        expect.objectContaining({ containerID: 3, containerName: 'stripTR' }),
+        expect.objectContaining({ containerID: 5, containerName: 'stripBL' }),
+        expect.objectContaining({ containerID: 6, containerName: 'stripBR' }),
       ],
     });
   });
@@ -71,9 +72,9 @@ describe('startup page', () => {
     ]).toEqual([4, 8, 12]);
   });
 
-  it('lays the HUD out as four edge strips, message upper-middle, status on the right border', () => {
-    // The layout table in the g2-hud-display skill (Maxx design round 5,
-    // 2026-09-30).
+  it('lays the HUD out as four edge strips (288x96 on top, 288x144 below) and status on the right border, no msg container', () => {
+    // The layout table in the g2-hud-display skill (Maxx design round 6,
+    // 2026-10-01).
     const page = buildPage({ mode: 'image', status: 'L S', message: 'BOX' });
     const byName = new Map(
       [...page.textObject, ...(page.imageObject ?? [])].map((container) => [
@@ -92,14 +93,16 @@ describe('startup page', () => {
     };
 
     expect(rect('bg')).toEqual([0, 0, 576, 288]);
-    expect(rect('stripTL')).toEqual([0, 0, 288, 48]);
-    expect(rect('stripTR')).toEqual([288, 0, 288, 48]);
-    expect(rect('stripBL')).toEqual([0, 192, 288, 96]);
-    expect(rect('stripBR')).toEqual([288, 192, 288, 96]);
-    // Upper middle, directly under the ▲, clear of the strips.
-    expect(rect('msg')).toEqual([144, 52, 288, 48]);
-    expect(rect('status')).toEqual([528, 124, 40, 28]);
-    expect(byName.get('msg')).toMatchObject({ content: 'BOX' });
+    expect(rect('stripTL')).toEqual([0, 0, 288, 96]);
+    expect(rect('stripTR')).toEqual([288, 0, 288, 96]);
+    expect(rect('stripBL')).toEqual([0, 144, 288, 144]);
+    expect(rect('stripBR')).toEqual([288, 144, 288, 144]);
+    // In the band between the strips (y 96..143), on the right border.
+    expect(rect('status')).toEqual([528, 108, 40, 28]);
+    expect(byName.has('msg')).toBe(false);
+    expect(
+      page.textObject.some((container) => container.content === 'BOX'),
+    ).toBe(false);
     expect(byName.get('status')).toMatchObject({ content: 'L S' });
 
     // The strip halves match what the queue draws into them.
@@ -114,10 +117,31 @@ describe('startup page', () => {
     expect(page.imageObject!.map((image) => image.zOrderIndex)).toEqual([
       6, 7, 8, 9,
     ]);
+    // The two strips meet: nothing but the status letters between them.
+    expect(STRIP_Y.top + STRIP_HEIGHTS.top).toBe(96);
+    expect(STRIP_Y.bottom).toBe(144);
   });
 
-  it('puts the text-mode HUD bottom centre, clear of the upper-middle message', () => {
-    const page = buildPage({ mode: 'text', status: 'L S', hud: 'x' });
+  it('keeps the text-mode page: HUD bottom centre, msg upper middle (round 5 rects)', () => {
+    const page = buildPage({
+      mode: 'text',
+      status: 'L S',
+      hud: 'x',
+      message: 'BOX',
+    });
+    expect(page.containerTotalNum).toBe(4);
+    expect(page.imageObject).toBeUndefined();
+    expect(
+      page.textObject.map((container) => [
+        container.containerID,
+        container.containerName,
+      ]),
+    ).toEqual([
+      [1, 'bg'],
+      [2, 'hud'],
+      [3, 'msg'],
+      [4, 'status'],
+    ]);
     const hud = page.textObject.find(
       (container) => container.containerName === 'hud',
     )!;
@@ -130,6 +154,7 @@ describe('startup page', () => {
     expect([msg.xPosition, msg.yPosition, msg.width, msg.height]).toEqual([
       144, 52, 288, 48,
     ]);
+    expect(msg.content).toBe('BOX');
   });
 
   it('keeps every container on the canvas, apart from bg overlapping nothing, with unique zOrder', () => {

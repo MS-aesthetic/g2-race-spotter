@@ -19,8 +19,8 @@ import {
   imageRawDataPayload,
 } from '../src/render/sdk-quirks.ts';
 
-/** Every image container is one half of a HUD strip: 288×48 on top (the
- * shape the nibble tests use), 288×96 below. */
+/** Every image container is one half of a HUD strip: 288×96 on top (the
+ * shape the nibble tests use), 288×144 below. */
 const WIDTH = HALF_WIDTH;
 const HEIGHT = STRIP_HEIGHTS.top;
 const STRIDE = WIDTH / 2;
@@ -35,20 +35,22 @@ function brightColumn(x: number): Uint8Array {
 }
 
 describe('gray4 packing', () => {
-  it('packs each 288x48 top container into 6912 bytes and each 288x96 bottom container into 13824 (050 AC-3)', () => {
-    expect(PACKED_BYTE_LENGTHS).toEqual({ top: 6_912, bottom: 13_824 });
+  it('packs each 288x96 top container into 13824 bytes and each 288x144 bottom container into 20736 (050 AC-3, round 6)', () => {
+    expect(PACKED_BYTE_LENGTHS).toEqual({ top: 13_824, bottom: 20_736 });
 
-    for (const half of splitStrip(drawTopStrip('mid', { linkOk: true }))) {
-      const packed = pack(half, { width: WIDTH, height: 48 });
-      expect(packed.length).toBe(6_912);
-      expect(packed.length).toBe(STRIDE * 48);
-    }
     for (const half of splitStrip(
-      drawBottomStrip([1, 2, 0], { linkOk: true }),
+      drawTopStrip('mid', { linkOk: true, message: 'BOX' }),
     )) {
       const packed = pack(half, { width: WIDTH, height: 96 });
       expect(packed.length).toBe(13_824);
       expect(packed.length).toBe(STRIDE * 96);
+    }
+    for (const half of splitStrip(
+      drawBottomStrip([1, 2, 0], { linkOk: true }),
+    )) {
+      const packed = pack(half, { width: WIDTH, height: 144 });
+      expect(packed.length).toBe(20_736);
+      expect(packed.length).toBe(STRIDE * 144);
     }
   });
 
@@ -65,13 +67,13 @@ describe('gray4 packing', () => {
     }
   });
 
-  it('puts a bright column at x=0 in the high nibble of byte 0 of every row of a 288x96 container', () => {
-    const frame = new Uint8Array(WIDTH * 96);
-    for (let y = 0; y < 96; y += 1) {
+  it('puts a bright column at x=0 in the high nibble of byte 0 of every row of a 288x144 container', () => {
+    const frame = new Uint8Array(WIDTH * 144);
+    for (let y = 0; y < 144; y += 1) {
       frame[y * WIDTH] = 15;
     }
-    const packed = pack(frame, { width: WIDTH, height: 96 });
-    for (let y = 0; y < 96; y += 1) {
+    const packed = pack(frame, { width: WIDTH, height: 144 });
+    for (let y = 0; y < 144; y += 1) {
       expect(packed[y * STRIDE]).toBe(0xf0);
     }
   });
@@ -105,18 +107,18 @@ describe('gray4 packing', () => {
   });
 
   it('rejects a frame that is not the declared size', () => {
-    expect(() => pack(new Uint8Array(10))).toThrow(/expected 13824/);
+    expect(() => pack(new Uint8Array(10))).toThrow(/expected 27648/);
   });
 });
 
 describe('sdk quirks', () => {
   it('carries the size and the SDK compress mode in one payload builder', () => {
-    // (a top container; a bottom one carries imageHeight 96 the same way)
+    // (a top container; a bottom one carries imageHeight 144 the same way)
     const imageData = pack(
       splitStrip(drawTopStrip('top', { linkOk: true }))[1],
     );
     const payload = imageRawDataPayload({
-      containerID: 5,
+      containerID: 3,
       containerName: 'stripTR',
       imageData,
       imageWidth: WIDTH,
@@ -124,11 +126,11 @@ describe('sdk quirks', () => {
     });
 
     expect(payload).toEqual({
-      containerID: 5,
+      containerID: 3,
       containerName: 'stripTR',
       imageData,
       imageWidth: 288,
-      imageHeight: 48,
+      imageHeight: 96,
       compressMode: COMPRESS_MODE,
     });
   });

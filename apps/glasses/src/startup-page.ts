@@ -1,18 +1,19 @@
 /**
  * The page the glasses show, created exactly once (constitution §6). Layout is
- * the table in the `g2-hud-display` skill (Maxx, 2026-09-30 design round 5).
+ * the table in the `g2-hud-display` skill (Maxx, 2026-10-01 design round 6).
  *
- * Image mode, 7 containers: the full-canvas `bg`, FOUR image containers along
- * the top and bottom edges (the two HUD strips, each split at x 288: 288×48 on
- * top, 288×96 below), the `msg` text upper-middle directly under the ▲ and the
- * `status` text on the right border. The pinned SDK (0.0.12) caps a page at
- * 4 image / 8 text / 12 containers.
+ * Image mode, 6 containers: the full-canvas `bg`, FOUR image containers along
+ * the top and bottom edges (the two HUD strips, each split at x 288: 288×96 on
+ * top, 288×144 below) and the `status` text on the right border. There is no
+ * `msg` text container: the message is drawn into the top strip as a bitmap
+ * (the SDK text container has one fixed, small font). The pinned SDK (0.0.12)
+ * caps a page at 4 image / 8 text / 12 containers.
  *
  * Text mode, 4 containers: `bg`, one `hud` text container in slot 2 (bottom
- * centre, where the car strip is in image mode), `msg`, `status` — the page
- * the mid-session fallback rebuilds to. Slot 2 is `stripTL`
- * in image mode and `hud` in text mode, so both pages number their containers
- * 1..n without gaps.
+ * centre), `msg` (upper middle), `status` — the page the mid-session fallback
+ * rebuilds to. Slots 2 and 3 are `stripTL`/`stripTR` in image mode and
+ * `hud`/`msg` in text mode, and `status` is 4 in both, so both pages number
+ * their containers 1..n without gaps.
  */
 
 import {
@@ -40,13 +41,17 @@ export type StartupPage = PageContainer;
 export const CONTAINER_BG = 1;
 /** Text mode only: the single text HUD (`renderText`). */
 export const CONTAINER_HUD = 2;
+/** Text mode only: the message (image mode draws it into the top strip). */
 export const CONTAINER_MSG = 3;
 export const CONTAINER_STATUS = 4;
-/** Image mode only: the four HUD strip halves. `stripTL` reuses slot 2. */
+/**
+ * Image mode only: the four HUD strip halves. `stripTL` and `stripTR` reuse
+ * the text page's slots 2 and 3 (`hud`, `msg`).
+ */
 export const CONTAINER_STRIP_TL = 2;
-export const CONTAINER_STRIP_TR = 5;
-export const CONTAINER_STRIP_BL = 6;
-export const CONTAINER_STRIP_BR = 7;
+export const CONTAINER_STRIP_TR = 3;
+export const CONTAINER_STRIP_BL = 5;
+export const CONTAINER_STRIP_BR = 6;
 
 /** Names of the text containers (slot 2 is `hud` here: the text-mode page). */
 export const CONTAINER_NAMES = {
@@ -106,28 +111,33 @@ export const SDK_MAX_TEXT_CONTAINERS = 8;
 export const SDK_MAX_CONTAINERS = 12;
 
 /**
- * Text-mode HUD: two short lines at the bottom centre — where the car strip
- * is in image mode — because the message now owns the upper middle.
+ * Text-mode HUD: two short lines at the bottom centre, because the message
+ * owns the upper middle. Text mode has no image strips, so these rects are
+ * its own (unchanged since design round 5), not derived from `STRIP_Y`.
  */
 const HUD_TEXT_X = 144;
-const HUD_TEXT_Y = STRIP_Y.bottom;
+const HUD_TEXT_Y = 192;
 const HUD_TEXT_WIDTH = 288;
-const HUD_TEXT_HEIGHT = STRIP_HEIGHTS.bottom;
+const HUD_TEXT_HEIGHT = 96;
 
 /**
- * Message upper-middle, directly under the ▲ (Maxx, design round 5: "Put text
- * upper middle below the top rectangle"): starts 4 px below the top strip and
- * is centred on the seam, so it clears the strips, the corner rings and the
- * status strip on the right border.
+ * Text-mode message, upper middle under where the ▲ is in image mode (Maxx,
+ * design round 5: "Put text upper middle below the top rectangle"), centred
+ * on the seam.
  */
 const MSG_WIDTH = 288;
 const MSG_X = HALF_WIDTH - MSG_WIDTH / 2;
-const MSG_Y = STRIP_HEIGHTS.top + 4;
+const MSG_Y = 52;
 const MSG_HEIGHT = 48;
 
-/** `L`/`S`, small, on the right border at mid-height. */
+/**
+ * `L`/`S`, small, on the right border in the band between the strips (image
+ * mode: canvas y 96–143; round 6 moved it up from 124 to stay clear of the
+ * 144-px bottom strip). The same rect in text mode, so it does not jump on a
+ * fallback.
+ */
 const STATUS_X = 528;
-const STATUS_Y = 124;
+const STATUS_Y = 108;
 const STATUS_WIDTH = 40;
 const STATUS_HEIGHT = 28;
 
@@ -235,25 +245,30 @@ export interface PageContent {
   readonly mode: RenderMode;
   /** Status strip text baked into the page (image data is not allowed here). */
   readonly status: string;
+  /** Text-mode message; ignored in image mode (the top strip draws it). */
   readonly message?: string;
   /** Text-mode HUD content; ignored in image mode. */
   readonly hud?: string;
 }
 
-/** Builds the page for either render mode (7 containers image, 4 text). */
+/** Builds the page for either render mode (6 containers image, 4 text). */
 export function buildPage(content: PageContent): PageContainer {
-  const message = messageContainer(content.message ?? '');
   const status = statusContainer(content.status);
 
   if (content.mode === 'text') {
     return {
       containerTotalNum: 4,
-      textObject: [background(), hudText(content.hud ?? ''), message, status],
+      textObject: [
+        background(),
+        hudText(content.hud ?? ''),
+        messageContainer(content.message ?? ''),
+        status,
+      ],
     };
   }
 
   const imageObject = STRIP_CONTAINERS.map(stripImage);
-  const textObject = [background(), message, status];
+  const textObject = [background(), status];
   return {
     containerTotalNum: textObject.length + imageObject.length,
     textObject,
