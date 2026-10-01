@@ -1,7 +1,6 @@
 import {
   CAR_LEVEL_MAX,
   MSG_MAX_CHARS,
-  PRESETS_MAX,
   type Lane,
 } from '@g2-race-spotter/protocol';
 
@@ -9,7 +8,6 @@ import { BUILTIN_MESSAGES, CAR_DETENTS, CAR_ROWS } from '../intents.ts';
 import {
   isLatencyStale,
   isLive,
-  roomPresets,
   selectedCars,
   selectedLane,
   type Model,
@@ -134,11 +132,18 @@ function statusHeader(model: Model): VNode {
   ]);
 }
 
+/**
+ * Three rounded squares filling the row, glyph only (design round 6); the
+ * lane's name is the button's accessible name. There is no CLEAR button:
+ * tapping the lit lane again clears it (`laneTap` in `intents.ts`).
+ */
 function laneRow(model: Model): VNode {
   const selected = selectedLane(model);
 
-  return h('section', { class: 'lanes', 'aria-label': 'Lane' }, [
-    ...LANES.map((button) =>
+  return h(
+    'section',
+    { class: 'lanes', 'aria-label': 'Lane' },
+    LANES.map((button) =>
       h(
         'button',
         {
@@ -147,31 +152,17 @@ function laneRow(model: Model): VNode {
           'data-act': 'lane',
           'data-arg': button.lane,
           'data-lane': button.lane,
+          'aria-label': button.label,
           'aria-pressed': button.lane === selected ? 'true' : 'false',
         },
         [
           h('span', { class: 'lane__glyph', 'aria-hidden': 'true' }, [
             button.glyph,
           ]),
-          h('span', { class: 'lane__label' }, [button.label]),
         ],
       ),
     ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'lane-clear',
-        'data-act': 'lane-clear',
-        'data-testid': 'lane-clear',
-        'aria-label': 'clear lane',
-      },
-      [
-        h('span', { class: 'lane__glyph', 'aria-hidden': 'true' }, ['✕']),
-        h('span', { class: 'lane-clear__label' }, ['CLEAR']),
-      ],
-    ),
-  ]);
+  );
 }
 
 /**
@@ -255,8 +246,7 @@ function faders(model: Model): VNode {
   );
 }
 
-/** Five equal buttons (design round 5: "Make them all the same size"); SPIN
- * keeps the alert colour, not a bigger box. */
+/** Four equal buttons in a 2×2 grid (design round 6), one colour. */
 function builtinMessages(): VNode {
   return h(
     'div',
@@ -266,7 +256,7 @@ function builtinMessages(): VNode {
         'button',
         {
           type: 'button',
-          class: text === 'SPIN' ? 'say say--alert' : 'say',
+          class: 'say',
           'data-act': 'say',
           'data-arg': text,
         },
@@ -276,49 +266,9 @@ function builtinMessages(): VNode {
   );
 }
 
-/** The room's saved messages as chips: tap sends, × forgets. The slot is
- * always rendered and hidden while the room has none. */
-function presetChips(model: Model): VNode {
-  const presets = roomPresets(model);
-
-  return h(
-    'div',
-    {
-      class: 'presets',
-      'data-testid': 'preset-chips',
-      hidden: presets.length === 0,
-    },
-    presets.map((text) =>
-      h('div', { class: 'pchip' }, [
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'pchip__text',
-            'data-act': 'preset-send',
-            'data-arg': text,
-          },
-          [text],
-        ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'pchip__x',
-            'data-act': 'preset-remove',
-            'data-arg': text,
-            'aria-label': `Forget "${text}"`,
-          },
-          ['×'],
-        ),
-      ]),
-    ),
-  );
-}
-
+/** Free text + Send (design round 6 took Save and the saved-message chips
+ * off the page; the protocol's `preset` messages stay for later). */
 function messageRow(model: Model): VNode {
-  const full = roomPresets(model).length >= PRESETS_MAX;
-
   return h('div', { class: 'msg' }, [
     h('input', {
       type: 'text',
@@ -342,18 +292,6 @@ function messageRow(model: Model): VNode {
         'data-testid': 'send',
       },
       ['Send'],
-    ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'btn',
-        'data-act': 'save',
-        'data-testid': 'save',
-        'aria-disabled': full ? 'true' : 'false',
-        title: full ? `The room keeps ${PRESETS_MAX} messages` : 'Save',
-      },
-      [full ? 'Full' : 'Save'],
     ),
   ]);
 }
@@ -436,7 +374,7 @@ function consoleView(model: Model): VNode {
       h(
         'section',
         { class: 'half half--bottom', 'data-testid': 'bottom-half' },
-        [builtinMessages(), presetChips(model), messageRow(model)],
+        [builtinMessages(), messageRow(model)],
       ),
     ]),
     h(

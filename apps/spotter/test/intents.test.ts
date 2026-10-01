@@ -11,6 +11,7 @@ import {
   dragCars,
   endCarDrag,
   faderPosition,
+  laneTap,
   moveCarDrag,
   nextCars,
   normaliseMessage,
@@ -133,19 +134,32 @@ describe('AC-2 fader drag', () => {
   });
 });
 
-describe('built-in messages', () => {
-  it('are the five Maxx named (round 5 names), each a valid msg text', () => {
+describe('built-in messages (design round 6)', () => {
+  it('are the four Maxx kept, in 2×2 reading order, each a valid msg text', () => {
     expect(BUILTIN_MESSAGES).toEqual([
-      'PULL OFF',
-      'LEADERS BEHIND',
       'CATCHING UP',
       'PULLING AWAY',
-      'SPIN',
+      'LEADERS BEHIND',
+      'EXIT',
     ]);
     for (const text of BUILTIN_MESSAGES) {
       expect(normaliseMessage(text)).toBe(text);
       expect(text.length).toBeLessThanOrEqual(MSG_MAX_CHARS);
     }
+  });
+});
+
+describe('lane taps (design round 6: no CLEAR button)', () => {
+  it('calls the tapped lane when another one, or none, is lit', () => {
+    expect(laneTap(null, 'bot')).toBe('bot');
+    expect(laneTap('bot', 'mid')).toBe('mid');
+    expect(laneTap('mid', 'top')).toBe('top');
+  });
+
+  it('clears the lane (lane: null) when the lit lane is tapped again', () => {
+    expect(laneTap('bot', 'bot')).toBeNull();
+    expect(laneTap('mid', 'mid')).toBeNull();
+    expect(laneTap('top', 'top')).toBeNull();
   });
 });
 

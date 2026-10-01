@@ -3,6 +3,7 @@ import {
   MSG_MAX_CHARS,
   type CarLevel,
   type Cars,
+  type Lane,
 } from '@g2-race-spotter/protocol';
 
 /**
@@ -23,18 +24,26 @@ export const CAR_ROWS: readonly {
 export const CAR_DETENTS: readonly CarLevel[] = [0, 1, 2, 3];
 
 /**
- * The five built-in messages (Maxx, 2026-09-25 design round 4; round 5
- * renamed "Back up entry" / "Drive in further"): client constants, one tap
- * sends them as `msg`. Room presets (`State.presets`) are the spotter's own
- * additions.
+ * The built-in messages (Maxx, 2026-10-01 design round 6): a 2×2 grid read
+ * left to right, top to bottom — CATCHING UP / PULLING AWAY on top, LEADERS
+ * BEHIND / EXIT under them (PULL OFF renamed EXIT, SPIN removed). Client
+ * constants; one tap sends one as `msg`.
  */
 export const BUILTIN_MESSAGES: readonly string[] = [
-  'PULL OFF',
-  'LEADERS BEHIND',
   'CATCHING UP',
   'PULLING AWAY',
-  'SPIN',
+  'LEADERS BEHIND',
+  'EXIT',
 ];
+
+/**
+ * The lane a tap on `tapped` calls, given the lane the console shows lit
+ * (design round 6: there is no CLEAR button any more): the tapped lane, or
+ * `null` — clear the lane — when it is the lit one.
+ */
+export function laneTap(selected: Lane | null, tapped: Lane): Lane | null {
+  return tapped === selected ? null : tapped;
+}
 
 /**
  * Where a finger at `y` sits on a fader track whose box starts at `trackTop`

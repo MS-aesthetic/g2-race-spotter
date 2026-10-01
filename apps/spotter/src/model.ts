@@ -121,13 +121,6 @@ export function selectedCars(model: Model): Readonly<Cars> {
   return model.state?.cars ?? NO_CARS;
 }
 
-const NO_PRESETS: readonly string[] = [];
-
-/** The room's saved messages — room state only, never local storage. */
-export function roomPresets(model: Model): readonly string[] {
-  return model.state?.presets ?? NO_PRESETS;
-}
-
 /** The console is trustworthy only when the socket is open *and* the room has
  * replayed its state; anything else is still reconnecting/syncing. */
 export function isLive(model: Model): boolean {

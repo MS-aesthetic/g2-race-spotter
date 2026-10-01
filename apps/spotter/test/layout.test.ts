@@ -7,9 +7,9 @@
  * Two consoles per viewport (design round 4, 2026-09-25): `down` — no relay,
  * the socket never opens, the header shows its RECONNECTING pill — and `live`
  * — the page's WebSocket is replaced by an in-page fake that replays a room
- * holding three saved messages and an unacknowledged message, which is the
- * fullest console (preset chips, ack icon). Saved messages are room state, so
- * only a replayed room can show them.
+ * with a lit lane, cars, an unacknowledged message (the ack icon) and three
+ * saved messages, which design round 6 (2026-10-01) no longer puts on the
+ * page: the room may hold them, the console must not grow for them.
  */
 
 import { createReadStream, existsSync, readdirSync, rmSync } from 'node:fs';
@@ -34,6 +34,9 @@ const VIEWPORTS = [
 /** Every button, and each fader knob and track's hit width. */
 const MIN_TOUCH_PX = 44;
 const MIN_LANE_PX = 64;
+/** Design round 6's "more vertical space" between lanes, faders and messages
+ * (≈ 20 px in the approved mock). */
+const MIN_AIR_PX = 18;
 /** Lanes and faders stay in the top of a portrait screen: round 4's "top
  * half", loosened to 55 % in round 5 so the faders get a usable travel. */
 const TOP_SHARE = 0.55;
@@ -127,16 +130,20 @@ interface Measured {
   consoleClient: number;
   minButton: number;
   minLane: number;
+  lanes: string[];
+  airLanesFaders: number;
+  airFadersMessages: number;
   buttons: number;
   fadersBottom: number;
   faders: number;
   gaps: number[];
   knob: { minWidth: number; minHeight: number };
   track: { minWidth: number; minHeight: number };
-  presetSizes: string[];
-  presetChips: number;
-  presetsScroll: number;
-  presetsClient: number;
+  saySizes: string[];
+  sayLabels: string[];
+  sayColumns: number;
+  sayRows: number;
+  savedMessageControls: number;
 }
 
 /**
@@ -254,7 +261,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
     await page.waitForSelector('.console .lane');
     await page.waitForSelector(
       live
-        ? '[data-testid="preset-chips"]:not([hidden])'
+        ? '[data-testid="header-ack"]:not([hidden])'
         : '[data-testid="reconnect-pill"]:not([hidden])',
     );
 
@@ -270,7 +277,6 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
       }
       return await page.evaluate(() => {
         const consoleEl = document.querySelector('.console')!;
-        const presetsEl = document.querySelector('.presets')!;
         const visible = (el: Element): boolean =>
           el.getBoundingClientRect().height > 0;
         const height = (el: Element): number =>
@@ -285,6 +291,11 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
             el.getBoundingClientRect(),
           );
         const faders = boxes('.fader');
+        const lanes = boxes('.lane');
+        const fadersBox = document
+          .querySelector('.faders')!
+          .getBoundingClientRect();
+        const says = boxes('.say');
         const knobs = boxes('.fader__knob');
         const tracks = boxes('.fader__track');
 
@@ -297,10 +308,15 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
           minLane: Math.min(
             ...[...consoleEl.querySelectorAll('.lane')].map(height),
           ),
+          lanes: lanes.map(
+            (box) => `${box.width.toFixed(1)}x${box.height.toFixed(1)}`,
+          ),
+          airLanesFaders:
+            fadersBox.top - Math.max(...lanes.map((box) => box.bottom)),
+          airFadersMessages:
+            Math.min(...says.map((box) => box.top)) - fadersBox.bottom,
           buttons: buttons.length,
-          fadersBottom: document
-            .querySelector('.faders')!
-            .getBoundingClientRect().bottom,
+          fadersBottom: fadersBox.bottom,
           faders: faders.length,
           // Horizontal space between neighbouring faders.
           gaps: faders
@@ -314,12 +330,17 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
             minWidth: Math.min(...tracks.map((box) => box.width)),
             minHeight: Math.min(...tracks.map((box) => box.height)),
           },
-          presetSizes: boxes('.say').map(
+          saySizes: says.map(
             (box) => `${box.width.toFixed(1)}x${box.height.toFixed(1)}`,
           ),
-          presetChips: presetsEl.querySelectorAll('.pchip').length,
-          presetsScroll: presetsEl.scrollHeight,
-          presetsClient: presetsEl.clientHeight,
+          sayLabels: [...consoleEl.querySelectorAll('.say')].map(
+            (el) => el.textContent ?? '',
+          ),
+          sayColumns: new Set(says.map((box) => Math.round(box.left))).size,
+          sayRows: new Set(says.map((box) => Math.round(box.top))).size,
+          savedMessageControls: consoleEl.querySelectorAll(
+            '[data-act="save"], [data-act^="preset"], .pchip',
+          ).length,
         };
       });
     } finally {
@@ -329,14 +350,14 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
 
   for (const viewport of VIEWPORTS) {
     for (const live of [false, true]) {
-      const label = live ? 'live room with presets' : 'relay down';
+      const label = live ? 'live room' : 'relay down';
       it(`fits ${viewport.name} (${viewport.width}x${viewport.height}), ${label}`, async () => {
         const measured = await measure(viewport.width, viewport.height, live);
         const portrait = viewport.height > viewport.width;
 
         // Reported so a regression says by how much, not just that it failed.
         console.info(
-          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes min ${measured.minLane}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, presets ${[...new Set(measured.presetSizes)].join(',')}, preset chips ${measured.presetChips} (${measured.presetsScroll} <= ${measured.presetsClient})`,
+          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes ${[...new Set(measured.lanes)].join(',')}, air ${measured.airLanesFaders.toFixed(0)}/${measured.airFadersMessages.toFixed(0)}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, messages ${[...new Set(measured.saySizes)].join(',')}`,
         );
 
         expect(measured.documentScroll).toBeLessThanOrEqual(
@@ -345,14 +366,25 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.consoleScroll).toBeLessThanOrEqual(
           measured.consoleClient,
         );
-        // code chip + 3 lanes + clear + 5 built-ins + Send/Save, and in the
-        // live room a text + × button per saved message. Faders are not
-        // buttons: each is one slider track.
-        expect(measured.buttons).toBe(
-          12 + (live ? 2 * LIVE_PRESETS.length : 0),
-        );
+        // code chip + 3 lanes + 4 built-ins + Send (round 6: no CLEAR, no
+        // Save, no saved-message chips even though the live room holds
+        // three). Faders are not buttons: each is one slider track.
+        expect(measured.buttons).toBe(9);
+        expect(measured.savedMessageControls).toBe(0);
         expect(measured.minButton).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
         expect(measured.minLane).toBeGreaterThanOrEqual(MIN_LANE_PX);
+        // Three equal squares (within 1 px), and air above and below the faders.
+        expect(measured.lanes).toHaveLength(3);
+        for (const size of measured.lanes) {
+          const [width, height] = size.split('x').map(Number);
+          expect(Math.abs(width! - height!)).toBeLessThanOrEqual(1);
+          expect(size).toBe(measured.lanes[0]);
+        }
+        expect(measured.airLanesFaders).toBeGreaterThanOrEqual(MIN_AIR_PX);
+        if (portrait) {
+          // In landscape the messages are a column of their own, beside.
+          expect(measured.airFadersMessages).toBeGreaterThanOrEqual(MIN_AIR_PX);
+        }
         // Three faders with clear horizontal gaps; a finger-sized knob on a
         // track at least a finger wide and tall enough for four detents.
         expect(measured.faders).toBe(3);
@@ -363,20 +395,28 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.knob.minHeight).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
         expect(measured.track.minWidth).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
         expect(measured.track.minHeight).toBeGreaterThanOrEqual(MIN_TRACK_PX);
-        // All five built-in messages are the same size (SPIN included).
-        expect(measured.presetSizes).toHaveLength(5);
-        expect(new Set(measured.presetSizes).size).toBe(1);
+        // Four built-in messages, 2×2, all one size.
+        expect(measured.sayLabels).toEqual([
+          'CATCHING UP',
+          'PULLING AWAY',
+          'LEADERS BEHIND',
+          'EXIT',
+        ]);
+        // One size: layout rounding may split a pixel between the columns.
+        const sizes = measured.saySizes.map((size) =>
+          size.split('x').map(Number),
+        );
+        for (const axis of [0, 1]) {
+          const values = sizes.map((size) => size[axis]!);
+          expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(
+            1,
+          );
+        }
+        expect([measured.sayColumns, measured.sayRows]).toEqual([2, 2]);
         if (portrait) {
           // Lanes and faders sit in the top 55 % of a portrait phone.
           expect(measured.fadersBottom).toBeLessThanOrEqual(
             measured.innerHeight * TOP_SHARE,
-          );
-        }
-        if (live) {
-          // Three saved messages are all visible without scrolling their box.
-          expect(measured.presetChips).toBe(LIVE_PRESETS.length);
-          expect(measured.presetsScroll).toBeLessThanOrEqual(
-            measured.presetsClient,
           );
         }
       }, 60_000);

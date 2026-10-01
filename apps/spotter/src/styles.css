@@ -151,9 +151,10 @@ button {
    One screen, never a scroll (Maxx, 2026-09-04 design round 2). Design round
    4 (2026-09-25): a one-row header of small icons, then the TOP half — lane
    row (◀ BOTTOM · ▲ MIDDLE · ▶ TOP, left to right) and three vertical car
-   faders (round 5) — and the BOTTOM half: five built-in messages, the room's saved
-   messages, and the message row. The top half is fixed height; the saved
-   messages take what is left. */
+   faders (round 5) — and the BOTTOM half: the built-in messages and the
+   message row. Design round 6 (2026-10-01): three glyph-only rounded-square
+   lanes filling the row, 20 px of air lanes → faders → messages, the
+   messages a 2×2 grid; the free text + Send sit at the bottom. */
 
 .console {
   display: grid;
@@ -250,18 +251,27 @@ button {
 }
 
 .console__body {
+  /* The lane square's edge: the row's width (8 px side padding, two 10 px
+     gaps) split in three, capped so a tablet does not get dinner plates.
+     The faders' travel below is sized from it (round 6). */
+  --air: 20px;
+  --lane: min((100vw - 36px) / 3, 140px);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--air);
   min-height: 0;
   overflow: hidden;
-  padding: 8px var(--pad) max(8px, env(safe-area-inset-bottom));
+  /* viewport-fit=cover: keep the lanes clear of a notch in landscape. The
+     squares follow the width they get (aspect-ratio), so they stay square;
+     `--lane` overestimates them there, which only shortens the fader travel. */
+  padding: 8px max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
 }
 
 .half {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--air);
   min-height: 0;
   min-width: 0;
 }
@@ -274,33 +284,35 @@ button {
   flex: 1 1 auto;
 }
 
-/* ---------- Lanes: ◀ BOTTOM · ▲ MIDDLE · ▶ TOP, left to right ---------- */
+/* ---------- Lanes: ◀ BOTTOM · ▲ MIDDLE · ▶ TOP, left to right ----------
+
+   Design round 6 (Maxx, 2026-10-01, mock docs/reviews/spotter-round6.png):
+   three equal rounded squares filling the row, glyph only; tapping the lit
+   one clears the lane, so there is no CLEAR button. */
 
 .lanes {
   display: flex;
-  gap: 6px;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 10px;
   flex: 0 0 auto;
 }
 
-.lane,
-.lane-clear {
+.lane {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 64px;
-  padding: 0 4px;
+  max-width: var(--lane);
+  aspect-ratio: 1;
+  padding: 0;
   border: 2px solid var(--accent);
-  border-radius: 12px;
+  border-radius: 18px;
   background: var(--bg);
   color: var(--accent);
   transition: background 120ms linear;
-}
-
-.lane {
-  flex: 1 1 0;
-  min-width: 0;
 }
 
 .lane.is-selected {
@@ -309,26 +321,8 @@ button {
 }
 
 .lane__glyph {
-  font-size: 24px;
+  font-size: 40px;
   line-height: 1;
-}
-
-.lane__label {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-
-.lane-clear {
-  flex: 0 0 52px;
-  border-color: var(--border);
-  color: #9fb2bf;
-}
-
-.lane-clear__label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
 }
 
 /* ---------- Cars behind: three vertical faders ----------
@@ -340,11 +334,15 @@ button {
    track box is the knob's travel (detent n at n/3 of it); the knob overhangs
    it by half its height, which is what the track's margins leave room for.
    `--track` is the travel: as tall as the top half allows (the faders end at
-   ≤ 55 % of a portrait screen), never under 96 px. */
+   ≤ 55 % of a portrait screen), never under 96 px. Above the track sit the
+   header (36), the body padding (8), the lane square, the air (20), the
+   panel's top (3) and half a knob (22); under it half a knob, the label and
+   the panel's bottom (47) — 136 px plus the lane, so the faders end at
+   54 % of the height. */
 
 .faders {
   --knob-h: 44px;
-  --track: clamp(96px, 54vh - 194px, 200px);
+  --track: clamp(96px, 54vh - 136px - var(--lane), 200px);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 18px;
@@ -355,7 +353,7 @@ button {
    guard rather than a second declaration. */
 @supports (height: 100dvh) {
   .faders {
-    --track: clamp(96px, 54dvh - 194px, 200px);
+    --track: clamp(96px, 54dvh - 136px - var(--lane), 200px);
   }
 }
 
@@ -516,88 +514,40 @@ button {
 
 /* ---------- Messages ---------- */
 
-/* Five equal buttons (design round 5: "Make them all the same size"): three
-   on the first row, two centred under them. A six-column grid where every
-   button spans two keeps the cells identical. */
+/* Four equal buttons, 2×2 (design round 6): CATCHING UP / PULLING AWAY,
+   LEADERS BEHIND / EXIT. One colour, one size. */
 .says {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 56px;
+  gap: var(--air) 10px;
   flex: 0 0 auto;
 }
 
 .say {
-  grid-column: span 2;
   min-width: 0;
-  min-height: 48px;
-  padding: 0 6px;
+  padding: 0 4px;
   border: 2px solid var(--amber);
-  border-radius: 10px;
-  background: var(--surface);
+  border-radius: 12px;
+  background: var(--bg);
   color: var(--amber);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
-.say:nth-child(4) {
-  grid-column: 2 / span 2;
-}
-
-/* SPIN keeps the alert colour, not a bigger box. */
-.say--alert {
-  border-color: var(--alert);
-  color: var(--alert);
-}
-
-/* The room's saved messages take whatever height is left; a long list
-   scrolls inside this box, never the console. */
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 6px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.pchip {
-  display: flex;
-  max-width: 100%;
-  border: 2px solid var(--border);
-  border-radius: 22px;
-  background: var(--surface);
-}
-
-.pchip__text {
-  min-width: 0;
-  min-height: 44px;
-  padding: 0 4px 0 14px;
-  border: 0;
-  background: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-}
-
-.pchip__x {
-  flex: 0 0 40px;
-  min-height: 44px;
-  border: 0;
-  background: none;
-  color: #9fb2bf;
-  font-size: 20px;
-}
-
+/* Free text + Send, at the bottom of the screen. */
 .msg {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
   flex: 0 0 auto;
   margin-top: auto;
+}
+
+.msg .btn--primary {
+  min-width: 92px;
 }
 
 .msg__input {
@@ -724,6 +674,20 @@ button {
     align-items: stretch;
   }
 
+  /* The lanes fill the left half's row, but give way on a short screen so
+     the faders keep their 96 px of travel. The track takes the height left
+     under the header (36), the body padding (16), the lanes, the air (20)
+     and the panel chrome (72). */
+  .console__body {
+    --lane: min((48vw - 27.68px) / 3, 100vh - 240px, 140px);
+  }
+
+  @supports (height: 100dvh) {
+    .console__body {
+      --lane: min((48vw - 27.68px) / 3, 100dvh - 240px, 140px);
+    }
+  }
+
   .half--top {
     flex: 0 0 48%;
   }
@@ -733,12 +697,12 @@ button {
   }
 
   .faders {
-    --track: clamp(96px, 100vh - 204px, 200px);
+    --track: clamp(96px, 100vh - 144px - var(--lane), 200px);
   }
 
   @supports (height: 100dvh) {
     .faders {
-      --track: clamp(96px, 100dvh - 204px, 200px);
+      --track: clamp(96px, 100dvh - 144px - var(--lane), 200px);
     }
   }
 

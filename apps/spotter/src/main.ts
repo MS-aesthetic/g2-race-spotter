@@ -12,13 +12,13 @@ import {
   CLOSE_CODE_AUTH,
   MSG_MAX_CHARS,
   PING_INTERVAL_MS,
-  PRESETS_MAX,
 } from '@g2-race-spotter/protocol';
 
 import {
   dragCars,
   endCarDrag,
   faderPosition,
+  laneTap,
   moveCarDrag,
   nextCars,
   normaliseMessage,
@@ -31,7 +31,6 @@ import { generateRoomCode, isSessionCurrent, isStartPin } from './join.ts';
 import {
   OPTIMISTIC_LANE_MS,
   createModel,
-  roomPresets,
   selectedCars,
   selectedLane,
   type Model,
@@ -247,28 +246,10 @@ function sendMessage(text: string, fromDraft: boolean): void {
   }
 }
 
-/** Save the typed message to the room for later (`preset add`). */
-function savePreset(): void {
-  const message = normaliseMessage(model.draft);
-  if (message === '') {
-    return;
-  }
-
-  const presets = roomPresets(model);
-  if (!presets.includes(message) && presets.length >= PRESETS_MAX) {
-    return;
-  }
-
-  vibrate();
-  client.send({ t: 'preset', add: message });
-  update({ draft: '' });
-}
-
-function setLane(lane: Lane | null): void {
-  if (lane !== null && selectedLane(model) === lane) {
-    return;
-  }
-
+/** A lane button: call that lane, or clear it when it is the lit one
+ * (design round 6 dropped the CLEAR button). */
+function tapLane(tapped: Lane): void {
+  const lane = laneTap(selectedLane(model), tapped);
   vibrate();
   client.send({ t: 'lane', lane });
   update({ optimisticLane: { lane, at: Date.now() } });
@@ -419,24 +400,13 @@ root.addEventListener('click', (event) => {
       update({ showCode: !model.showCode });
       break;
     case 'lane':
-      setLane(action.arg as Lane);
-      break;
-    case 'lane-clear':
-      setLane(null);
+      tapLane(action.arg as Lane);
       break;
     case 'send':
       sendMessage(model.draft, true);
       break;
-    case 'save':
-      savePreset();
-      break;
     case 'say':
-    case 'preset-send':
       sendMessage(action.arg, false);
-      break;
-    case 'preset-remove':
-      vibrate();
-      client.send({ t: 'preset', remove: action.arg });
       break;
     case 'reload':
       window.location.reload();

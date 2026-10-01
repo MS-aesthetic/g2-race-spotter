@@ -1,9 +1,5 @@
 // @vitest-environment jsdom
-import {
-  MSG_MAX_CHARS,
-  PRESETS_MAX,
-  type State,
-} from '@g2-race-spotter/protocol';
+import { MSG_MAX_CHARS, type State } from '@g2-race-spotter/protocol';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createModel, type Model } from '../src/model.ts';
@@ -76,16 +72,22 @@ describe('AC-1 lane row and driver status (design round 4)', () => {
       'mid',
       'top',
     ]);
-    // ◀ and ▶ carry U+FE0E so iOS draws them as text, not emoji.
+    // Glyph only (design round 6); ◀ and ▶ carry U+FE0E so iOS draws them
+    // as text, not emoji. The lane's name is the button's accessible name.
     expect(lanes.map((el) => el.textContent)).toEqual([
-      '◀\uFE0EBOTTOM',
-      '▲MIDDLE',
-      '▶\uFE0ETOP',
+      '◀\uFE0E',
+      '▲',
+      '▶\uFE0E',
     ]);
-    // The clear control closes the row and sends lane:null.
-    expect(
-      root.querySelector('.lanes')!.lastElementChild!.getAttribute('data-act'),
-    ).toBe('lane-clear');
+    expect(lanes.map((el) => el.getAttribute('aria-label'))).toEqual([
+      'BOTTOM',
+      'MIDDLE',
+      'TOP',
+    ]);
+    // No CLEAR button any more: tapping the lit lane clears it.
+    expect(root.querySelector('.lanes')!.children).toHaveLength(3);
+    expect(root.querySelector('[data-testid="lane-clear"]')).toBeNull();
+    expect(root.querySelector('[data-act="lane-clear"]')).toBeNull();
   });
 
   it('highlights only the middle lane for lane:"mid"', () => {
@@ -295,7 +297,7 @@ describe('AC-2 vertical car faders (design round 5)', () => {
       [...root.querySelector('.half--bottom')!.children].map(
         (el) => el.className,
       ),
-    ).toEqual(['says', 'presets', 'msg']);
+    ).toEqual(['says', 'msg']);
   });
 
   it('puts each knob on its detent from the room state', () => {
@@ -413,11 +415,8 @@ describe('AC-3 reconnect pill', () => {
     expect(selected).toHaveLength(1);
     expect(selected[0]!.getAttribute('data-lane')).toBe('bot');
     expect(faderLevels()).toEqual([0, 0, 3]);
-    expect(
-      [...root.querySelectorAll('[data-act="preset-send"]')].map(
-        (el) => el.textContent,
-      ),
-    ).toEqual(['Fuel save']);
+    // The room's saved messages stay room state; round 6 shows none.
+    expect(root.querySelectorAll('[data-act^="preset"]')).toHaveLength(0);
     expect(root.querySelectorAll('button[disabled]')).toHaveLength(0);
   });
 });
@@ -451,16 +450,18 @@ describe('pill toggling never re-creates the controls', () => {
     );
   });
 
-  it('keeps the input and the buttons below the chips when presets come and go', () => {
+  it('keeps the input, Send and the message buttons when the room presets change', () => {
     render(consoleModel());
     const input = root.querySelector('[data-testid="msg-input"]');
-    const save = root.querySelector('[data-testid="save"]');
+    const send = root.querySelector('[data-testid="send"]');
+    const says = [...root.querySelectorAll('[data-act="say"]')];
 
     render(consoleModel({ state: stateWith({ seq: 2, presets: ['a', 'b'] }) }));
     render(consoleModel({ state: stateWith({ seq: 3, presets: [] }) }));
 
     expect(root.querySelector('[data-testid="msg-input"]')).toBe(input);
-    expect(root.querySelector('[data-testid="save"]')).toBe(save);
+    expect(root.querySelector('[data-testid="send"]')).toBe(send);
+    expect([...root.querySelectorAll('[data-act="say"]')]).toEqual(says);
   });
 
   it('keeps the lane buttons and the update toast slot stable', () => {
@@ -518,8 +519,8 @@ describe('AC-4 ack icon', () => {
   });
 });
 
-describe('messages (design round 4)', () => {
-  it('offers the five built-in messages as one-tap buttons of one size, SPIN in the alert colour', () => {
+describe('messages (design round 6)', () => {
+  it('offers four built-in messages, 2×2 in reading order, all one style', () => {
     render(consoleModel());
 
     expect(
@@ -529,52 +530,33 @@ describe('messages (design round 4)', () => {
         el.className,
       ]),
     ).toEqual([
-      ['PULL OFF', 'PULL OFF', 'say'],
-      ['LEADERS BEHIND', 'LEADERS BEHIND', 'say'],
       ['CATCHING UP', 'CATCHING UP', 'say'],
       ['PULLING AWAY', 'PULLING AWAY', 'say'],
-      // Same box as the others (layout.test.ts measures it); only the colour
-      // modifier differs.
-      ['SPIN', 'SPIN', 'say say--alert'],
+      ['LEADERS BEHIND', 'LEADERS BEHIND', 'say'],
+      ['EXIT', 'EXIT', 'say'],
     ]);
+    // SPIN and PULL OFF are gone, and nothing wears the alert colour.
+    expect(root.querySelector('.say--alert')).toBeNull();
+    expect(
+      root.querySelector('[data-testid="builtin-messages"]')!.children,
+    ).toHaveLength(4);
   });
 
-  it('renders the room presets as chips with a remove button each, from room state only', () => {
-    render(consoleModel({ state: stateWith({ presets: [] }) }));
-    expect(shown('[data-testid="preset-chips"]')).toBe(false);
-
+  it('shows no saved-message chips and no Save, whatever presets the room holds', () => {
     render(
       consoleModel({
         state: stateWith({ presets: ['Fuel save', 'Box box'] }),
       }),
     );
-    expect(shown('[data-testid="preset-chips"]')).toBe(true);
-    expect(
-      [...root.querySelectorAll('.pchip')].map((chip) =>
-        [...chip.children].map((el) => [
-          el.getAttribute('data-act'),
-          el.getAttribute('data-arg'),
-        ]),
-      ),
-    ).toEqual([
-      [
-        ['preset-send', 'Fuel save'],
-        ['preset-remove', 'Fuel save'],
-      ],
-      [
-        ['preset-send', 'Box box'],
-        ['preset-remove', 'Box box'],
-      ],
-    ]);
 
-    // A room from a relay that predates presets simply has none.
-    const legacy = stateWith();
-    delete legacy.presets;
-    render(consoleModel({ state: legacy }));
-    expect(root.querySelectorAll('.pchip')).toHaveLength(0);
+    expect(root.querySelector('[data-testid="preset-chips"]')).toBeNull();
+    expect(root.querySelector('.pchip')).toBeNull();
+    expect(root.querySelector('[data-testid="save"]')).toBeNull();
+    expect(root.querySelector('[data-act="save"]')).toBeNull();
+    expect(root.querySelectorAll('[data-act^="preset"]')).toHaveLength(0);
   });
 
-  it('caps the message input at MSG_MAX_CHARS and offers Send and Save', () => {
+  it('caps the message input at MSG_MAX_CHARS and offers Send only', () => {
     render(consoleModel());
 
     const input = root.querySelector(
@@ -582,19 +564,13 @@ describe('messages (design round 4)', () => {
     ) as HTMLInputElement;
     expect(input.getAttribute('maxlength')).toBe(String(MSG_MAX_CHARS));
     expect(text('[data-testid="send"]')).toBe('Send');
-    expect(text('[data-testid="save"]')).toBe('Save');
-    expect(root.querySelector('[data-testid="lane-clear"]')).not.toBeNull();
-    // Recent-message chips from localStorage are gone (presets replace them).
+    expect(
+      [...root.querySelector('.msg')!.children].map((el) =>
+        el.getAttribute('data-act'),
+      ),
+    ).toEqual(['draft', 'send']);
+    // Recent-message chips from localStorage are gone too.
     expect(root.querySelectorAll('[data-act="recent"]')).toHaveLength(0);
-  });
-
-  it('marks Save unavailable once the room holds PRESETS_MAX messages', () => {
-    const presets = Array.from({ length: PRESETS_MAX }, (_, i) => `p${i}`);
-    render(consoleModel({ state: stateWith({ presets }) }));
-
-    const save = root.querySelector('[data-testid="save"]')!;
-    expect(save.textContent).toBe('Full');
-    expect(save.getAttribute('aria-disabled')).toBe('true');
   });
 });
 
