@@ -100,7 +100,7 @@ describe('startup page per render mode', () => {
       height: 96,
       zOrderIndex: 6,
     });
-    // `bg` and `status`; the message is drawn into the top strip (round 6).
+    // `bg` and `status`; the message is drawn into the bottom strip (round 7).
     expect(page.textObject.map((container) => container.containerID)).toEqual([
       1, 4,
     ]);

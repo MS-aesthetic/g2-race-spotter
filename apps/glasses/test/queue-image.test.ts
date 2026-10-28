@@ -3,8 +3,13 @@ import { describe, expect, it } from 'vitest';
 
 import type { ImageRawData } from '../src/bridge.ts';
 import type { HudState } from '../src/render/hud-design.ts';
-import { packContainers, RenderQueue } from '../src/render/queue.ts';
 import {
+  packContainers,
+  RenderQueue,
+  textModeMessage,
+} from '../src/render/queue.ts';
+import {
+  CONTAINER_MSG,
   CONTAINER_STRIP_BL,
   CONTAINER_STRIP_BR,
   CONTAINER_STRIP_TL,
@@ -427,35 +432,39 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     ).toHaveLength(0);
   });
 
-  it('re-sends a failed final blink frame once, ending at the wanted bytes (T060a)', async () => {
-    const { bridge, queue } = await primed({ lane: 'top', cars: [0, 0, 0] });
+  it('re-sends a failed message-blink frame once, ending at the wanted bytes (T060a)', async () => {
+    // Round 7: the message blink is the only blink, in the bottom strip.
+    const state: HudState = { lane: 'top', cars: [0, 0, 0] };
+    const { bridge, queue } = await primed(state);
     const start = images(bridge).length;
-    // The outline phase lands; the closing `filled` phase fails once.
+    // The visible phase lands; the hidden phase fails once on stripBL.
     bridge.imageResult = (index) =>
-      index === start + 1 ? 'sendFailed' : 'success';
+      index === start + 2 ? 'sendFailed' : 'success';
 
-    queue.push({
-      ...hud({ lane: 'top', cars: [0, 0, 0] }),
-      laneStyle: 'outline',
-    });
+    queue.push({ ...hud(state), message: 'GO' });
     await queue.whenIdle();
-    queue.push(hud({ lane: 'top', cars: [0, 0, 0] }));
+    queue.push({ ...hud(state), message: 'GO', msgVisible: false });
     await queue.whenIdle();
 
-    const filled = packContainers({ lane: 'top', cars: [0, 0, 0] }, true);
-    const outline = packContainers(
-      { lane: 'top', cars: [0, 0, 0] },
-      true,
-      'outline',
-    );
+    const visible = packContainers(state, true, 'GO');
+    const hidden = packContainers(state, true, 'GO', false);
     const sent = images(bridge).slice(start);
-    expect(names(sent)).toEqual(['stripTR', 'stripTR', 'stripTR']);
-    expect(sent.map((payload) => payload.imageData)).toEqual([
-      outline.get(CONTAINER_STRIP_TR),
-      filled.get(CONTAINER_STRIP_TR),
-      filled.get(CONTAINER_STRIP_TR),
+    // The retry rejoins the flush after the other half.
+    expect(names(sent)).toEqual([
+      'stripBL',
+      'stripBR',
+      'stripBL',
+      'stripBR',
+      'stripBL',
     ]);
-    expect(shownImages(bridge)).toEqual(filled);
+    expect(sent.map((payload) => payload.imageData)).toEqual([
+      visible.get(CONTAINER_STRIP_BL),
+      visible.get(CONTAINER_STRIP_BR),
+      hidden.get(CONTAINER_STRIP_BL),
+      hidden.get(CONTAINER_STRIP_BR),
+      hidden.get(CONTAINER_STRIP_BL),
+    ]);
+    expect(shownImages(bridge)).toEqual(hidden);
     expect(queue.consecutiveSendFailures).toBe(0);
   });
 
@@ -552,59 +561,104 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     ]);
   });
 
-  it('draws the message into the top strip: a message or blink phase sends only the top halves it changes', async () => {
-    // Round 6: there is no `msg` container on the image page; the message is
-    // pixels under the ▲, straddling the seam.
+  it('draws the message into the bottom strip: a message or blink phase sends only the bottom halves, at once', async () => {
+    // Round 7: the message is pixels between the corner Ls, straddling the
+    // seam; there is no `msg` container on the image page.
     const { bridge, clock, queue } = await primed({
       lane: 'bot',
       cars: [1, 2, 3],
     });
-    const state: HudState = { lane: 'bot', cars: [1, 2, 3] };
+    // A middle-car change flushes the car strip and opens the 250 ms
+    // debounce window; the message 10 ms later must not wait for it.
+    const state: HudState = { lane: 'bot', cars: [1, 1, 3] };
+    expect(names(await sendsFor(bridge, queue, state))).toEqual([
+      'stripBL',
+      'stripBR',
+    ]);
+    await clock.advance(10);
     const withMessage = (msgVisible: boolean) =>
       ({
         ...hud(state),
-        message: 'BOX',
+        message: 'GO LOW\nEXIT',
         ...(msgVisible ? {} : { msgVisible: false }),
       }) as const;
 
     const before = images(bridge).length;
     queue.push(withMessage(true));
     await queue.whenIdle();
-    expect(names(images(bridge).slice(before))).toEqual(['stripTL', 'stripTR']);
+    expect(names(images(bridge).slice(before))).toEqual(['stripBL', 'stripBR']);
     expect(shownImages(bridge)).toEqual(
-      packContainers(state, true, 'filled', 'BOX'),
+      packContainers(state, true, 'GO LOW\nEXIT'),
     );
 
-    // Hidden phase, then visible again: the top halves each time, at once.
+    // Hidden phase, then visible again: the bottom halves each time, at once
+    // (no clock advance between the push and the check).
     for (const visible of [false, true]) {
       const from = images(bridge).length;
       queue.push(withMessage(visible));
       await queue.whenIdle();
-      expect(names(images(bridge).slice(from))).toEqual(['stripTL', 'stripTR']);
+      expect(names(images(bridge).slice(from))).toEqual(['stripBL', 'stripBR']);
       expect(shownImages(bridge)).toEqual(
-        packContainers(state, true, 'filled', 'BOX', visible),
+        packContainers(state, true, 'GO LOW\nEXIT', visible),
       );
     }
     // A hidden phase is pixel-identical to no message at all.
-    expect(packContainers(state, true, 'filled', 'BOX', false)).toEqual(
+    expect(packContainers(state, true, 'GO LOW\nEXIT', false)).toEqual(
       packContainers(state, true),
     );
 
-    // The same message again costs nothing; the clear costs the top halves.
+    // The same message again costs nothing; the clear costs the bottom halves.
     const repeat = images(bridge).length;
     queue.push(withMessage(true));
     await queue.whenIdle();
     expect(images(bridge).length).toBe(repeat);
     expect(names(await sendsFor(bridge, queue, state))).toEqual([
-      'stripTL',
-      'stripTR',
+      'stripBL',
+      'stripBR',
     ]);
 
-    // None of it ever touched the car strip.
-    await clock.advance(HUD_GAP_FLUSH_MS * 2);
+    // None of it ever touched the lane strip.
+    expect(names(images(bridge).slice(before))).not.toContain('stripTL');
+    expect(names(images(bridge).slice(before))).not.toContain('stripTR');
+  });
+
+  it('sends a lane change with a message on screen to the top strip only', async () => {
+    const state: HudState = { lane: 'bot', cars: [1, 2, 3] };
+    const { bridge, queue } = await primed(state);
+    queue.push({ ...hud(state), message: 'PITS' });
     await queue.whenIdle();
-    expect(names(images(bridge).slice(before))).not.toContain('stripBL');
-    expect(names(images(bridge).slice(before))).not.toContain('stripBR');
+
+    const before = images(bridge).length;
+    queue.push({ ...hud({ lane: 'top', cars: [1, 2, 3] }), message: 'PITS' });
+    await queue.whenIdle();
+    expect(names(images(bridge).slice(before))).toEqual(['stripTL', 'stripTR']);
+  });
+
+  it('shows the message in text mode with its line break as a space', async () => {
+    const bridge = new FakeBridge();
+    const clock = new FakeClock();
+    const queue = new RenderQueue({
+      bridge,
+      mode: 'text',
+      timers: clock.timers,
+      now: clock.now,
+      log: () => undefined,
+    });
+    expect(textModeMessage('GO LOW\nEXIT')).toBe('GO LOW EXIT');
+    expect(textModeMessage('A\r\nB\nC')).toBe('A B C');
+    expect(textModeMessage('A\rB')).toBe('A B');
+    expect(textModeMessage('GO\tLOW')).toBe('GO LOW');
+
+    queue.push({
+      ...hud({ lane: null, cars: [0, 0, 0] }),
+      message: 'GO TOP\nENTRY',
+    });
+    await queue.whenIdle();
+    const msg = bridge
+      .callsNamed('textContainerUpgrade')
+      .map((entry) => entry.payload as { containerID: number; content: string })
+      .filter((payload) => payload.containerID === CONTAINER_MSG);
+    expect(msg.map((payload) => payload.content)).toEqual(['GO TOP ENTRY']);
   });
 
   it('never creates an image container of its own', async () => {

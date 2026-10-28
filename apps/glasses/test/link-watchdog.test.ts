@@ -6,7 +6,6 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { ImageRawData, TextUpgrade } from '../src/bridge.ts';
-import { LANE_BLINK_MS, LANE_BLINK_PHASES } from '../src/blink.ts';
 import { startDriver, type Driver } from '../src/driver.ts';
 import { statusStrip, STATUS_BLINK_MS, STATUS_NO_ROOM } from '../src/link.ts';
 import { packContainers, RenderQueue } from '../src/render/queue.ts';
@@ -269,7 +268,8 @@ describe('NO LINK watchdog (030 AC-4)', () => {
     expect(shownImages(bridge)).toEqual(
       packContainers({ lane: null, cars: [0, 0, 0] }, true),
     );
-    await clock.advance(LANE_BLINK_MS * LANE_BLINK_PHASES.length);
+    // Nothing follows it (no lane-call blink since design round 7).
+    await clock.advance(4_000);
     await queue.whenIdle();
     expect(images(bridge).length).toBe(before + 4);
   });

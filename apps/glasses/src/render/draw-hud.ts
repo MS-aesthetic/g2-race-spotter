@@ -4,38 +4,34 @@
  * in. Nothing about the look belongs in this file.
  *
  * Every function here is pure: same input, same `Uint8Array` of 0..15 out,
- * one byte per pixel. Packing to gray4 is `gray4.ts`'s job.
+ * one byte per pixel. Packing to gray4 is `gray4.ts`'s job. Since design
+ * round 7 the top strip is the lane icons only and the bottom strip carries
+ * the car bars AND the message.
  */
 
 import type { Cars, Lane } from '@g2-race-spotter/protocol';
 
 import {
-  drawBottomStripDesign,
+  drawCarsDesign,
+  drawMessageDesign,
   drawTopStripDesign,
   HALF_WIDTH,
   STRIP_HEIGHTS,
   STRIP_WIDTH,
   type HudState,
-  type LaneStyle,
   type StripId,
 } from './hud-design.ts';
 import { createCanvas, dim, type Canvas } from './primitives.ts';
 
-export {
-  HALF_WIDTH,
-  STRIP_HEIGHTS,
-  STRIP_WIDTH,
-  type HudState,
-  type LaneStyle,
-  type StripId,
-};
+export { HALF_WIDTH, STRIP_HEIGHTS, STRIP_WIDTH, type HudState, type StripId };
 
 export interface DrawHudOptions {
   /** `false` renders the stale variant (every pixel `>> 1`). */
   readonly linkOk: boolean;
-  /** How the called lane icon is drawn (the lane-call blink); default filled. */
-  readonly laneStyle?: LaneStyle;
-  /** The message drawn in the top strip under the ▲; `null`/`''` = none. */
+  /**
+   * The message drawn in the bottom strip between the corner Ls (design
+   * round 7); `null`/`''` = none. The top strip ignores it.
+   */
   readonly message?: string | null;
   /** `false` in the hidden phases of the message blink; default `true`. */
   readonly msgVisible?: boolean;
@@ -49,30 +45,55 @@ function finish(canvas: Canvas, options: DrawHudOptions): Uint8Array {
   return canvas.data;
 }
 
-/** The top strip, `Uint8Array(576*96)`: the three lane icons and the message. */
+/** The top strip, `Uint8Array(576*96)`: the three lane icons, nothing else. */
 export function drawTopStrip(
   lane: Lane | null,
-  options: DrawHudOptions,
+  options: Pick<DrawHudOptions, 'linkOk'>,
 ): Uint8Array {
   const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.top);
-  drawTopStripDesign(
+  drawTopStripDesign(canvas, lane);
+  return finish(canvas, options);
+}
+
+/**
+ * The car bars alone on a 576×144 bottom-strip canvas, at full intensity —
+ * the costly part of a frame (the corner-L regions), so the queue keeps the
+ * last one and lays each message phase over a copy
+ * ({@link composeBottomStrip}).
+ */
+export function drawCarsLayer(cars: Readonly<Cars>): Uint8Array {
+  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.bottom);
+  drawCarsDesign(canvas, cars);
+  return canvas.data;
+}
+
+/**
+ * The bottom strip from a {@link drawCarsLayer} result: a copy with the
+ * message drawn in, halved when the link is stale. The layer is not touched.
+ */
+export function composeBottomStrip(
+  carsLayer: Uint8Array,
+  options: DrawHudOptions,
+): Uint8Array {
+  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.bottom);
+  canvas.data.set(carsLayer);
+  drawMessageDesign(
     canvas,
-    lane,
-    options.laneStyle ?? 'filled',
     options.message ?? null,
     options.msgVisible ?? true,
   );
   return finish(canvas, options);
 }
 
-/** The bottom strip, `Uint8Array(576*144)`: the three car-behind bars. */
+/**
+ * The bottom strip, `Uint8Array(576*144)`: the three car-behind bars and,
+ * between the corner Ls, the message (design round 7).
+ */
 export function drawBottomStrip(
   cars: Readonly<Cars>,
   options: DrawHudOptions,
 ): Uint8Array {
-  const canvas = createCanvas(STRIP_WIDTH, STRIP_HEIGHTS.bottom);
-  drawBottomStripDesign(canvas, cars);
-  return finish(canvas, options);
+  return composeBottomStrip(drawCarsLayer(cars), options);
 }
 
 export interface Strips {
@@ -91,7 +112,8 @@ export function drawStrips(state: HudState, options: DrawHudOptions): Strips {
 /**
  * Splits a 576-px-wide strip down x 288 into its left and right image
  * containers (`288*height` each). The halves are pixel-adjacent on the glasses,
- * so a shape drawn across the seam (▲, the middle bar) shows as one shape.
+ * so a shape drawn across the seam (▲, the message, the middle bar) shows as
+ * one shape.
  */
 export function splitStrip(
   strip: Uint8Array,

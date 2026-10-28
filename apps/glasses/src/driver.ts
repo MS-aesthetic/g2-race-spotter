@@ -13,7 +13,6 @@ import type {
 } from '@g2-race-spotter/protocol';
 
 import { HudApp, MSG_AUTO_ACK_MS, type RenderSink } from './app.ts';
-import { createLaneBlink } from './blink.ts';
 import type { Bridge, BridgeLogger } from './bridge.ts';
 import { createInputHandler } from './input.ts';
 import { createLinkWatchdog, STATUS_BLINK_MS } from './link.ts';
@@ -169,29 +168,15 @@ export function startDriver(options: DriverOptions): Driver {
     }, 0);
   };
 
-  // Blink phases do not render on their own: they record their style and ask
-  // for ONE render a turn later (0 ms). The lane blink (every 500 ms) and the
-  // message blink (every 1 s) have phases due at the same instant 1, 2 and
-  // 3 s after a frame that carries both; rendering each on its own would send
-  // a half-updated top strip before the whole one.
-  let blinkRenderTimer: number | undefined;
-  const renderBlinkSoon = (): void => {
-    blinkRenderTimer ??= timers.setTimeout(() => {
-      blinkRenderTimer = undefined;
-      app.render();
-    }, 0);
-  };
-
   // The message blink (round 6): visible / hidden every second from the
   // render that first showed the message — visible at 0, 2, 4 s — until the
   // auto-clear below takes it off at 5 s. Keyed on the id like that timer.
+  // It is the only blink left on the HUD (design round 7 made a lane call
+  // solid at once), so a phase renders straight away.
   const msgBlink = createMessageBlink({
     timers,
     setVisible: (msgId, visible, render) => {
-      app.setMessageVisible(msgId, visible, { render: false });
-      if (render) {
-        renderBlinkSoon();
-      }
+      app.setMessageVisible(msgId, visible, { render });
     },
   });
 
@@ -248,29 +233,10 @@ export function startDriver(options: DriverOptions): Driver {
     }, remaining);
   };
 
-  // The lane-call blink: outline / filled × 4 (500 ms each) on a new call.
-  // Every phase is a re-render of the CURRENT state, so a cars change that
-  // lands mid-blink is drawn with whatever phase is showing and the blink
-  // carries on; only the lane, NO LINK, a clear or `stop()` ends it.
-  const laneBlink = createLaneBlink({
-    timers,
-    setStyle: (style, render) => {
-      app.setLaneStyle(style, { render: false });
-      if (render) {
-        renderBlinkSoon();
-      }
-    },
-  });
-
   const watchdog = createLinkWatchdog({
     now: options.now,
     lastFrameAt: () => client.lastFrameAt,
     onChange: (linkOk) => {
-      if (!linkOk) {
-        // A dimmed HUD with a hollow icon would read as "no call": stop on
-        // filled; the render just below draws it.
-        laneBlink.cancel();
-      }
       app.setLinkOk(linkOk, { render: !applyingState });
     },
   });
@@ -303,18 +269,8 @@ export function startDriver(options: DriverOptions): Driver {
       applyingState = true;
       try {
         watchdog.check();
-        const previous = app.currentState;
-        // Only a change between two applied states is a call. The first
-        // snapshot after launch (a lane may already be up) is shown as is.
-        if (previous !== undefined && state.lane !== previous.lane) {
-          // A new call blinks (its first phase rides on this very render); a
-          // clear — the spotter's or the relay's stale clear — cancels.
-          if (state.lane === null) {
-            laneBlink.cancel();
-          } else {
-            laneBlink.start();
-          }
-        }
+        // A lane call is drawn solid by this very render and stays solid
+        // (design round 7: "solid instead of blinking").
         app.applyState(state);
       } finally {
         applyingState = false;
@@ -370,12 +326,7 @@ export function startDriver(options: DriverOptions): Driver {
       }
       clearMsgTimer();
       clearRetryTimer();
-      laneBlink.cancel();
       msgBlink.cancel();
-      if (blinkRenderTimer !== undefined) {
-        timers.clearTimeout(blinkRenderTimer);
-        blinkRenderTimer = undefined;
-      }
       for (const off of unsubscribe) {
         off();
       }
