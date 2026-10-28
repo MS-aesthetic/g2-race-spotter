@@ -24,12 +24,69 @@ import { buildSpotter, tempDist } from './build-app.ts';
 
 const DIST = tempDist('g2rs-spotter-layout-');
 
-/** Portrait phones the spotter is likely to hold, plus a landscape one. */
-const VIEWPORTS = [
-  { name: 'iPhone-ish portrait', width: 390, height: 664 },
-  { name: 'small Android portrait', width: 360, height: 640 },
-  { name: 'landscape', width: 740, height: 360 },
-] as const;
+interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+interface Viewport {
+  name: string;
+  width: number;
+  height: number;
+  /** The three viewports AC-8 names (and round 7b's measured numbers). */
+  pinned: boolean;
+  /** Safe-area insets, simulated with CDP `Emulation.setSafeAreaInsetsOverride`
+   * (the page uses `viewport-fit=cover`, so they reach `env()`). */
+  insets?: Insets;
+}
+
+const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+/** Portrait phones the spotter is likely to hold, plus a landscape one —
+ * pinned by AC-8 — and (T068b) the short screens and safe-area insets that
+ * the vertical budget has to survive. */
+const VIEWPORTS: readonly Viewport[] = [
+  { name: 'iPhone-ish portrait', width: 390, height: 664, pinned: true },
+  { name: 'small Android portrait', width: 360, height: 640, pinned: true },
+  { name: 'landscape', width: 740, height: 360, pinned: true },
+  {
+    name: 'iPhone SE in Safari with toolbars',
+    width: 375,
+    height: 553,
+    pinned: false,
+  },
+  { name: 'iPhone 5/SE (1st gen)', width: 320, height: 568, pinned: false },
+  {
+    name: 'iPhone 5/SE (1st gen), 20 px top inset',
+    width: 320,
+    height: 568,
+    pinned: false,
+    insets: { ...NO_INSETS, top: 20 },
+  },
+  {
+    name: 'small Android portrait, 20 px top inset',
+    width: 360,
+    height: 640,
+    pinned: false,
+    insets: { ...NO_INSETS, top: 20 },
+  },
+  {
+    name: 'iPhone-ish portrait, 20 px top inset',
+    width: 390,
+    height: 664,
+    pinned: false,
+    insets: { ...NO_INSETS, top: 20 },
+  },
+  {
+    name: 'notched landscape (47 px side insets, 21 px bottom)',
+    width: 844,
+    height: 390,
+    pinned: false,
+    insets: { top: 0, right: 47, bottom: 21, left: 47 },
+  },
+];
 
 /** Every button, and each fader knob and track's hit width. */
 const MIN_TOUCH_PX = 44;
@@ -38,6 +95,11 @@ const MIN_LANE_PX = 64;
  * vertical space" (20 px, asserted ≥ 18); design round 7 (2026-10-28) spent
  * 8 px of each on the two corner-call rows (12 px, asserted ≥ 10). */
 const MIN_AIR_PX = 10;
+/** A portrait screen ≤ 600 px tall tightens the spacing (T068b): 8 px of air
+ * and 10 px between the corner-call rows, so the lanes and faders keep their
+ * floors. */
+const SHORT_SCREEN_PX = 600;
+const MIN_AIR_SHORT_PX = 6;
 /** Lanes and faders stay in the top of a portrait screen: round 4's "top
  * half", loosened to 55 % in round 5 so the faders get a usable travel. */
 const TOP_SHARE = 0.55;
@@ -161,6 +223,8 @@ interface Measured {
   maxOtherButton: { height: number; area: number };
   minLaneArea: number;
   savedMessageControls: number;
+  outsideViewport: string[];
+  inputBottom: number;
 }
 
 /**
@@ -250,11 +314,8 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
     rmSync(DIST, { recursive: true, force: true });
   });
 
-  async function measure(
-    width: number,
-    height: number,
-    live: boolean,
-  ): Promise<Measured> {
+  async function measure(viewport: Viewport, live: boolean): Promise<Measured> {
+    const { width, height } = viewport;
     const context = await browser.newContext({
       viewport: { width, height },
       deviceScaleFactor: 2,
@@ -262,6 +323,12 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
       hasTouch: true,
     });
     const page = await context.newPage();
+    if (viewport.insets !== undefined) {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', {
+        insets: viewport.insets,
+      });
+    }
     if (live) {
       await page.addInitScript(installFakeRelay, LIVE_PRESETS);
     }
@@ -289,7 +356,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         await page.screenshot({
           path: join(
             process.env.G2RS_LAYOUT_SHOTS,
-            `console-${width}x${height}-${live ? 'live' : 'down'}.png`,
+            `console-${width}x${height}${viewport.insets === undefined ? '' : '-inset'}-${live ? 'live' : 'down'}.png`,
           ),
         });
       }
@@ -440,6 +507,30 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
           savedMessageControls: consoleEl.querySelectorAll(
             '[data-act="save"], [data-act^="preset"], .pchip',
           ).length,
+          // `.console__body` clips (overflow: hidden), so "no scroll" cannot
+          // see a control pushed off the bottom: every visible button, the
+          // room chip (whose 44 px hit box hangs over the header on purpose)
+          // and the message input must lie wholly inside the viewport.
+          outsideViewport: [
+            ...buttons.filter((el) => !el.classList.contains('hdr__code')),
+            ...consoleEl.querySelectorAll('.hdr__chip, .msg__input'),
+          ]
+            .filter((el) => {
+              const box = el.getBoundingClientRect();
+              return (
+                box.top < -0.5 ||
+                box.left < -0.5 ||
+                box.bottom > window.innerHeight + 0.5 ||
+                box.right > window.innerWidth + 0.5
+              );
+            })
+            .map((el) => {
+              const box = el.getBoundingClientRect();
+              return `${el.className} ${el.textContent ?? ''} ${box.top.toFixed(0)}..${box.bottom.toFixed(0)}`;
+            }),
+          inputBottom: consoleEl
+            .querySelector('.msg__input')!
+            .getBoundingClientRect().bottom,
         };
       });
     } finally {
@@ -451,12 +542,14 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
     for (const live of [false, true]) {
       const label = live ? 'live room' : 'relay down';
       it(`fits ${viewport.name} (${viewport.width}x${viewport.height}), ${label}`, async () => {
-        const measured = await measure(viewport.width, viewport.height, live);
+        const measured = await measure(viewport, live);
         const portrait = viewport.height > viewport.width;
+        const short = portrait && viewport.height <= SHORT_SCREEN_PX;
+        const minAir = short ? MIN_AIR_SHORT_PX : MIN_AIR_PX;
 
         // Reported so a regression says by how much, not just that it failed.
         console.info(
-          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes ${[...new Set(measured.lanes)].join(',')}, air ${measured.airLanesFaders.toFixed(0)}/${measured.airFadersMessages.toFixed(0)}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, calls ${[...new Set(measured.callSizes)].join(',')} gaps ${measured.callColumnGap.toFixed(0)}/${measured.callRowGap.toFixed(0)}px y ${measured.callsTop.toFixed(0)}..${measured.callsBottom.toFixed(0)}, messages ${[...new Set(measured.saySizes)].join(',')} from y=${measured.saysTop.toFixed(0)}`,
+          `layout ${viewport.width}x${viewport.height}${viewport.insets === undefined ? '' : ` inset ${JSON.stringify(viewport.insets)}`} ${live ? 'live' : 'down'}: input ends y=${measured.inputBottom.toFixed(0)}, document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes ${[...new Set(measured.lanes)].join(',')}, air ${measured.airLanesFaders.toFixed(0)}/${measured.airFadersMessages.toFixed(0)}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, calls ${[...new Set(measured.callSizes)].join(',')} gaps ${measured.callColumnGap.toFixed(0)}/${measured.callRowGap.toFixed(0)}px y ${measured.callsTop.toFixed(0)}..${measured.callsBottom.toFixed(0)}, messages ${[...new Set(measured.saySizes)].join(',')} from y=${measured.saysTop.toFixed(0)}`,
         );
 
         expect(measured.documentScroll).toBeLessThanOrEqual(
@@ -465,6 +558,9 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.consoleScroll).toBeLessThanOrEqual(
           measured.consoleClient,
         );
+        // Nothing clipped: the clip on `.console__body` hides overflow from
+        // the two checks above (T068b review).
+        expect(measured.outsideViewport).toEqual([]);
         // code chip + 3 lanes + 6 corner calls + 2 built-ins + Send (round 6:
         // no CLEAR, no Save, no saved-message chips even though the live room
         // holds three; round 7 added the corner calls; round 7b removed
@@ -481,19 +577,24 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.minLaneArea).toBeGreaterThan(
           measured.maxOtherButton.area,
         );
-        // Three equal lanes, never taller than wide (within 1 px): round 6's
-        // squares, which round 7 lets give up height on a short portrait
-        // screen (square where there is room); air above and below the faders.
+        // Three equal lanes: squares (within 1 px) at the pinned viewports
+        // and in landscape (insets included), and never taller than wide
+        // where a short or inset portrait screen makes them give up height;
+        // air above and below the faders.
         expect(measured.lanes).toHaveLength(3);
         for (const size of measured.lanes) {
           const [width, height] = size.split('x').map(Number);
-          expect(height! - width!).toBeLessThanOrEqual(1);
+          if (viewport.pinned || !portrait) {
+            expect(Math.abs(width! - height!)).toBeLessThanOrEqual(1);
+          } else {
+            expect(height! - width!).toBeLessThanOrEqual(1);
+          }
           expect(size).toBe(measured.lanes[0]);
         }
-        expect(measured.airLanesFaders).toBeGreaterThanOrEqual(MIN_AIR_PX);
+        expect(measured.airLanesFaders).toBeGreaterThanOrEqual(minAir);
         if (portrait) {
           // In landscape the messages are a column of their own, beside.
-          expect(measured.airFadersMessages).toBeGreaterThanOrEqual(MIN_AIR_PX);
+          expect(measured.airFadersMessages).toBeGreaterThanOrEqual(minAir);
         }
         // Three faders with clear horizontal gaps; a finger-sized knob on a
         // track at least a finger wide and tall enough for four detents.
@@ -541,8 +642,9 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         // Round 7b (Maxx, 13:34): noticeably more room between the call
         // buttons (16 px, was 10) and between the ENTRY and EXIT rows (16 px,
         // was 8), and larger, pure white headings (15 px, was 12 px grey).
+        // A short portrait screen tightens the rows to 10 px (T068b).
         expect(measured.callColumnGap).toBeGreaterThanOrEqual(15);
-        expect(measured.callRowGap).toBeGreaterThanOrEqual(15);
+        expect(measured.callRowGap).toBeGreaterThanOrEqual(short ? 9 : 15);
         for (const phase of measured.phaseStyle) {
           expect(phase.color).toBe('rgb(255, 255, 255)');
           expect(phase.fontSize).toBeGreaterThanOrEqual(15);
@@ -577,7 +679,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
   /** Smallest QR edge a phone camera reads comfortably across a pit lane. */
   const MIN_QR_PX = 140;
 
-  for (const viewport of VIEWPORTS) {
+  for (const viewport of VIEWPORTS.filter((each) => each.pinned)) {
     it(`fits the driver setup screen (room, PIN, QR, URL, instructions) in ${viewport.name} (${viewport.width}x${viewport.height})`, async () => {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },

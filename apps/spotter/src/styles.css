@@ -256,32 +256,72 @@ button {
 }
 
 .console__body {
-  /* `--lane` is a lane button's width: the row's width (8 px side padding,
-     two 10 px gaps) split in three, capped so a tablet does not get dinner
-     plates. `--lane-h` is its height (round 7): square when the screen has
-     room, otherwise the lanes and the fader travel share what a portrait
-     screen leaves after everything else (416 px, see `.faders`) half and
-     half, never under 64 px. Since round 7b (one message row fewer) that
-     leaves the lanes square on 360×640 and 390×664 too. Round 7 also
-     cut the air from 20 px to 12 px to make room for the corner calls. */
+  /* The vertical budget (round 7, insets and short screens T068b):
+     - `--h` is the viewport height (dvh where supported, below), `--inset-v`
+       what the safe areas take from it (the header grows by the top inset;
+       the bottom padding is max(8px, bottom inset), so only the part over
+       8 px counts);
+     - `--fixed` is everything on a portrait screen except the lanes and the
+       fader travel (see `.faders` for the sum), `--room` what is left for
+       those two;
+     - `--lane` is a lane button's width: the row's width (the side padding,
+       two 10 px gaps) split in three, capped so a tablet does not get dinner
+       plates; `--lane-h` caps its height: square when there is room,
+       otherwise the lanes and the travel share `--room` half and half, the
+       travel never under 96 px and the lanes never under 64 px.
+     Round 7 cut the air from 20 px to 12 px for the corner calls. */
   --air: 12px;
-  --lane: min((100vw - 36px) / 3, 140px);
-  --lane-h: min(var(--lane), max(64px, (100vh - 416px) / 2));
+  --call-gap-v: 16px;
+  --phase-h: 18px;
+  --phase-gap: 4px;
+  --fixed: 416px;
+  --top-fixed: 128px;
+  --h: 100vh;
+  --inset-top: env(safe-area-inset-top, 0px);
+  --inset-v: calc(
+    var(--inset-top) + max(0px, env(safe-area-inset-bottom, 0px) - 8px)
+  );
+  --pad-x: calc(
+    max(8px, env(safe-area-inset-left, 0px)) +
+      max(8px, env(safe-area-inset-right, 0px))
+  );
+  --room: calc(var(--h) - var(--inset-v) - var(--fixed));
+  --lane: min((100vw - var(--pad-x) - 20px) / 3, 140px);
+  --lane-h: min(
+    var(--lane),
+    max(64px, min(var(--room) / 2, var(--room) - 96px))
+  );
   display: flex;
   flex-direction: column;
   gap: var(--air);
   min-height: 0;
   overflow: hidden;
-  /* viewport-fit=cover: keep the lanes clear of a notch in landscape. The
-     lanes take the width they get, so `--lane` may overestimate it there,
-     which only shortens the fader travel. */
+  /* viewport-fit=cover: keep the lanes clear of a notch in landscape. */
   padding: 8px max(8px, env(safe-area-inset-right))
     max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
 }
 
+/* A custom property is not re-validated, so the dvh value needs its own
+   guard rather than a second declaration. */
 @supports (height: 100dvh) {
   .console__body {
-    --lane-h: min(var(--lane), max(64px, (100dvh - 416px) / 2));
+    --h: 100dvh;
+  }
+}
+
+/* A short portrait screen (an SE in Safari with its toolbars is 553 px):
+   12 px of air, 16 px between the corner-call rows and an 18 px heading
+   would leave the lanes and the faders less than their floors (64 + 96 px),
+   so the spacing tightens — 8 px air, 10 px between the call rows, a 14 px
+   heading line 2 px over its buttons — which buys 34 px. */
+@media (orientation: portrait) and (max-height: 600px) {
+  .console__body {
+    --air: 8px;
+    --call-gap-v: 10px;
+    --phase-h: 14px;
+    --phase-gap: 2px;
+    --fixed: 382px;
+    --top-fixed: 124px;
   }
 }
 
@@ -308,7 +348,8 @@ button {
    one clears the lane, so there is no CLEAR button. Design round 7
    (2026-10-28): they keep the row's width but give up height on a short
    portrait screen (`--lane-h`), so they are squares only where there is
-   room — as in the round-7 mock. */
+   room — as in the round-7 mock. Square by `aspect-ratio`, so a lane
+   narrowed by side insets in landscape stays square too (T068b). */
 
 .lanes {
   display: flex;
@@ -326,7 +367,8 @@ button {
   min-width: 0;
   min-height: 64px;
   max-width: var(--lane);
-  height: var(--lane-h);
+  aspect-ratio: 1;
+  max-height: var(--lane-h);
   padding: 0;
   border: 2px solid var(--accent);
   border-radius: 18px;
@@ -356,15 +398,17 @@ button {
    `--track` is the travel, never under 96 px, and the smaller of two
    budgets (round 7):
    - the top part ends at ≤ 55 % of a portrait screen (the CSS aims at 54 %):
-     above the track sit the header (36), the body padding (8), the lane
-     height, the air (12), the panel's top (3) and half a knob (22); under it
-     half a knob, the label and the panel's bottom (47) — 128 px plus the
-     lane;
+     above the track sit the header (36 + the top inset), the body padding
+     (8), the lane height, the air (12), the panel's top (3) and half a knob
+     (22); under it half a knob, the label and the panel's bottom (47) —
+     `--top-fixed` 128 px plus the lane and the inset;
    - everything else fits under it: the air (12), the corner calls (two rows
      of an 18 px phase heading, 4 px and 44 px buttons, 16 px apart: 148),
      the air (12), the one row of built-in messages (44), the air (12), the
      input row (48) and the bottom padding (8) — 284 px more, 412 px in all,
-     plus 4 px of slack for rounding: 416 px plus the lane.
+     plus 4 px of slack for rounding: `--fixed` 416 px (382 / 124 px in the
+     short-screen spacing) plus the lane and the insets, i.e. `--room` minus
+     the lane.
    Round 7b: at 360×640 that is ≈ 110 px of travel, at 390×664 ≈ 113 px, the
    54 % budget binding in both (lanes square). */
 
@@ -372,25 +416,16 @@ button {
   --knob-h: 44px;
   --track: clamp(
     96px,
-    min(54vh - 128px - var(--lane-h), 100vh - 416px - var(--lane-h)),
+    min(
+      var(--h) * 0.54 - var(--top-fixed) - var(--inset-top) - var(--lane-h),
+      var(--room) - var(--lane-h)
+    ),
     200px
   );
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 18px;
   flex: 0 0 auto;
-}
-
-/* A custom property is not re-validated, so the dvh value needs its own
-   guard rather than a second declaration. */
-@supports (height: 100dvh) {
-  .faders {
-    --track: clamp(
-      96px,
-      min(54dvh - 128px - var(--lane-h), 100dvh - 416px - var(--lane-h)),
-      200px
-    );
-  }
 }
 
 /* The whole panel is the pointer target, so the bands the knob overhangs
@@ -558,22 +593,22 @@ button {
 .calls {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--call-gap-v);
   flex: 0 0 auto;
 }
 
 .calls__row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-rows: 18px 44px;
-  gap: 4px 16px;
+  grid-template-rows: var(--phase-h) 44px;
+  gap: var(--phase-gap) 16px;
 }
 
 .calls__phase {
   grid-column: 1 / -1;
   padding-left: 2px;
   font-size: 15px;
-  line-height: 18px;
+  line-height: var(--phase-h);
   font-weight: 800;
   letter-spacing: 0.08em;
   color: #fff;
@@ -740,24 +775,22 @@ button {
     align-items: stretch;
   }
 
-  /* The lanes fill the left half's row, but give way on a short screen so
-     the faders keep their 96 px of travel. The track takes the height left
-     under the header (36), the body padding (16), the lanes, the air (12 —
-     20 before round 7; the 144 below keeps the old figure as slack) and the
-     panel chrome (72); the lanes stay square here (`--lane-h` = `--lane`).
-     The right column holds the corner calls (148), the built-in messages (44)
-     and the input (48) with 12 px air: 264 px, inside the 308 px a 360 px
-     tall screen leaves. */
+  /* The lanes fill the left half's row (48 % of the width inside the side
+     padding, which grows with a notch's inset), but give way on a short
+     screen so the faders keep their 96 px of travel. The track takes the
+     height left under the header (36), the body padding (16), the safe-area
+     insets, the lanes, the air (12 — 20 before round 7; the 144 below keeps
+     the old figure as slack) and the panel chrome (72); the lanes stay square
+     here (`--lane-h` = `--lane`). The right column holds the corner calls
+     (148), the built-in messages (44) and the input (48) with 12 px air:
+     264 px, inside the 308 px a 360 px tall screen leaves. */
   .console__body {
-    --lane: min((48vw - 27.68px) / 3, 100vh - 240px, 140px);
+    --lane: min(
+      (0.48 * (100vw - var(--pad-x)) - 20px) / 3,
+      var(--h) - var(--inset-v) - 240px,
+      140px
+    );
     --lane-h: var(--lane);
-  }
-
-  @supports (height: 100dvh) {
-    .console__body {
-      --lane: min((48vw - 27.68px) / 3, 100dvh - 240px, 140px);
-      --lane-h: var(--lane);
-    }
   }
 
   .half--top {
@@ -769,13 +802,11 @@ button {
   }
 
   .faders {
-    --track: clamp(96px, 100vh - 144px - var(--lane), 200px);
-  }
-
-  @supports (height: 100dvh) {
-    .faders {
-      --track: clamp(96px, 100dvh - 144px - var(--lane), 200px);
-    }
+    --track: clamp(
+      96px,
+      var(--h) - var(--inset-v) - 144px - var(--lane),
+      200px
+    );
   }
 
   /* Driver setup: the QR on the left, room, PIN and instructions beside it. */
