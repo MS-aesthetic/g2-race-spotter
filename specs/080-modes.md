@@ -1,6 +1,6 @@
 # 080 — Session modes (Practice / Race)
 
-Status: DRAFT — scoped 2026-10-28, not scheduled; waiting on Maxx for the per-mode differences
+Status: READY — scoped and decided 2026-10-28; build after round 7 (T067/T068) integrates; Practice's extra button texts still open
 Depends on: 020, 040 (round 7 layout)
 Design reference: skills `spotter-ui`, `race-relay-protocol`
 
@@ -40,12 +40,11 @@ One consolidated task once round 7 is integrated: protocol (type, guard, fixture
 
 ## Decisions
 
-- 2026-10-28 (Maxx) Two modes, Practice and Race; differences TBD and "primarily … what buttons are shown on the mobile app".
+- 2026-10-28 (Maxx) Two modes, Practice and Race; differences "primarily … what buttons are shown on the mobile app".
+- 2026-10-28 (Maxx, answering the open questions) **Whole room** — the mode lives in room state (proposal 1, not the phone-only alternative). **Practice has no car faders and more text buttons**; Race is the round-7 console (lanes, faders, ENTRY/EXIT rows, built-in messages, free text). **Switching clears the glasses**: the mode change also clears lane, cars and message in the same reducer step (one `seq` bump, one broadcast), so nothing from the old mode lingers on the HUD. **Confirm on tap**: tapping the `P`/`R` chip shows a Yes/No confirm; no long-press.
 
 ## Open questions (for Maxx)
 
-- Room-level mode (proposal) or phone-only? Does a second spotter phone ever need to see the same mode?
-- What does each mode show? For example: Race hides the free-text box and some presets; Practice adds driving-line coaching calls.
-- Should switching mode clear the current lane call or message on the glasses, or leave them?
-- Should the glasses show which mode is on?
-- Is a confirm on switch wanted, or is a long-press better at the track?
+- Which extra text buttons does Practice get (the space the faders free up)? Until answered, Practice shows the Race buttons minus the faders, with the freed space given to the remaining controls.
+- Which mode does a new room start in? Proposal: Practice.
+- Should the glasses show which mode is on? (Not requested; default no.)
