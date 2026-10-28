@@ -141,6 +141,10 @@ describe('RaceRoom silent-peer reaper (T050)', () => {
       }
       expect(alarm).not.toBeNull();
       expect(alarm as number).toBeGreaterThan(Date.now() + 60 * 60 * 1_000);
+      // ...and the relay did reap it (the close frame went out with this).
+      expect(worker.output()).toContain(
+        '{"ev":"drop","reason":"silent_peer","role":"driver"}',
+      );
     } finally {
       spotter.terminate();
       lurker.terminate();

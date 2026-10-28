@@ -216,7 +216,8 @@ export class RoomClient {
     // cannot leak state into the new session even though they are not
     // explicitly removed.
     //
-    // It must also have heard from the relay within two ping periods: after
+    // It must also have heard from the relay within one ping period of the
+    // silence limit (SOCKET_SILENT_MS - PING_INTERVAL_MS, 4 s): after
     // a phone lock or app switch the timers were frozen, so a socket can look
     // replayed while it is really half-open. A foreground `connect()` then
     // replaces it at once instead of waiting for the silence watchdog.
@@ -225,7 +226,7 @@ export class RoomClient {
       this.socket !== undefined &&
       this.replayed &&
       this.lastFrameAt !== undefined &&
-      this.now() - this.lastFrameAt <= 2 * PING_INTERVAL_MS
+      this.now() - this.lastFrameAt <= SOCKET_SILENT_MS - PING_INTERVAL_MS
     ) {
       return;
     }

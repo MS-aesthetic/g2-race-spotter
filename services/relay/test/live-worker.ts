@@ -21,6 +21,8 @@ const wranglerEntrypoint = join(
 
 export interface RunningWorker {
   readonly origin: string;
+  /** Everything wrangler printed so far (console.log from the worker included). */
+  output(): string;
   stop(options?: { readonly removePersistence?: boolean }): Promise<void>;
 }
 
@@ -112,6 +114,7 @@ export async function startWorker(
       if ((await fetch(`${origin}/health`)).ok) {
         return {
           origin,
+          output: () => output.join(''),
           async stop(options = {}): Promise<void> {
             await stopProcess(worker);
             await removeTemporaryDirectory(assetDirectory);

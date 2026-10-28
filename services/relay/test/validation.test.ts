@@ -39,6 +39,28 @@ async function join(
   return socket;
 }
 
+/** Waits (briefly) for wrangler to print a matching structured drop line. */
+async function expectDropLine(
+  worker: RunningWorker,
+  matches: (line: Record<string, unknown>) => boolean,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    for (const raw of worker.output().split('\n')) {
+      const start = raw.indexOf('{"ev":"drop"');
+      if (start === -1) continue;
+      try {
+        const line = JSON.parse(raw.slice(start)) as Record<string, unknown>;
+        if (matches(line)) return line;
+      } catch {
+        // partial line; keep polling
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('no matching drop line in the worker output');
+}
+
 async function expectAlive(socket: WebSocket, ts: number): Promise<void> {
   const next = nextMessage(socket);
   socket.send(JSON.stringify({ t: 'ping', ts }));
@@ -115,10 +137,17 @@ describe('RaceRoom frame validation (T050, 020 AC-9)', () => {
     await expectAlive(spotter, 5);
   }, 30_000);
 
-  it('ignores an unknown t silently', async () => {
-    spotter.send(JSON.stringify({ t: 'warp', speed: 9 }));
+  it('ignores an unknown t silently and logs only a short prefix of it', async () => {
+    const longT = `warp-${'x'.repeat(200)}`;
+    spotter.send(JSON.stringify({ t: longT, secret: 'BODY-TEXT' }));
     await expectAlive(spotter, 6);
     await expectAlive(driver, 7);
+    const line = await expectDropLine(
+      worker,
+      (l) => l.reason === 'unknown_t' && l.role === 'spotter',
+    );
+    expect(line.t).toBe(longT.slice(0, 16));
+    expect(worker.output()).not.toContain('BODY-TEXT');
   }, 30_000);
 
   it('ignores wrong-role frames without changing the room', async () => {
@@ -127,6 +156,15 @@ describe('RaceRoom frame validation (T050, 020 AC-9)', () => {
     // No state broadcast came before the pongs.
     await expectAlive(spotter, 8);
     await expectAlive(driver, 9);
+    // Counted by the relay's own role gate, not just a reducer no-op.
+    await expectDropLine(
+      worker,
+      (l) => l.reason === 'wrong_role' && l.role === 'driver' && l.t === 'lane',
+    );
+    await expectDropLine(
+      worker,
+      (l) => l.reason === 'wrong_role' && l.role === 'spotter' && l.t === 'ack',
+    );
   }, 30_000);
 
   it('still applies valid frames after bad ones', async () => {
@@ -141,6 +179,11 @@ describe('RaceRoom frame validation (T050, 020 AC-9)', () => {
 
   it("treats name='' in the URL as no name", async () => {
     const named = await join(`${room}?role=driver&name=`, 'driver');
+    named.terminate();
+  }, 30_000);
+
+  it("treats name='' in hello as no name", async () => {
+    const named = await join(`${room}?role=driver`, 'driver', '');
     named.terminate();
   }, 30_000);
 });

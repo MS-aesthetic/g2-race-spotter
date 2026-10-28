@@ -54,7 +54,7 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 ## Done this cycle
 
 - [x] T065 (coordinator, 2026-10-28) `ef8d476` — `RoomClient` drops a socket silent for `SOCKET_SILENT_MS` (6 s) or not open within `CONNECT_TIMEOUT_MS` (10 s) and reconnects; same-URL `connect()` replaces a socket quiet for > 2 ping periods; spotter reconnects on `visibilitychange`/`pageshow`/`online`. Half-open LTE sockets previously never recovered until the OS gave up.
-- [x] T050 (coordinator, 2026-10-28) `6cf87b5` — relay silent-peer reaper (020 AC-7) + joined-socket validation (020 AC-9). 445/445 tests.
+- [x] T050 (coordinator, 2026-10-28) `6cf87b5` — relay silent-peer reaper (020 AC-7) + joined-socket validation (020 AC-9). 449/449 tests after the review nit pass.
 - [x] T063 + T064 design round 6 (approved from mocks first): 500 ms ×8 lane blink, bitmap message in 288×96 top strips blinking 1 s for 5 s, L-shaped corner bars + centre-out middle bar in 288×144 bottom strips; spotter: no CLEAR, square lanes, 2×2 messages, no Save/chips. `6eab30d`, `2ede204`. Relay redeployed (verified live 2026-10-28).
 - [x] T060 + T061 design round 5 (corner arcs, vertical middle bar, ◀▲▶ + blink, faders, renamed presets). Relay redeployed.
 - [x] T058 hosted glasses app + QR driver setup; T059 solid fills. `npm run deploy` is the one-command deploy.

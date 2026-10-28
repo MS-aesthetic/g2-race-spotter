@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import ackInvalid from './fixtures/ack.invalid.json';
 import ackValid from './fixtures/ack.valid.json';
@@ -24,6 +24,8 @@ import stateInvalid from './fixtures/state.invalid.json';
 import stateValid from './fixtures/state.valid.json';
 
 import {
+  CLIENT_MESSAGE_TYPES,
+  createInitialState,
   isClientMessage,
   isErrorMessage,
   isHudEmpty,
@@ -36,7 +38,11 @@ import {
   MSG_MAX_CHARS,
   PRESETS_MAX,
   PROTOCOL_VERSION,
+  reduce,
   ROOM_TTL_MS,
+  senderRole,
+  type ClientMessage,
+  type ClientMessageType,
 } from '../src/index';
 
 type FixtureExpectation = {
@@ -214,5 +220,48 @@ describe('protocol v2 guards', () => {
         msg: { id: 'm', text: 'x', ts: 1, ackedAt: 2 },
       }),
     ).toBe(false);
+  });
+});
+
+describe('client frame type list (T050 drift guard)', () => {
+  it('CLIENT_MESSAGE_TYPES is exactly ClientMessage["t"]', () => {
+    expectTypeOf<ClientMessageType>().toEqualTypeOf<ClientMessage['t']>();
+    expect(new Set(CLIENT_MESSAGE_TYPES).size).toBe(
+      CLIENT_MESSAGE_TYPES.length,
+    );
+  });
+
+  it('senderRole matches the reducer: wrong-role frames are no-ops', () => {
+    const base = createInitialState();
+    const withMsg = reduce(
+      base,
+      { t: 'msg', text: 'HI', role: 'spotter' },
+      { now: 1, newId: () => 'm1' },
+    );
+    const frames: Record<
+      Exclude<ClientMessageType, 'hello' | 'ping'>,
+      ClientMessage
+    > = {
+      lane: { t: 'lane', lane: 'top' },
+      cars: { t: 'cars', cars: [1, 2, 3] },
+      msg: { t: 'msg', text: 'X' },
+      clear: { t: 'clear' },
+      preset: { t: 'preset', add: 'X' },
+      ack: { t: 'ack', msgId: 'm1' },
+    };
+    for (const [t, frame] of Object.entries(frames)) {
+      const allowed = senderRole(t as ClientMessageType);
+      expect(allowed).not.toBeNull();
+      const wrong = allowed === 'spotter' ? 'driver' : 'spotter';
+      const ctx = { now: 2, newId: () => 'm2' };
+      expect(reduce(withMsg, { ...frame, role: wrong } as never, ctx)).toBe(
+        withMsg,
+      );
+      expect(
+        reduce(withMsg, { ...frame, role: allowed } as never, ctx),
+      ).not.toBe(withMsg);
+    }
+    expect(senderRole('hello')).toBeNull();
+    expect(senderRole('ping')).toBeNull();
   });
 });

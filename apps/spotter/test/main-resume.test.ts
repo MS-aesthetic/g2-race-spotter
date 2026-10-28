@@ -4,9 +4,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PING_INTERVAL_MS } from '@g2-race-spotter/protocol';
 
 /**
- * Back from a locked phone (timers frozen, socket possibly half-open), the
- * page reconnects at once on `visibilitychange` instead of waiting out the
- * silence watchdog; a socket that is still fresh is left alone.
+ * Hidden: the page drops its socket (so a throttled tab cannot flap the
+ * driver's `S`). Visible again, or back online, or restored from bfcache: it
+ * reconnects at once; a socket that is still fresh is left alone.
  */
 
 type Listener = (event: unknown) => void;
@@ -88,19 +88,35 @@ describe('foreground resume (main.ts, jsdom)', () => {
     vi.useRealTimers();
   });
 
-  it('leaves a fresh socket alone when the page becomes visible', () => {
-    setVisibility('hidden');
-    setVisibility('visible');
+  it('leaves a fresh socket alone on online and on a non-bfcache pageshow', () => {
+    window.dispatchEvent(new Event('online'));
+    const pageshow = new Event('pageshow') as Event & { persisted?: boolean };
+    Object.defineProperty(pageshow, 'persisted', { value: false });
+    window.dispatchEvent(pageshow);
     expect(FakeSocket.sockets).toHaveLength(1);
   });
 
-  it('reconnects at once when the page returns after the socket went quiet', () => {
-    setVisibility('hidden');
-    // Locked: the clock moves, timers do not run, nothing arrives.
+  it('reconnects on online once the socket has gone quiet', () => {
+    // Timers frozen (dead zone / throttled): the clock moves, nothing arrives.
     vi.setSystemTime(Date.now() + 2 * PING_INTERVAL_MS + 1_000);
-    setVisibility('visible');
-
+    window.dispatchEvent(new Event('online'));
     expect(FakeSocket.sockets).toHaveLength(2);
-    expect(FakeSocket.sockets[1]!.url).toBe(FakeSocket.sockets[0]!.url);
+    const socket = FakeSocket.sockets[1]!;
+    socket.emit('open');
+    socket.receive(roomState());
+  });
+
+  it('drops the socket while hidden and reconnects at once when visible', () => {
+    const before = FakeSocket.sockets.length;
+    const current = FakeSocket.sockets[before - 1]!;
+    const close = vi.spyOn(current, 'close');
+
+    setVisibility('hidden');
+    expect(close).toHaveBeenCalled();
+    expect(FakeSocket.sockets).toHaveLength(before);
+
+    setVisibility('visible');
+    expect(FakeSocket.sockets).toHaveLength(before + 1);
+    expect(FakeSocket.sockets[before]!.url).toBe(current.url);
   });
 });

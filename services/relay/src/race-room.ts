@@ -452,7 +452,8 @@ export class RaceRoom extends DurableObject<Env> {
     if (!isClientMessageType(t)) {
       // Unknown `t`: ignore and count — a newer client may send frames this
       // relay does not know yet.
-      logDrop('unknown_t', attachment.role, t);
+      // Client-chosen text: log a short prefix only, never a body fragment.
+      logDrop('unknown_t', attachment.role, t.slice(0, 16));
       return;
     }
 

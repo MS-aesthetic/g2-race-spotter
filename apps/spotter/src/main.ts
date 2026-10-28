@@ -534,16 +534,37 @@ window.setInterval(() => update({}), PING_INTERVAL_MS);
  * Back from a locked screen, another app, or a dead zone: reconnect at once
  * instead of waiting out a backoff or the silence watchdog (timers were
  * frozen while hidden). `RoomClient.connect` is a no-op on a socket that has
- * heard from the relay in the last two ping periods, so a healthy session is
- * left alone.
+ * heard from the relay recently, so a healthy session is left alone.
  */
 function resumeLink(): void {
   if (model.screen === 'console' && document.visibilityState === 'visible') {
     client.connect(roomUrl(origin, model.form));
   }
 }
-document.addEventListener('visibilitychange', resumeLink);
-window.addEventListener('pageshow', resumeLink);
+
+/**
+ * Hidden: drop the socket. A hidden tab's timers are throttled (Android:
+ * about once a minute after 5 min), so pings stop, the relay reaps the
+ * spotter and the throttled reconnect would rejoin it for a few seconds every
+ * minute — the driver's `S` would flap. Going offline while hidden keeps
+ * `S` honest; `resumeLink` reconnects on return.
+ */
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'hidden') {
+    if (model.screen === 'console') {
+      client.disconnect();
+    }
+    return;
+  }
+  resumeLink();
+}
+document.addEventListener('visibilitychange', onVisibilityChange);
+// Only a back/forward-cache restore: a normal load already connected.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) {
+    resumeLink();
+  }
+});
 window.addEventListener('online', resumeLink);
 
 if ('serviceWorker' in navigator) {
