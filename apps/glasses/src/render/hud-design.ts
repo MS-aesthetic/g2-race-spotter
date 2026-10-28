@@ -33,10 +33,11 @@
  * centered, like 3x the current size … blink every second for 5 seconds"): a
  * 5×7 bitmap font (`font.ts`) drawn ×6 (30×42-px glyphs, 6-px gaps), up to
  * two lines 8 px apart, each centred on x 288; a single line is centred
- * vertically in the band. Split on `\n` first (`"GO LOW\nEXIT"`: the action,
- * then the corner phase), then word-wrapped to the 288 px between the Ls'
+ * vertically in the band. A message's own line breaks are its lines
+ * (`"GO LOW\nEXIT"`: the action, then the corner phase), each cut on its own;
+ * a message without one is word-wrapped to the 288 px between the Ls'
  * bounding boxes less 8 px clearance each side (8 glyphs); overflow is cut
- * with a `.`. `msgVisible: false` (the hidden phases of `msg-blink.ts`) leaves
+ * with a `.` (`font.ts` `wrapText`). `msgVisible: false` (the hidden phases of `msg-blink.ts`) leaves
  * the band dark.
  *
  * Bottom strip — "I want the curved things like it was before … extend the

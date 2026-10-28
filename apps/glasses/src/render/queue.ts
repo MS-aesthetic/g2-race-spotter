@@ -81,10 +81,12 @@ function isBlank(state: HudState): boolean {
 
 /**
  * The message as the text-mode `msg` container shows it: one line, each line
- * break (`"GO LOW\nEXIT"`, design round 7) a space.
+ * break (`\r\n`, `\r`, `\n` — `"GO LOW\nEXIT"`, design round 7) and any
+ * other whitespace a space, as the image-mode line splitting in `font.ts`
+ * treats them.
  */
 export function textModeMessage(message: string): string {
-  return message.replace(/\r?\n/g, ' ');
+  return message.replace(/\r\n|\s/g, ' ');
 }
 
 /** The message pixels a job puts in the bottom strip: `''` when none/hidden. */

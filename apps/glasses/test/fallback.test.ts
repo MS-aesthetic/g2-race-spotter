@@ -118,7 +118,7 @@ describe('image send failure fallback', () => {
 
     queue.push({ kind: 'status', text: 'LINK OK' });
     await queue.whenIdle();
-    // Image mode draws the message into the top strip; the text page it falls
+    // Image mode draws the message into the bottom strip; the text page it falls
     // back to carries it in its `msg` container.
     queue.push({
       kind: 'hud',

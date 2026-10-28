@@ -1092,6 +1092,10 @@ describe('HUD design: message (round 7: bottom strip, two lines)', () => {
     expect(lines('PITS')).toEqual(['PITS']);
     // Lower case is drawn upper case; '\n' never becomes a '?'.
     expect(lines('go low\nexit')).toEqual(['GO LOW', 'EXIT']);
+    // The message's own line breaks are the layout: each line cut on its own,
+    // never word-wrapped into the next (hud-qa, T067).
+    expect(lines('PULLING AWAY\nEXIT')).toEqual(['PULLING.', 'EXIT']);
+    expect(lines('LEADERS BEHIND\nENTRY')).toEqual(['LEADERS.', 'ENTRY']);
   });
 
   it('puts two lines at rows 6..47 and 56..97 (canvas y 150..241), each centred on x 288', () => {

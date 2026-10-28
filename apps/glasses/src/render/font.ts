@@ -6,8 +6,8 @@
  * Upper case, digits, space and `.,-!?/'`. Lower case is drawn upper case;
  * anything else is drawn as `?` — the glasses never show a missing glyph as a
  * gap. Since design round 7 (2026-10-28) a text may also be set as a block of
- * up to `maxLines` lines ({@link wrapText}): split on `\n` first, then
- * word-wrapped to the width it is given. Glyph rows are strings, `#` lit and `.` dark, so the table reads as the
+ * up to `maxLines` lines ({@link wrapText}): its own line breaks if it has
+ * any, otherwise word-wrapped to the width it is given. Glyph rows are strings, `#` lit and `.` dark, so the table reads as the
  * letters it draws. Nothing here knows where the text goes on the HUD: that is
  * `hud-design.ts`.
  */
@@ -99,7 +99,8 @@ export function measureText(length: number, style: TextStyle): number {
 /**
  * `text` normalised and cut to fit `maxWidth`: if it is too wide, as many
  * glyphs as fit are kept and the last of them becomes `.` so the driver sees
- * that something was cut.
+ * that something was cut. A space left in front of the `.` is dropped
+ * (`"SLOW DOWN, CAR."`, not `"SLOW DOWN, CAR ."`).
  */
 export function fitText(
   text: string,
@@ -116,7 +117,12 @@ export function fitText(
     fits += 1;
   }
 
-  return fits === 0 ? '' : glyphs.slice(0, fits - 1).join('') + TRUNCATION_CHAR;
+  return fits === 0
+    ? ''
+    : glyphs
+        .slice(0, fits - 1)
+        .join('')
+        .trimEnd() + TRUNCATION_CHAR;
 }
 
 export interface TextPlacement extends TextStyle {
@@ -173,20 +179,39 @@ export function drawText(
   return layout;
 }
 
+/** Splits on every line break (`\r\n`, `\r`, `\n`); other whitespace → ' '. */
+function splitLines(text: string): string[] {
+  return text.split(/\r\n|\r|\n/).map((line) => line.replace(/\s/g, ' '));
+}
+
+/** A line normalised for the font, its runs of spaces collapsed. */
+function normaliseLine(line: string): string {
+  return normaliseText(line)
+    .split(' ')
+    .filter((word) => word !== '')
+    .join(' ');
+}
+
 /**
  * `text` as at most `maxLines` lines that each fit `maxWidth` (Maxx, design
  * round 7, 2026-10-28: the phone sends texts like `"GO LOW\nEXIT"` — the
  * action, then the corner phase):
  *
- * 1. split on `\n` (a `\r\n` counts as one break) BEFORE normalising, because
+ * 1. split on every line break (`\r\n`, `\r`, `\n`) and turn any other
+ *    whitespace (a tab, …) into a space BEFORE normalising, because
  *    {@link normaliseText} turns any character the font lacks — `\n`
- *    included — into `?`;
- * 2. normalise each line, then word-wrap it greedily on spaces (runs of
- *    spaces collapse, blank lines are dropped);
- * 3. if that makes more than `maxLines` lines, everything from line
- *    `maxLines` on is joined with spaces into the last line;
- * 4. every line still too wide — a single word longer than the width, or the
- *    joined overflow — is cut by {@link fitText}, ending in `.`.
+ *    included — into `?`; then normalise each line, collapse runs of spaces
+ *    and drop blank lines;
+ * 2. two or more lines left: the line breaks ARE the layout — line 1 stays
+ *    line 1, line 2 stays line 2, each cut on its own by {@link fitText}
+ *    (`"PULLING AWAY\nEXIT"` → `PULLING.` / `EXIT`); nothing is word-wrapped
+ *    across them. Lines past `maxLines` join the last line with spaces
+ *    before it is cut (`"A\nB\nC"` → `A` / `B C`);
+ * 3. one line left (no line break in the message): word-wrap it greedily on
+ *    spaces into at most `maxLines` lines — everything that does not fit the
+ *    earlier lines joins the last one — and cut every line still too wide (a
+ *    single word longer than the width, the joined overflow) by
+ *    {@link fitText}, ending in `.`.
  *
  * `[]` for a text with nothing to draw.
  */
@@ -196,35 +221,35 @@ export function wrapText(
   style: TextStyle,
   maxLines: number,
 ): string[] {
-  const fits = (line: string): boolean =>
-    measureText([...line].length, style) <= maxWidth;
-  const lines: string[] = [];
+  const limit = Math.max(1, Math.floor(maxLines));
+  const keep = (lines: readonly string[]): string[] =>
+    (lines.length > limit
+      ? [...lines.slice(0, limit - 1), lines.slice(limit - 1).join(' ')]
+      : [...lines]
+    ).map((line) => fitText(line, maxWidth, style));
 
-  for (const raw of text.split(/\r?\n/)) {
-    let current = '';
-    for (const word of normaliseText(raw).split(' ')) {
-      if (word === '') {
-        continue;
-      }
-      const candidate = current === '' ? word : `${current} ${word}`;
-      if (current === '' || fits(candidate)) {
-        current = candidate;
-      } else {
-        lines.push(current);
-        current = word;
-      }
-    }
-    if (current !== '') {
-      lines.push(current);
-    }
+  const explicit = splitLines(text)
+    .map(normaliseLine)
+    .filter((line) => line !== '');
+  if (explicit.length !== 1) {
+    return keep(explicit);
   }
 
-  const limit = Math.max(1, Math.floor(maxLines));
-  const kept =
-    lines.length > limit
-      ? [...lines.slice(0, limit - 1), lines.slice(limit - 1).join(' ')]
-      : lines;
-  return kept.map((line) => fitText(line, maxWidth, style));
+  const fits = (line: string): boolean =>
+    measureText([...line].length, style) <= maxWidth;
+  const wrapped: string[] = [];
+  let current = '';
+  for (const word of (explicit[0] as string).split(' ')) {
+    const candidate = current === '' ? word : `${current} ${word}`;
+    if (current === '' || fits(candidate)) {
+      current = candidate;
+    } else {
+      wrapped.push(current);
+      current = word;
+    }
+  }
+  wrapped.push(current);
+  return keep(wrapped);
 }
 
 export interface TextBlockPlacement extends TextPlacement {

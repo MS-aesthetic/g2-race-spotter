@@ -61,7 +61,7 @@ Pixel assertions (on the glasses screenshot; grey = max(R,G,B) of a pixel, lit =
 - `lane:"top"` → lit pixels in the symbol region form a shape wider at the bottom row than at the top row; `bot` → the reverse; `mid` → lit bounding box roughly square (aspect 0.8–1.2); `null` → < 1 % of symbol-region pixels lit.
 - `gap:g` → lit width of the fill row (y ≈ 132) inside the bar ≈ `(288-6) * g/100` ± 6 px; `g ≥ 90` → the bar outline rows are brighter than the fill rows.
 - `linkOk:false` (after `link-loss` / relay kill) → mean grey of the HUD region ≤ 55 % of the previous checkpoint's, and the status strip region (y 258–286) contains lit pixels.
-- `msg` set → lit pixels in the message region (y 160–255); after ack → none.
+- `msg` set → lit pixels in the message region; after ack → none. Image mode (design round 7, `g2-hud-display`): the band between the corner car bars, canvas x 147–428, y 150–241 — clear of the corner Ls and above the middle bar (canvas y 256–283), so no car-bar pixel falls inside it; a hidden blink phase (1 s / 3 s) is also none. Text mode: the `msg` text container (x 144–431, y 52–99).
 - Text mode: the same checks, but symbol/bar assertions reduce to "lit pixels present in the expected rows" (glyph shapes are font-dependent).
 
 Simulator caveats that remain true: no on-device image-size enforcement, no LZ4, faster than hardware, list-scroll focus differs, error handling under abnormal conditions differs, no real background lifecycle. Everything under "Hardware runs" stays mandatory.

@@ -50,7 +50,7 @@ a local relay. Image mode is the default everywhere, simulator included.
 | File | Purpose |
 | --- | --- |
 | `src/render/primitives.ts` | Generic drawing ops on a `Uint8Array` canvas (`fillRect`, `strokeRect`, `fillTriangle`, `strokeTriangle`, ring sectors, `Region` + `fillRegion`/`strokeRegion`, `blitBitmap`, `dim`, …). Knows nothing about racing. |
-| `src/render/font.ts` | The 5×7 bitmap font (×6 on the HUD) and text layout: `fitText` (cut with `.`), `wrapText` (split on `\n`, word-wrap, ≤ N lines), `layoutTextBlock` / `drawTextBlock`. Knows nothing about where text goes. |
+| `src/render/font.ts` | The 5×7 bitmap font (×6 on the HUD) and text layout: `fitText` (cut with `.`), `wrapText` (the message's own line breaks as its lines, else word-wrap; ≤ N lines), `layoutTextBlock` / `drawTextBlock`. Knows nothing about where text goes. |
 | `src/render/hud-design.ts` | **The look.** `DESIGN` holds every position/level of the two HUD strips — round 7: ◀ ▲ ▶ lane icons 63×64 along the top (576×96), the corner Ls, the middle bar and the two-line message between them along the bottom (576×144); `drawLanes`/`drawCars`/`drawMessage` compose the primitives. Edit this file (and re-record the goldens) to change the HUD. |
 | `src/render/draw-hud.ts` | `drawTopStrip(lane, {linkOk})` → `Uint8Array(576*96)`; `drawBottomStrip(cars, {linkOk, message, msgVisible})` → `Uint8Array(576*144)` (= `composeBottomStrip(drawCarsLayer(cars), …)`), halved when the link is stale; `splitStrip` cuts a strip at x 288 into its two image containers (288×96 / 288×144). |
 | `src/render/gray4.ts` | Packs one image container to gray4 bytes: 288×96 → 13 824, 288×144 → 20 736. `NIBBLE_ORDER` is the one thing to flip if hardware mirrors the image. |

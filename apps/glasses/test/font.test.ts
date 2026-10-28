@@ -140,9 +140,12 @@ describe('5x7 bitmap font', () => {
     // 16 glyphs (570 px) fit the 576-px strip; 17 do not.
     expect(fitText('ABCDEFGHIJKLMNOP', 576, STYLE)).toBe('ABCDEFGHIJKLMNOP');
     expect(fitText('ABCDEFGHIJKLMNOPQ', 576, STYLE)).toBe('ABCDEFGHIJKLMNO.');
+    // A space left in front of the `.` is dropped.
     expect(fitText('slow down, car inside!', 576, STYLE)).toBe(
-      'SLOW DOWN, CAR .',
+      'SLOW DOWN, CAR.',
     );
+    expect(fitText('PULLING AWAY', 288, STYLE)).toBe('PULLING.');
+    expect(fitText('GO TO PIT NOW', 288, STYLE)).toBe('GO TO P.');
     expect(fitText('AB', 29, STYLE)).toBe('');
     expect(fitText('AB', 30, STYLE)).toBe('.');
 
@@ -178,10 +181,15 @@ describe('text blocks (round 7: up to two lines)', () => {
     maxLines: 2,
   };
 
-  it('splits on \\n before normalising, so a line break never draws a ?', () => {
+  it('splits on \\r\\n, \\r and \\n before normalising, so a line break never draws a ?', () => {
     expect(normaliseText('A\nB')).toBe('A?B');
     expect(lines('GO LOW\nEXIT')).toEqual(['GO LOW', 'EXIT']);
     expect(lines('go top\r\nentry')).toEqual(['GO TOP', 'ENTRY']);
+    expect(lines('A\rB')).toEqual(['A', 'B']);
+    // Any other whitespace is a space, never a '?'.
+    expect(normaliseText('GO\tLOW')).toBe('GO?LOW');
+    expect(lines('GO\tLOW')).toEqual(['GO LOW']);
+    expect(lines('GO\t\tLOW\u00a0NOW')).toEqual(['GO LOW', 'NOW']);
     // Blank lines and runs of spaces disappear.
     expect(lines('\n  PITS  \n')).toEqual(['PITS']);
     expect(lines('')).toEqual([]);
@@ -194,8 +202,17 @@ describe('text blocks (round 7: up to two lines)', () => {
     expect(lines('PULLING AWAY')).toEqual(['PULLING', 'AWAY']);
     expect(lines('GO TO P2')).toEqual(['GO TO P2']);
     expect(lines('PITS')).toEqual(['PITS']);
-    // An explicit line still wraps if it is too wide on its own.
-    expect(lines('BOX\nTHIS LAP NOW', 3)).toEqual(['BOX', 'THIS LAP', 'NOW']);
+    // A message whose only line break leaves one line is wrapped too.
+    expect(lines('\nCATCHING UP\n')).toEqual(['CATCHING', 'UP']);
+  });
+
+  it("keeps the message's own two lines as THE two lines, each cut on its own", () => {
+    // Never word-wrapped across: line 2 is never pushed out by line 1.
+    expect(lines('PULLING AWAY\nEXIT')).toEqual(['PULLING.', 'EXIT']);
+    expect(lines('LEADERS BEHIND\nENTRY')).toEqual(['LEADERS.', 'ENTRY']);
+    expect(lines('GO\nCATCHING UP')).toEqual(['GO', 'CATCHIN.']);
+    // Even with room for more lines, explicit lines are not wrapped.
+    expect(lines('BOX\nTHIS LAP NOW', 3)).toEqual(['BOX', 'THIS LA.']);
   });
 
   it('keeps at most maxLines: the rest joins the last line, cut with a .', () => {

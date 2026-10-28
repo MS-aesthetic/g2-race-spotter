@@ -646,6 +646,8 @@ describe('render queue, image mode: one job per image container (050 AC-4)', () 
     });
     expect(textModeMessage('GO LOW\nEXIT')).toBe('GO LOW EXIT');
     expect(textModeMessage('A\r\nB\nC')).toBe('A B C');
+    expect(textModeMessage('A\rB')).toBe('A B');
+    expect(textModeMessage('GO\tLOW')).toBe('GO LOW');
 
     queue.push({
       ...hud({ lane: null, cars: [0, 0, 0] }),
