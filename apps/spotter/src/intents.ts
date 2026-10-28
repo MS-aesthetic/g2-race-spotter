@@ -24,17 +24,35 @@ export const CAR_ROWS: readonly {
 export const CAR_DETENTS: readonly CarLevel[] = [0, 1, 2, 3];
 
 /**
- * The built-in messages (Maxx, 2026-10-01 design round 6): a 2×2 grid read
- * left to right, top to bottom — CATCHING UP / PULLING AWAY on top, LEADERS
- * BEHIND / EXIT under them (PULL OFF renamed EXIT, SPIN removed). Client
+ * The built-in messages: a 2×2 grid read left to right, top to bottom —
+ * CATCHING UP / PULLING AWAY on top, LEADERS BEHIND / PITS under them (Maxx,
+ * 2026-10-01 design round 6: PULL OFF renamed EXIT, SPIN removed; 2026-10-28
+ * design round 7: EXIT renamed PITS, since EXIT is now a corner phase). Client
  * constants; one tap sends one as `msg`.
  */
 export const BUILTIN_MESSAGES: readonly string[] = [
   'CATCHING UP',
   'PULLING AWAY',
   'LEADERS BEHIND',
-  'EXIT',
+  'PITS',
 ];
+
+/**
+ * The corner calls (Maxx, 2026-10-28 design round 7): a row per phase, ENTRY
+ * then EXIT, each `[GO LOW] [GO MID] [GO TOP]` left to right — LOW on the
+ * left, TOP on the right, like the lanes' BOTTOM · MIDDLE · TOP.
+ */
+export const CALL_PHASES: readonly string[] = ['ENTRY', 'EXIT'];
+export const CALL_ACTIONS: readonly string[] = ['GO LOW', 'GO MID', 'GO TOP'];
+
+/**
+ * The one `msg` text a corner call sends: the action on line 1, the phase on
+ * line 2 (`'GO LOW\nEXIT'`), which the glasses draw as two lines. These are
+ * the only messages the spotter sends with a line break in them.
+ */
+export function callMessage(action: string, phase: string): string {
+  return `${action}\n${phase}`;
+}
 
 /**
  * The lane a tap on `tapped` calls, given the lane the console shows lit
@@ -171,6 +189,8 @@ export function rebaseCars(
 /**
  * Trim and cap to `MSG_MAX_CHARS`, then re-trim: slicing an 80-char boundary
  * can leave a trailing space, and `isSetMsg` rejects untrimmed text outright.
+ * Only the ends are trimmed: an inner `'\n'` (a corner call's two lines,
+ * design round 7) passes through untouched and counts as one character.
  */
 export function normaliseMessage(text: string): string {
   return text.trim().slice(0, MSG_MAX_CHARS).trim();

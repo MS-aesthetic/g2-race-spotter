@@ -297,7 +297,7 @@ describe('AC-2 vertical car faders (design round 5)', () => {
       [...root.querySelector('.half--bottom')!.children].map(
         (el) => el.className,
       ),
-    ).toEqual(['says', 'msg']);
+    ).toEqual(['calls', 'says', 'msg']);
   });
 
   it('puts each knob on its detent from the room state', () => {
@@ -519,12 +519,16 @@ describe('AC-4 ack icon', () => {
   });
 });
 
-describe('messages (design round 6)', () => {
+describe('messages (design rounds 6 and 7)', () => {
   it('offers four built-in messages, 2×2 in reading order, all one style', () => {
     render(consoleModel());
 
     expect(
-      [...root.querySelectorAll('[data-act="say"]')].map((el) => [
+      [
+        ...root.querySelectorAll(
+          '[data-testid="builtin-messages"] [data-act="say"]',
+        ),
+      ].map((el) => [
         el.textContent,
         el.getAttribute('data-arg'),
         el.className,
@@ -533,13 +537,72 @@ describe('messages (design round 6)', () => {
       ['CATCHING UP', 'CATCHING UP', 'say'],
       ['PULLING AWAY', 'PULLING AWAY', 'say'],
       ['LEADERS BEHIND', 'LEADERS BEHIND', 'say'],
-      ['EXIT', 'EXIT', 'say'],
+      ['PITS', 'PITS', 'say'],
     ]);
     // SPIN and PULL OFF are gone, and nothing wears the alert colour.
     expect(root.querySelector('.say--alert')).toBeNull();
     expect(
       root.querySelector('[data-testid="builtin-messages"]')!.children,
     ).toHaveLength(4);
+  });
+
+  it('offers ENTRY and EXIT corner calls above the 2×2, LOW left to TOP right (round 7)', () => {
+    render(consoleModel());
+
+    const rows = [...root.querySelectorAll('.calls__row')];
+    expect(
+      rows.map((row) => [
+        row.getAttribute('role'),
+        row.getAttribute('aria-label'),
+        row.querySelector('.calls__phase')!.textContent,
+      ]),
+    ).toEqual([
+      ['group', 'ENTRY', 'ENTRY'],
+      ['group', 'EXIT', 'EXIT'],
+    ]);
+    // The phase name comes first in each row, then the three buttons.
+    for (const row of rows) {
+      expect(row.firstElementChild!.className).toBe('calls__phase');
+    }
+    expect(
+      [...root.querySelectorAll('.say--call')].map((el) => [
+        el.textContent,
+        el.getAttribute('data-act'),
+        el.getAttribute('data-arg'),
+        el.getAttribute('aria-label'),
+      ]),
+    ).toEqual([
+      ['GO LOW', 'say', 'GO LOW\nENTRY', 'ENTRY GO LOW'],
+      ['GO MID', 'say', 'GO MID\nENTRY', 'ENTRY GO MID'],
+      ['GO TOP', 'say', 'GO TOP\nENTRY', 'ENTRY GO TOP'],
+      ['GO LOW', 'say', 'GO LOW\nEXIT', 'EXIT GO LOW'],
+      ['GO MID', 'say', 'GO MID\nEXIT', 'EXIT GO MID'],
+      ['GO TOP', 'say', 'GO TOP\nEXIT', 'EXIT GO TOP'],
+    ]);
+    // Same family as the 2×2: the plain `say` class plus a modifier.
+    for (const el of root.querySelectorAll('.say--call')) {
+      expect(el.className).toBe('say say--call');
+    }
+  });
+
+  it('gives no button a lit state for the room message, a corner call included (round 7)', () => {
+    // The 2×2 never reflected the room's message, so the corner calls do not
+    // either; the header's ack icon is the only trace of it on the phone.
+    render(
+      consoleModel({
+        state: stateWith({
+          msg: { id: '01K', text: 'GO LOW\nEXIT', ts: 4_000, ackedAt: null },
+        }),
+      }),
+    );
+
+    for (const el of root.querySelectorAll('[data-act="say"]')) {
+      expect(el.className).not.toMatch(/is-/);
+      expect(el.hasAttribute('aria-pressed')).toBe(false);
+    }
+    expect(text('[data-testid="header-ack"]')).toBe('⌛');
+    // The message text itself is not printed anywhere on the console.
+    expect(root.textContent).not.toContain('GO LOW\nEXIT');
   });
 
   it('shows no saved-message chips and no Save, whatever presets the room holds', () => {

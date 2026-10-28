@@ -5,7 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
  * Design round 6 (040 Decisions 2026-10-01) through the real `main.ts`: the
  * CLEAR button is gone, so tapping the lit lane again sends the lane clear
  * (`{t:'lane', lane:null}`); the 2×2 message buttons send `msg`; nothing on
- * the page sends `preset` any more.
+ * the page sends `preset` any more. Design round 7 (2026-10-28): the ENTRY /
+ * EXIT corner calls send one two-line `msg` each.
  */
 
 type Listener = (event: unknown) => void;
@@ -145,7 +146,7 @@ describe('lane taps and message buttons (main.ts, jsdom)', () => {
     await settle(null);
     const before = frames().length;
 
-    tap('[data-act="say"][data-arg="EXIT"]');
+    tap('[data-act="say"][data-arg="PITS"]');
     tap('[data-act="say"][data-arg="CATCHING UP"]');
     const input = document.querySelector<HTMLInputElement>(
       '[data-testid="msg-input"]',
@@ -155,11 +156,35 @@ describe('lane taps and message buttons (main.ts, jsdom)', () => {
     tap('[data-testid="send"]');
 
     expect(frames().slice(before)).toEqual([
-      { t: 'msg', text: 'EXIT' },
+      { t: 'msg', text: 'PITS' },
       { t: 'msg', text: 'CATCHING UP' },
       { t: 'msg', text: 'box this lap' },
     ]);
     expect(frames().filter((frame) => frame.t === 'preset')).toHaveLength(0);
     expect(document.querySelector('[data-act="save"]')).toBeNull();
+  });
+
+  it('a corner call sends one msg: the action, a line break, the phase (round 7)', async () => {
+    await settle(null);
+    const before = frames().length;
+    const call = (phase: string, action: string): void => {
+      const button = [
+        ...document.querySelectorAll<HTMLElement>('.say--call'),
+      ].find((el) => el.getAttribute('aria-label') === `${phase} ${action}`);
+      expect(button).toBeDefined();
+      button!.click();
+    };
+
+    call('EXIT', 'GO LOW');
+    call('ENTRY', 'GO TOP');
+    call('ENTRY', 'GO MID');
+
+    expect(frames().slice(before)).toEqual([
+      { t: 'msg', text: 'GO LOW\nEXIT' },
+      { t: 'msg', text: 'GO TOP\nENTRY' },
+      { t: 'msg', text: 'GO MID\nENTRY' },
+    ]);
+    // On the wire it is JSON's escaped newline, one character in the text.
+    expect(socket.sent.at(-3)).toBe('{"t":"msg","text":"GO LOW\\nEXIT"}');
   });
 });
