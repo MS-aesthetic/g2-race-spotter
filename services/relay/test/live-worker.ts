@@ -205,3 +205,19 @@ export async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
     }
   }
 }
+
+/**
+ * Pings like a real `RoomClient` (every `PING_INTERVAL_MS`) so a test that
+ * holds sockets open past `PEER_OFFLINE_MS` is not reaped as a silent peer.
+ * Returns the stop function.
+ */
+export function keepAlive(...sockets: WebSocket[]): () => void {
+  const interval = setInterval(() => {
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ t: 'ping', ts: Date.now() }));
+      }
+    }
+  }, 2_000);
+  return () => clearInterval(interval);
+}

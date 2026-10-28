@@ -6,15 +6,20 @@ import {
   CLOSE_CODE_AUTH,
   CLOSE_CODE_BAD_HELLO,
   CLOSE_CODE_DRIVER_EVICTED,
+  CLOSE_CODE_SILENT_PEER,
   CLOSE_CODE_VERSION,
   createInitialState,
+  FRAME_MAX_BYTES,
   isClientMessage,
+  isClientMessageType,
   isHello,
   isPing,
   isState,
+  PEER_OFFLINE_MS,
   PROTOCOL_VERSION,
   reduce,
   ROOM_TTL_MS,
+  senderRole,
   type ErrorMessage,
   type Role,
   type State,
@@ -36,6 +41,53 @@ interface StoredPin {
 
 function serialize(message: object): string {
   return JSON.stringify(message);
+}
+
+const encoder = new TextEncoder();
+
+/** `FRAME_MAX_BYTES` is a UTF-8 byte cap, checked before `JSON.parse`. */
+function oversized(raw: string): boolean {
+  // A string longer than the cap in UTF-16 units is over it in bytes too;
+  // skip encoding pathological frames.
+  return (
+    raw.length > FRAME_MAX_BYTES || encoder.encode(raw).length > FRAME_MAX_BYTES
+  );
+}
+
+/** An empty `name` (URL or hello) means "no name". */
+function presentName(name: string | null | undefined): string | undefined {
+  return name === null || name === undefined || name === '' ? undefined : name;
+}
+
+type DropReason =
+  | 'unknown_t'
+  | 'wrong_role'
+  | 'bad_frame'
+  | 'oversized'
+  | 'binary'
+  | 'silent_peer';
+
+/**
+ * Dropped/rejected frames are counted as one structured log line each, never
+ * with the frame body (020 AC-9; 060 R4 shape).
+ */
+function logDrop(reason: DropReason, role: Role | null, t?: string): void {
+  console.log(
+    JSON.stringify({
+      ev: 'drop',
+      reason,
+      role,
+      ...(t === undefined ? {} : { t }),
+    }),
+  );
+}
+
+function frameType(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const t = (value as { t?: unknown }).t;
+  return typeof t === 'string' ? t : undefined;
 }
 
 function isSocketAttachment(value: unknown): value is SocketAttachment {
@@ -102,7 +154,7 @@ export class RaceRoom extends DurableObject<Env> {
     this.state = next;
     const frame = serialize(next);
     for (const socket of this.ctx.getWebSockets()) {
-      if (socket !== exclude && this.attachment(socket)?.ready === true) {
+      if (socket !== exclude && this.isLive(socket)) {
         socket.send(frame);
       }
     }
@@ -115,7 +167,10 @@ export class RaceRoom extends DurableObject<Env> {
     const current = state ?? (await this.loadState());
     const socketCount = this.ctx
       .getWebSockets()
-      .filter((socket) => socket !== unavailable).length;
+      .filter(
+        (socket) =>
+          socket !== unavailable && this.attachment(socket)?.rejected !== true,
+      ).length;
     await this.ctx.storage.setAlarm(
       nextAlarmAt(socketCount, current, Date.now()),
     );
@@ -141,10 +196,13 @@ export class RaceRoom extends DurableObject<Env> {
   private hasReadyPeer(role: Role, unavailable?: WebSocket): boolean {
     return this.ctx
       .getWebSockets(role)
-      .some(
-        (socket) =>
-          socket !== unavailable && this.attachment(socket)?.ready === true,
-      );
+      .some((socket) => socket !== unavailable && this.isLive(socket));
+  }
+
+  /** A joined socket the relay has not rejected, evicted or reaped. */
+  private isLive(socket: WebSocket): boolean {
+    const attachment = this.attachment(socket);
+    return attachment?.ready === true && attachment.rejected !== true;
   }
 
   private async reconcilePeers(
@@ -174,6 +232,18 @@ export class RaceRoom extends DurableObject<Env> {
     const error: ErrorMessage = { t: 'error', code: 'bad_frame' };
     socket.send(serialize(error));
     socket.close(CLOSE_CODE_BAD_HELLO, 'hello must match URL');
+  }
+
+  /** Malformed frame on a joined socket: report it, keep the socket (AC-9). */
+  private sendBadFrame(
+    socket: WebSocket,
+    role: Role | null,
+    reason: DropReason,
+    t?: string,
+  ): void {
+    logDrop(reason, role, t);
+    const error: ErrorMessage = { t: 'error', code: 'bad_frame' };
+    socket.send(serialize(error));
   }
 
   private rejectSocket(
@@ -209,7 +279,7 @@ export class RaceRoom extends DurableObject<Env> {
         ? requestedRole
         : null;
 
-    const name = url.searchParams.get('name') ?? undefined;
+    const name = presentName(url.searchParams.get('name'));
     const tokenPresent = url.searchParams.has('token');
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
@@ -235,8 +305,28 @@ export class RaceRoom extends DurableObject<Env> {
     if (attachment?.rejected === true) {
       return;
     }
-    if (attachment === undefined || typeof raw !== 'string') {
+    if (attachment === undefined) {
       this.sendBadHello(socket, attachment);
+      return;
+    }
+
+    // A joined socket survives malformed frames (020 AC-9); before `hello`
+    // anything but a valid hello still closes 4400.
+    if (typeof raw !== 'string') {
+      if (attachment.ready) {
+        this.sendBadFrame(socket, attachment.role, 'binary');
+      } else {
+        this.sendBadHello(socket, attachment);
+      }
+      return;
+    }
+
+    if (oversized(raw)) {
+      if (attachment.ready) {
+        this.sendBadFrame(socket, attachment.role, 'oversized');
+      } else {
+        this.sendBadHello(socket, attachment);
+      }
       return;
     }
 
@@ -244,7 +334,11 @@ export class RaceRoom extends DurableObject<Env> {
     try {
       value = JSON.parse(raw);
     } catch {
-      this.sendBadHello(socket, attachment);
+      if (attachment.ready) {
+        this.sendBadFrame(socket, attachment.role, 'bad_frame');
+      } else {
+        this.sendBadHello(socket, attachment);
+      }
       return;
     }
 
@@ -268,7 +362,7 @@ export class RaceRoom extends DurableObject<Env> {
       if (
         attachment.role === null ||
         value.role !== attachment.role ||
-        value.name !== attachment.name
+        presentName(value.name) !== attachment.name
       ) {
         this.sendBadHello(socket, attachment);
         return;
@@ -333,19 +427,47 @@ export class RaceRoom extends DurableObject<Env> {
         }
       }
 
-      socket.serializeAttachment({ ...attachment, ready: true });
+      socket.serializeAttachment({
+        ...attachment,
+        ready: true,
+        lastPing: Date.now(),
+      });
       const peers = await this.reconcilePeers(socket);
       socket.send(serialize(peers.state));
       await this.scheduleAlarm(peers.state);
       return;
     }
 
-    if (!isClientMessage(value) || value.t === 'hello') {
+    if (attachment.role === null) {
+      this.sendBadHello(socket, attachment);
       return;
     }
 
-    if (attachment.role === null) {
-      this.sendBadHello(socket, attachment);
+    const t = frameType(value);
+    if (t === undefined) {
+      // Valid JSON but not a frame at all.
+      this.sendBadFrame(socket, attachment.role, 'bad_frame');
+      return;
+    }
+    if (!isClientMessageType(t)) {
+      // Unknown `t`: ignore and count — a newer client may send frames this
+      // relay does not know yet.
+      logDrop('unknown_t', attachment.role, t);
+      return;
+    }
+
+    if (!isClientMessage(value)) {
+      this.sendBadFrame(socket, attachment.role, 'bad_frame', t);
+      return;
+    }
+
+    if (value.t === 'hello') {
+      return;
+    }
+
+    const allowed = senderRole(value.t);
+    if (allowed !== null && allowed !== attachment.role) {
+      logDrop('wrong_role', attachment.role, value.t);
       return;
     }
 
@@ -405,10 +527,51 @@ export class RaceRoom extends DurableObject<Env> {
     this.state = undefined;
   }
 
+  /**
+   * Closes every socket that has not pinged for `PEER_OFFLINE_MS` — or never
+   * sent `hello` within it — with 4408 (020 R4/AC-7). The peer's offline
+   * presence is broadcast to the remaining sockets BEFORE the close: a
+   * server-side close does not fire `webSocketClose` here, and the reaped
+   * sockets are marked rejected so a late close event is ignored.
+   */
+  private async reapSilentPeers(now: number): Promise<State | undefined> {
+    const silent = this.ctx.getWebSockets().filter((socket) => {
+      const attachment = this.attachment(socket);
+      return (
+        attachment !== undefined &&
+        attachment.rejected !== true &&
+        now - attachment.lastPing > PEER_OFFLINE_MS
+      );
+    });
+    if (silent.length === 0) {
+      return undefined;
+    }
+
+    for (const socket of silent) {
+      const attachment = this.attachment(socket);
+      if (attachment !== undefined) {
+        socket.serializeAttachment({ ...attachment, rejected: true });
+        logDrop('silent_peer', attachment.role);
+      }
+    }
+    const { state } = await this.reconcilePeers();
+    for (const socket of silent) {
+      try {
+        socket.close(CLOSE_CODE_SILENT_PEER, 'no ping');
+      } catch {
+        // Already closing; nothing to do.
+      }
+    }
+    return state;
+  }
+
   async alarm(): Promise<void> {
-    let state = await this.loadState();
     const now = Date.now();
-    if (this.ctx.getWebSockets().length === 0) {
+    let state = (await this.reapSilentPeers(now)) ?? (await this.loadState());
+    const open = this.ctx
+      .getWebSockets()
+      .filter((socket) => this.attachment(socket)?.rejected !== true);
+    if (open.length === 0) {
       if (now >= state.updatedAt + ROOM_TTL_MS) {
         await this.expireRoom(state);
         return;

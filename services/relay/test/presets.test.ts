@@ -15,6 +15,7 @@ import {
 
 import {
   createPersistenceDirectory,
+  keepAlive,
   nextClose,
   nextMessage,
   nextMessageMatching,
@@ -251,6 +252,8 @@ describe('RaceRoom presets (T056)', () => {
   it('keeps presets through the 6 s stale clear', async () => {
     worker = await startWorker();
     const { spotter, driver } = await joinRoom(worker, 'QA53');
+    // Held open past PEER_OFFLINE_MS: ping like a real client (T050 reaper).
+    const stopPinging = keepAlive(spotter, driver);
 
     try {
       await edit(spotter, driver, { t: 'preset', add: 'Fuel save' }, [
@@ -281,6 +284,7 @@ describe('RaceRoom presets (T056)', () => {
       const stored = await readDebug(worker, 'QA53');
       expect(stored.state.presets).toEqual(['Fuel save']);
     } finally {
+      stopPinging();
       spotter.terminate();
       driver.terminate();
     }
