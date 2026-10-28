@@ -28,6 +28,8 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 - [ ] T051 (owner: g2-glasses-dev) (spec: 050 image polish) [depends:T030 integrated; T104/T109 evidence] Whatever the first hardware session shows: nibble order / stride flip, pacing, `sendFailed` behaviour, design tweaks in `hud-design.ts`. Scoped by Maxx after the session; do not start before.
 - [ ] T054 (owner: plan-updater + any worker, Sonnet-tier) Housekeeping collected by the review records (role files, `hud-e2e-testing` skill, BUILD_PLAN §3/§5, constitution/AGENTS v1 prose, PWA icons, `HUD_GAP_FLUSH_MS` rename). Not blocking; batch it with T051.
 
+- [ ] T069 (owner: maxx → then relay-backend-dev + spotter-pwa-dev, one consolidated task) (spec: 080 DRAFT) **Practice / Race modes.** Scoped 2026-10-28: room-level `State.mode` (additive v2), spotter-only `{t:'mode'}`, header `P`/`R` chip with confirm, `MODE_LAYOUTS` table deciding the console's button groups; both modes identical until Maxx fills in the differences. Blocked on Maxx answering 080's open questions; start after round 7 (T067/T068) integrates.
+
 ## Needs simulator [SIM] — Maxx runs these on his machine
 
 - [ ] T002c (owner: maxx) (spec: 010 AC-3) `npm run sim:scenarios -- --smoke` with simulator 0.9.5 open; commit `qa/<date>/sim/report.json` + `smoke-01.png` (records the real `getDeviceInfo()` for T003c).
