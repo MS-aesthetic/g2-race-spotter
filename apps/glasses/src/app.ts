@@ -22,7 +22,7 @@ import {
   type StatusInput,
   type TerminalClose,
 } from './link.ts';
-import type { HudState, LaneStyle } from './render/draw-hud.ts';
+import type { HudState } from './render/draw-hud.ts';
 import type { RenderJob } from './render/queue.ts';
 
 export interface RenderSink {
@@ -69,13 +69,9 @@ export class HudApp {
   /** Phase of the NO-LINK `L` blink; the driver's timer flips it. */
   private blinkOn = true;
 
-  /** Phase of the lane-call blink (`blink.ts`); `filled` when none runs. */
-  private laneStyle: LaneStyle = 'filled';
-
   private lastHud:
     | (HudState & {
         linkOk: boolean;
-        laneStyle: LaneStyle;
         message: string;
         msgVisible: boolean;
       })
@@ -143,17 +139,6 @@ export class HudApp {
       this.everLinked = true;
     }
     this.linkOkFlag = linkOk;
-    if (options.render !== false) {
-      this.render();
-    }
-  }
-
-  /**
-   * How the called lane icon is drawn — set by the lane-call blink. `render:
-   * false` when the caller renders next anyway (see `setLinkOk`).
-   */
-  setLaneStyle(style: LaneStyle, options: { render?: boolean } = {}): void {
-    this.laneStyle = style;
     if (options.render !== false) {
       this.render();
     }
@@ -237,8 +222,8 @@ export class HudApp {
 
   /**
    * Pushes whatever changed since the last render. Safe to call at any time.
-   * The message travels in the `hud` job (round 6: image mode draws it into
-   * the top strip), so one `state` frame is one HUD job.
+   * The message travels in the `hud` job (image mode draws it into the
+   * bottom strip since design round 7), so one `state` frame is one HUD job.
    */
   render(): void {
     const message = this.messageText();
@@ -246,8 +231,6 @@ export class HudApp {
       lane: this.state?.lane ?? null,
       cars: this.state?.cars ?? NO_CARS,
       linkOk: this.linkOkFlag,
-      // With no lane called there is no icon to blink.
-      laneStyle: this.state?.lane == null ? 'filled' : this.laneStyle,
       message,
       msgVisible:
         message === '' || this.state?.msg?.id !== this.blinkHiddenMessageId,
@@ -258,7 +241,6 @@ export class HudApp {
       this.lastHud.lane !== hud.lane ||
       !sameCars(this.lastHud.cars, hud.cars) ||
       this.lastHud.linkOk !== hud.linkOk ||
-      this.lastHud.laneStyle !== hud.laneStyle ||
       this.lastHud.message !== hud.message ||
       this.lastHud.msgVisible !== hud.msgVisible
     ) {
@@ -267,7 +249,6 @@ export class HudApp {
         kind: 'hud',
         state: { lane: hud.lane, cars: hud.cars },
         linkOk: hud.linkOk,
-        ...(hud.laneStyle === 'filled' ? {} : { laneStyle: hud.laneStyle }),
         ...(hud.message === '' ? {} : { message: hud.message }),
         ...(hud.msgVisible ? {} : { msgVisible: false }),
       });

@@ -10,8 +10,9 @@
  * `test/draw-hud.test.ts` pin whatever design is current — a deliberate change
  * updates them in the same commit.
  *
- * Layout (Maxx, 2026-10-01 design round 6, approved mock
- * `docs/reviews/hud-design-round6.png`, on the round-4 perimeter layout): the
+ * Layout (Maxx, 2026-10-28 design round 7, approved mock "option A" —
+ * preview from these drawers in `docs/reviews/hud-design-round7.png` — on the
+ * round-6 strips and car bars, on the round-4 perimeter layout): the
  * HUD is two STRIPS the full 576-px canvas width — a 576×96 one along the top
  * edge and a 576×144 one along the bottom edge — and the middle band of the
  * screen (canvas y 96–143) holds only the `status` letters on the right
@@ -20,17 +21,23 @@
  * middle (x 288) into two pixel-adjacent image containers (`splitStrip` in
  * `draw-hud.ts`): 288×96 on top, 288×144 (the SDK maximum) below.
  *
- * Top strip, rows 3–45 — ◀ at the far left (bottom lane), ▲ centred on the
- * seam (middle lane), ▶ at the far right (top lane), 42 px along the pointing
- * axis and 42 across (43 lit rows); the called one solid, the other two thin
- * outlines. On a new call the called icon blinks outline/filled every 500 ms
- * for 4 s (`LaneStyle`, driven by `blink.ts`).
- * Top strip, rows 51–92 — the MESSAGE ("put text upper middle below the top
- * rectangle … larger and centered, like 3x the current size … blink every
- * second for 5 seconds"): a 5×7 bitmap font (`font.ts`) drawn ×6 (30×42-px
- * glyphs, 6-px gaps) centred on x 288 under the ▲, truncated with a `.` when
- * it would not fit the strip. `msgVisible: false` (the hidden phases of
- * `msg-blink.ts`) leaves the rows dark.
+ * Top strip, rows 3–67 — ◀ at the far left (bottom lane), ▲ centred on the
+ * seam (middle lane), ▶ at the far right (top lane), round 7's 50 % larger
+ * size: 63 px along the pointing axis and 64 between the base vertices (▲
+ * rows 3–66, ◀ ▶ rows 3–67); the called one SOLID from the moment the call
+ * arrives ("solid instead of blinking" — round 7 removed the lane blink), the
+ * other two thin faint outlines. Nothing else is in the top strip.
+ *
+ * Bottom strip, rows 6–97 between the corner Ls and above the middle bar —
+ * the MESSAGE (round 7 moved it down from the top strip; round 6: "larger and
+ * centered, like 3x the current size … blink every second for 5 seconds"): a
+ * 5×7 bitmap font (`font.ts`) drawn ×6 (30×42-px glyphs, 6-px gaps), up to
+ * two lines 8 px apart, each centred on x 288; a single line is centred
+ * vertically in the band. Split on `\n` first (`"GO LOW\nEXIT"`: the action,
+ * then the corner phase), then word-wrapped to the 288 px between the Ls'
+ * bounding boxes less 8 px clearance each side (8 glyphs); overflow is cut
+ * with a `.`. `msgVisible: false` (the hidden phases of `msg-blink.ts`) leaves
+ * the band dark.
  *
  * Bottom strip — "I want the curved things like it was before … extend the
  * bars touching the bottom and sides … make bottom middle bar shorter and
@@ -70,7 +77,7 @@
 
 import { CAR_LEVEL_MAX, type Cars, type Lane } from '@g2-race-spotter/protocol';
 
-import { drawText, type TextLayout } from './font.ts';
+import { drawTextBlock, type TextBlockLayout } from './font.ts';
 import {
   fillRect,
   fillRegion,
@@ -114,12 +121,10 @@ export interface HudState {
   readonly cars: Readonly<Cars>;
 }
 
-/**
- * How the CALLED lane icon is drawn: `filled` normally, `outline` during the
- * hollow phases of the lane-call blink (a bright outline, so the called icon
- * still stands out from the two dim uncalled ones).
- */
-export type LaneStyle = 'filled' | 'outline';
+/** Length of the corner Ls' arms; the message band is fitted between them. */
+const CORNER_ARM_LENGTH = 136;
+/** Dark pixels kept between the message and the corner Ls' bounding boxes. */
+const MESSAGE_CLEARANCE = 8;
 
 export const DESIGN = {
   /**
@@ -136,8 +141,10 @@ export const DESIGN = {
    * Lane call along the TOP strip: three fixed positions so the driver always
    * sees where a call could be. ◀ (bottom lane) and ▶ (top lane) point
    * outwards from the far left and far right, ▲ (middle lane) sits on the seam
-   * at x 288, half in each image. 42 px along the direction the triangle
-   * points and 42 px between the base vertices (43 lit rows): rows 3..45.
+   * at x 288, half in each image. Round 7 (2026-10-28): 50 % larger than
+   * round 5b's 42 × 42 — 63 px along the direction the triangle points (the
+   * apex 32 px from the centre, the base 31) and 64 px between the base
+   * vertices (`halfWidth` 32, 31.5 rounded): ▲ rows 3..66, ◀ ▶ rows 3..67.
    */
   lanes: {
     slots: [
@@ -145,28 +152,33 @@ export const DESIGN = {
       { lane: 'mid', centreX: 288, points: 'up' },
       { lane: 'top', centreX: 525, points: 'right' },
     ],
-    centreY: 24,
+    centreY: 35,
     /** Apex to base. */
-    length: 42,
+    length: 63,
     /** Half the base. */
-    halfWidth: 21,
+    halfWidth: 32,
     /** The two lanes that were not called: thin, faint, still legible. */
     outlineThickness: 2,
     outlineLevel: 4,
-    /** The called lane during an `outline` blink phase: hollow but bright. */
-    blinkOutlineLevel: 15,
   },
   /**
-   * The message, in the TOP strip under the ▲: 5×7 font ×6 = 30×42-px glyphs
-   * with 6-px gaps (16 characters fit the 576-px strip), cell rows 51..92 —
-   * 5 px below the lane icons, 3 px above the strip's bottom edge.
+   * The message, in the BOTTOM strip (round 7): 5×7 font ×6 = 30×42-px glyphs
+   * with 6-px gaps, at most two lines 8 px apart in the band at rows 6..97
+   * (canvas y 150..241) — line 1 rows 6..47, line 2 rows 56..97; one line
+   * rows 31..72. Each line is centred on x 288 and at most `maxWidth` wide:
+   * the 304 px between the corner Ls' bounding boxes (x 136..439) less
+   * `clearance` each side = 288 px, so 8 glyphs (282 px, x 147..428). The
+   * middle bar starts at row 112 — 14 dark rows below line 2.
    */
   message: {
     centreX: HALF_WIDTH,
-    top: 51,
+    top: 6,
     scale: 6,
     gap: 6,
-    maxWidth: STRIP_WIDTH,
+    lineGap: 8,
+    maxLines: 2,
+    clearance: MESSAGE_CLEARANCE,
+    maxWidth: STRIP_WIDTH - 2 * (CORNER_ARM_LENGTH + MESSAGE_CLEARANCE),
     level: 15,
   },
   /**
@@ -179,7 +191,7 @@ export const DESIGN = {
    */
   cars: {
     corner: {
-      armLength: 136,
+      armLength: CORNER_ARM_LENGTH,
       thickness: 28,
       filletRadius: 60,
       /**
@@ -219,54 +231,57 @@ export const DESIGN = {
 
 type Direction = (typeof DESIGN.lanes.slots)[number]['points'];
 
-/** The three vertices of a lane triangle pointing `direction`. */
-function laneTriangle(
+/**
+ * The three vertices of a lane triangle pointing `direction`, all on whole
+ * pixels: an odd `length` puts the apex the extra pixel from the centre
+ * (63 → apex 32 px out, base 31 px back).
+ */
+export function laneTriangle(
   centreX: number,
   direction: Direction,
 ): [Point, Point, Point] {
   const { centreY, length, halfWidth } = DESIGN.lanes;
-  const half = length / 2;
+  const toApex = Math.ceil(length / 2);
+  const toBase = length - toApex;
 
   if (direction === 'up') {
     return [
-      { x: centreX, y: centreY - half },
-      { x: centreX - halfWidth, y: centreY + half },
-      { x: centreX + halfWidth, y: centreY + half },
+      { x: centreX, y: centreY - toApex },
+      { x: centreX - halfWidth, y: centreY + toBase },
+      { x: centreX + halfWidth, y: centreY + toBase },
     ];
   }
 
   const sign = direction === 'left' ? -1 : 1;
   return [
-    { x: centreX + sign * half, y: centreY },
-    { x: centreX - sign * half, y: centreY - halfWidth },
-    { x: centreX - sign * half, y: centreY + halfWidth },
+    { x: centreX + sign * toApex, y: centreY },
+    { x: centreX - sign * toBase, y: centreY - halfWidth },
+    { x: centreX - sign * toBase, y: centreY + halfWidth },
   ];
 }
 
-function drawLanes(
-  canvas: Canvas,
-  lane: Lane | null,
-  laneStyle: LaneStyle,
-): void {
-  const { outlineThickness, outlineLevel, blinkOutlineLevel } = DESIGN.lanes;
+function drawLanes(canvas: Canvas, lane: Lane | null): void {
+  const { outlineThickness, outlineLevel } = DESIGN.lanes;
 
   // Every slot is drawn on every frame: an empty position would be read as "no
-  // call there", which is exactly the same picture as "no call at all".
+  // call there", which is exactly the same picture as "no call at all". The
+  // called one is solid from the first frame on (round 7: no blink).
   for (const slot of DESIGN.lanes.slots) {
     const [a, b, c] = laneTriangle(slot.centreX, slot.points);
-    if (slot.lane !== lane) {
-      strokeTriangle(canvas, a, b, c, outlineLevel, outlineThickness);
-    } else if (laneStyle === 'filled') {
+    if (slot.lane === lane) {
       fillTriangle(canvas, a, b, c, DESIGN.fill);
     } else {
-      strokeTriangle(canvas, a, b, c, blinkOutlineLevel, outlineThickness);
+      strokeTriangle(canvas, a, b, c, outlineLevel, outlineThickness);
     }
   }
 }
 
-/** Draws the message centred under the ▲; returns where it went. */
-export function drawMessage(canvas: Canvas, text: string): TextLayout {
-  return drawText(canvas, text, DESIGN.message, DESIGN.message.level);
+/**
+ * Draws the message as up to two centred lines in the bottom strip's band
+ * between the corner Ls; returns where each line went.
+ */
+export function drawMessage(canvas: Canvas, text: string): TextBlockLayout {
+  return drawTextBlock(canvas, text, DESIGN.message, DESIGN.message.level);
 }
 
 interface Look {
@@ -551,27 +566,26 @@ function drawCars(canvas: Canvas, cars: Readonly<Cars>): void {
   drawCorner(canvas, 'right', cars[2] ?? 0);
 }
 
-/**
- * Paints the lane icons and (when given and visible) the message onto a
- * 576×96 top-strip canvas. Pure apart from it.
- */
-export function drawTopStripDesign(
-  canvas: Canvas,
-  lane: Lane | null,
-  laneStyle: LaneStyle = 'filled',
-  message: string | null = null,
-  msgVisible = true,
-): void {
-  drawLanes(canvas, lane, laneStyle);
-  if (message !== null && message !== '' && msgVisible) {
-    drawMessage(canvas, message);
-  }
+/** Paints the three lane icons onto a 576×96 top-strip canvas. */
+export function drawTopStripDesign(canvas: Canvas, lane: Lane | null): void {
+  drawLanes(canvas, lane);
 }
 
 /** Paints the three car bars onto a 576×144 bottom-strip canvas. */
-export function drawBottomStripDesign(
-  canvas: Canvas,
-  cars: Readonly<Cars>,
-): void {
+export function drawCarsDesign(canvas: Canvas, cars: Readonly<Cars>): void {
   drawCars(canvas, cars);
+}
+
+/**
+ * Paints the message (when given and visible) onto a 576×144 bottom-strip
+ * canvas that already holds the car bars — the band it uses is clear of them.
+ */
+export function drawMessageDesign(
+  canvas: Canvas,
+  message: string | null,
+  msgVisible: boolean,
+): void {
+  if (message !== null && message !== '' && msgVisible) {
+    drawMessage(canvas, message);
+  }
 }

@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   drawText,
+  drawTextBlock,
+  layoutTextBlock,
+  measureTextBlock,
+  wrapText,
+  type TextBlockPlacement,
   FALLBACK_CHAR,
   fitText,
   FONT,
@@ -18,7 +23,8 @@ import { createCanvas, type Canvas } from '../src/render/primitives.ts';
 
 /**
  * The 5×7 bitmap font the image-mode message is drawn with (Maxx, 2026-10-01
- * design round 6), at the HUD's ×6 scale: 30×42-px glyphs, 6-px gaps.
+ * design round 6), at the HUD's ×6 scale: 30×42-px glyphs, 6-px gaps — and,
+ * since round 7 (2026-10-28), set as a block of up to two lines.
  */
 
 const STYLE = { scale: 6, gap: 6 } as const;
@@ -155,5 +161,82 @@ describe('5x7 bitmap font', () => {
     const layout = drawText(canvas, '', PLACEMENT, 15);
     expect(layout.width).toBe(0);
     expect(litBox(canvas).count).toBe(0);
+  });
+});
+
+describe('text blocks (round 7: up to two lines)', () => {
+  /** 8 glyphs = 282 px fit; 9 = 318 do not. */
+  const WIDTH = 288;
+  const lines = (text: string, maxLines = 2): string[] =>
+    wrapText(text, WIDTH, STYLE, maxLines);
+  const BLOCK: TextBlockPlacement = {
+    ...STYLE,
+    centreX: 288,
+    top: 6,
+    maxWidth: WIDTH,
+    lineGap: 8,
+    maxLines: 2,
+  };
+
+  it('splits on \\n before normalising, so a line break never draws a ?', () => {
+    expect(normaliseText('A\nB')).toBe('A?B');
+    expect(lines('GO LOW\nEXIT')).toEqual(['GO LOW', 'EXIT']);
+    expect(lines('go top\r\nentry')).toEqual(['GO TOP', 'ENTRY']);
+    // Blank lines and runs of spaces disappear.
+    expect(lines('\n  PITS  \n')).toEqual(['PITS']);
+    expect(lines('')).toEqual([]);
+    expect(lines(' \n ')).toEqual([]);
+  });
+
+  it('word-wraps a line wider than maxWidth greedily on spaces', () => {
+    expect(lines('CATCHING UP')).toEqual(['CATCHING', 'UP']);
+    expect(lines('LEADERS BEHIND')).toEqual(['LEADERS', 'BEHIND']);
+    expect(lines('PULLING AWAY')).toEqual(['PULLING', 'AWAY']);
+    expect(lines('GO TO P2')).toEqual(['GO TO P2']);
+    expect(lines('PITS')).toEqual(['PITS']);
+    // An explicit line still wraps if it is too wide on its own.
+    expect(lines('BOX\nTHIS LAP NOW', 3)).toEqual(['BOX', 'THIS LAP', 'NOW']);
+  });
+
+  it('keeps at most maxLines: the rest joins the last line, cut with a .', () => {
+    expect(lines('A\nB\nC')).toEqual(['A', 'B C']);
+    expect(lines('BOX\nTHIS LAP NOW')).toEqual(['BOX', 'THIS LA.']);
+    expect(lines('ONE TWO THREE FOUR', 1)).toEqual(['ONE TWO.']);
+    // A single word too wide is cut on its own line.
+    expect(lines('OVERTAKING')).toEqual(['OVERTAK.']);
+    for (const line of lines('SLOW DOWN, CAR INSIDE AT TURN 4')) {
+      expect(measureText(line.length, STYLE)).toBeLessThanOrEqual(WIDTH);
+    }
+  });
+
+  it('measures a block as n x 42 + (n - 1) x 8 px', () => {
+    expect(measureTextBlock(0, BLOCK)).toBe(0);
+    expect(measureTextBlock(1, BLOCK)).toBe(42);
+    expect(measureTextBlock(2, BLOCK)).toBe(92);
+  });
+
+  it('lays two lines from the top of the band and centres one line in it', () => {
+    const two = layoutTextBlock('GO LOW\nEXIT', BLOCK);
+    expect(two.lines.map((line) => [line.text, line.y])).toEqual([
+      ['GO LOW', 6],
+      ['EXIT', 56],
+    ]);
+    const one = layoutTextBlock('PITS', BLOCK);
+    expect(one.lines.map((line) => [line.text, line.y])).toEqual([
+      ['PITS', 31],
+    ]);
+    expect(layoutTextBlock('', BLOCK).lines).toEqual([]);
+  });
+
+  it('draws every line centred on centreX', () => {
+    const canvas = createCanvas(576, 144);
+    const layout = drawTextBlock(canvas, 'CATCHING UP', BLOCK, 15);
+    expect(layout.lines.map((line) => line.text)).toEqual(['CATCHING', 'UP']);
+    const box = litBox(canvas);
+    expect([box.minY, box.maxY]).toEqual([6, 97]);
+    expect([box.minX, box.maxX]).toEqual([147, 428]);
+    for (const line of layout.lines) {
+      expect(Math.abs(line.x + line.width / 2 - 288)).toBeLessThanOrEqual(1);
+    }
   });
 });

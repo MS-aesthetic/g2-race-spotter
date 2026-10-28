@@ -6,12 +6,12 @@
  * visible — visible at 0, 2 and 4 s, hidden at 1 and 3 s — and at
  * `MSG_AUTO_ACK_MS` (5 s, `app.ts`) the driver's auto-clear takes it off the
  * screen and acks it exactly as before. The first phase is the render that
- * shows the message (no extra frame); each later phase is one re-render
- * (`driver.ts` coalesces it with a lane-blink phase due at the same instant),
- * which the queue turns into sends of only the top-strip halves whose pixels
- * changed (the message straddles the seam, so usually both) — never the cars
- * strip. In text mode a phase changes nothing the `msg` container shows, and
- * costs nothing.
+ * shows the message (no extra frame); each later phase is one re-render,
+ * which the queue turns into immediate sends of only the bottom-strip halves
+ * whose pixels changed (since design round 7 the message is drawn between the
+ * corner car bars and straddles the seam, so both) — never the lane strip. In
+ * text mode a phase changes nothing the `msg` container shows, and costs
+ * nothing.
  *
  * The blink is keyed on the message id: a new message restarts it, and a
  * phase can only ever hide the message it was started for.

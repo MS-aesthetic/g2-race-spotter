@@ -1,11 +1,13 @@
 /**
  * The page the glasses show, created exactly once (constitution §6). Layout is
- * the table in the `g2-hud-display` skill (Maxx, 2026-10-01 design round 6).
+ * the table in the `g2-hud-display` skill (Maxx, 2026-10-01 design round 6;
+ * round 7, 2026-10-28, moved the image-mode message into the bottom strip
+ * without changing a container).
  *
  * Image mode, 6 containers: the full-canvas `bg`, FOUR image containers along
  * the top and bottom edges (the two HUD strips, each split at x 288: 288×96 on
  * top, 288×144 below) and the `status` text on the right border. There is no
- * `msg` text container: the message is drawn into the top strip as a bitmap
+ * `msg` text container: the message is drawn into the bottom strip as a bitmap
  * (the SDK text container has one fixed, small font). The pinned SDK (0.0.12)
  * caps a page at 4 image / 8 text / 12 containers.
  *
@@ -41,7 +43,7 @@ export type StartupPage = PageContainer;
 export const CONTAINER_BG = 1;
 /** Text mode only: the single text HUD (`renderText`). */
 export const CONTAINER_HUD = 2;
-/** Text mode only: the message (image mode draws it into the top strip). */
+/** Text mode only: the message (image mode draws it into the bottom strip). */
 export const CONTAINER_MSG = 3;
 export const CONTAINER_STATUS = 4;
 /**
@@ -245,7 +247,7 @@ export interface PageContent {
   readonly mode: RenderMode;
   /** Status strip text baked into the page (image data is not allowed here). */
   readonly status: string;
-  /** Text-mode message; ignored in image mode (the top strip draws it). */
+  /** Text-mode message; ignored in image mode (the bottom strip draws it). */
   readonly message?: string;
   /** Text-mode HUD content; ignored in image mode. */
   readonly hud?: string;

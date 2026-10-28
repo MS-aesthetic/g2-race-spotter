@@ -5,7 +5,9 @@
  *
  * Upper case, digits, space and `.,-!?/'`. Lower case is drawn upper case;
  * anything else is drawn as `?` — the glasses never show a missing glyph as a
- * gap. Glyph rows are strings, `#` lit and `.` dark, so the table reads as the
+ * gap. Since design round 7 (2026-10-28) a text may also be set as a block of
+ * up to `maxLines` lines ({@link wrapText}): split on `\n` first, then
+ * word-wrapped to the width it is given. Glyph rows are strings, `#` lit and `.` dark, so the table reads as the
  * letters it draws. Nothing here knows where the text goes on the HUD: that is
  * `hud-design.ts`.
  */
@@ -168,5 +170,123 @@ export function drawText(
     );
   });
 
+  return layout;
+}
+
+/**
+ * `text` as at most `maxLines` lines that each fit `maxWidth` (Maxx, design
+ * round 7, 2026-10-28: the phone sends texts like `"GO LOW\nEXIT"` — the
+ * action, then the corner phase):
+ *
+ * 1. split on `\n` (a `\r\n` counts as one break) BEFORE normalising, because
+ *    {@link normaliseText} turns any character the font lacks — `\n`
+ *    included — into `?`;
+ * 2. normalise each line, then word-wrap it greedily on spaces (runs of
+ *    spaces collapse, blank lines are dropped);
+ * 3. if that makes more than `maxLines` lines, everything from line
+ *    `maxLines` on is joined with spaces into the last line;
+ * 4. every line still too wide — a single word longer than the width, or the
+ *    joined overflow — is cut by {@link fitText}, ending in `.`.
+ *
+ * `[]` for a text with nothing to draw.
+ */
+export function wrapText(
+  text: string,
+  maxWidth: number,
+  style: TextStyle,
+  maxLines: number,
+): string[] {
+  const fits = (line: string): boolean =>
+    measureText([...line].length, style) <= maxWidth;
+  const lines: string[] = [];
+
+  for (const raw of text.split(/\r?\n/)) {
+    let current = '';
+    for (const word of normaliseText(raw).split(' ')) {
+      if (word === '') {
+        continue;
+      }
+      const candidate = current === '' ? word : `${current} ${word}`;
+      if (current === '' || fits(candidate)) {
+        current = candidate;
+      } else {
+        lines.push(current);
+        current = word;
+      }
+    }
+    if (current !== '') {
+      lines.push(current);
+    }
+  }
+
+  const limit = Math.max(1, Math.floor(maxLines));
+  const kept =
+    lines.length > limit
+      ? [...lines.slice(0, limit - 1), lines.slice(limit - 1).join(' ')]
+      : lines;
+  return kept.map((line) => fitText(line, maxWidth, style));
+}
+
+export interface TextBlockPlacement extends TextPlacement {
+  /** Dark rows between two lines. */
+  readonly lineGap: number;
+  /** Lines the block may hold; the band is sized for this many. */
+  readonly maxLines: number;
+}
+
+export interface TextBlockLayout {
+  /** One layout per line, top to bottom; empty for no text. */
+  readonly lines: readonly TextLayout[];
+}
+
+/** Height of `count` lines set in `placement`, gaps included; 0 for none. */
+export function measureTextBlock(
+  count: number,
+  placement: Pick<TextBlockPlacement, 'scale' | 'lineGap'>,
+): number {
+  return count <= 0
+    ? 0
+    : count * GLYPH_HEIGHT * placement.scale + (count - 1) * placement.lineGap;
+}
+
+/**
+ * Where a block of text goes: {@link wrapText}'s lines, each centred on
+ * `centreX`, the block centred vertically in the band that starts at `top`
+ * and is {@link measureTextBlock}(`maxLines`) tall (half a pixel up for an
+ * odd remainder). A full block starts at `top`.
+ */
+export function layoutTextBlock(
+  text: string,
+  placement: TextBlockPlacement,
+): TextBlockLayout {
+  const lines = wrapText(
+    text,
+    placement.maxWidth,
+    placement,
+    placement.maxLines,
+  );
+  const band = measureTextBlock(placement.maxLines, placement);
+  const block = measureTextBlock(lines.length, placement);
+  const top = placement.top + Math.floor((band - block) / 2);
+  const advance = GLYPH_HEIGHT * placement.scale + placement.lineGap;
+
+  return {
+    lines: lines.map((line, index) =>
+      layoutText(line, { ...placement, top: top + index * advance }),
+    ),
+  };
+}
+
+/** Draws a block of text per `placement`; returns the layout it used. */
+export function drawTextBlock(
+  canvas: Canvas,
+  text: string,
+  placement: TextBlockPlacement,
+  paint: Paint,
+): TextBlockLayout {
+  const layout = layoutTextBlock(text, placement);
+  for (const line of layout.lines) {
+    drawText(canvas, line.text, { ...placement, top: line.y }, paint);
+  }
   return layout;
 }

@@ -38,15 +38,13 @@ describe('gray4 packing', () => {
   it('packs each 288x96 top container into 13824 bytes and each 288x144 bottom container into 20736 (050 AC-3, round 6)', () => {
     expect(PACKED_BYTE_LENGTHS).toEqual({ top: 13_824, bottom: 20_736 });
 
-    for (const half of splitStrip(
-      drawTopStrip('mid', { linkOk: true, message: 'BOX' }),
-    )) {
+    for (const half of splitStrip(drawTopStrip('mid', { linkOk: true }))) {
       const packed = pack(half, { width: WIDTH, height: 96 });
       expect(packed.length).toBe(13_824);
       expect(packed.length).toBe(STRIDE * 96);
     }
     for (const half of splitStrip(
-      drawBottomStrip([1, 2, 0], { linkOk: true }),
+      drawBottomStrip([1, 2, 0], { linkOk: true, message: 'GO LOW\nEXIT' }),
     )) {
       const packed = pack(half, { width: WIDTH, height: 144 });
       expect(packed.length).toBe(20_736);
