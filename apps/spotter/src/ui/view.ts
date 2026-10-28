@@ -258,7 +258,8 @@ function faders(model: Model): VNode {
  * small heading line above it (Maxx, 2026-10-28), then GO LOW · GO MID ·
  * GO TOP across the full width — in the message buttons' style. Each
  * button sends one two-line `msg` (`'GO LOW\nEXIT'`) through the same
- * `data-act="say"` path as the 2×2 below; like them it carries no lit state.
+ * `data-act="say"` path as the built-ins below; like them it carries no lit
+ * state.
  */
 function cornerCalls(): VNode {
   return h(
@@ -285,7 +286,8 @@ function cornerCalls(): VNode {
   );
 }
 
-/** Four equal buttons in a 2×2 grid (design round 6), one colour. */
+/** The built-in messages, equal buttons in one colour: round 6's 2×2, one
+ * row of two (LEADERS BEHIND · PITS) since round 7b. */
 function builtinMessages(): VNode {
   return h(
     'div',

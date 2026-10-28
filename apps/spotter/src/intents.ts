@@ -24,18 +24,13 @@ export const CAR_ROWS: readonly {
 export const CAR_DETENTS: readonly CarLevel[] = [0, 1, 2, 3];
 
 /**
- * The built-in messages: a 2×2 grid read left to right, top to bottom —
- * CATCHING UP / PULLING AWAY on top, LEADERS BEHIND / PITS under them (Maxx,
- * 2026-10-01 design round 6: PULL OFF renamed EXIT, SPIN removed; 2026-10-28
- * design round 7: EXIT renamed PITS, since EXIT is now a corner phase). Client
+ * The built-in messages, one row left to right: LEADERS BEHIND · PITS (Maxx,
+ * 2026-10-01 design round 6: a 2×2 with PULL OFF renamed EXIT and SPIN
+ * removed; 2026-10-28 design round 7: EXIT renamed PITS, since EXIT is now a
+ * corner phase; round 7b: CATCHING UP and PULLING AWAY removed). Client
  * constants; one tap sends one as `msg`.
  */
-export const BUILTIN_MESSAGES: readonly string[] = [
-  'CATCHING UP',
-  'PULLING AWAY',
-  'LEADERS BEHIND',
-  'PITS',
-];
+export const BUILTIN_MESSAGES: readonly string[] = ['LEADERS BEHIND', 'PITS'];
 
 /**
  * The corner calls (Maxx, 2026-10-28 design round 7): a row per phase, ENTRY

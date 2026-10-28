@@ -137,15 +137,11 @@ describe('AC-2 fader drag', () => {
   });
 });
 
-describe('built-in messages (design rounds 6 and 7)', () => {
-  it('are the four Maxx kept, in 2×2 reading order, each a valid msg text', () => {
-    // Round 7 renamed EXIT to PITS (EXIT is a corner phase now).
-    expect(BUILTIN_MESSAGES).toEqual([
-      'CATCHING UP',
-      'PULLING AWAY',
-      'LEADERS BEHIND',
-      'PITS',
-    ]);
+describe('built-in messages (design rounds 6, 7 and 7b)', () => {
+  it('are the two Maxx kept, left to right, each a valid msg text', () => {
+    // Round 7 renamed EXIT to PITS (EXIT is a corner phase now); round 7b
+    // removed CATCHING UP and PULLING AWAY.
+    expect(BUILTIN_MESSAGES).toEqual(['LEADERS BEHIND', 'PITS']);
     for (const text of BUILTIN_MESSAGES) {
       expect(normaliseMessage(text)).toBe(text);
       expect(text.length).toBeLessThanOrEqual(MSG_MAX_CHARS);

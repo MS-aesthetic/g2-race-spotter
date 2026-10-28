@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 /**
  * Design round 6 (040 Decisions 2026-10-01) through the real `main.ts`: the
  * CLEAR button is gone, so tapping the lit lane again sends the lane clear
- * (`{t:'lane', lane:null}`); the 2×2 message buttons send `msg`; nothing on
+ * (`{t:'lane', lane:null}`); the built-in message buttons send `msg`; nothing on
  * the page sends `preset` any more. Design round 7 (2026-10-28): the ENTRY /
  * EXIT corner calls send one two-line `msg` each.
  */
@@ -147,7 +147,7 @@ describe('lane taps and message buttons (main.ts, jsdom)', () => {
     const before = frames().length;
 
     tap('[data-act="say"][data-arg="PITS"]');
-    tap('[data-act="say"][data-arg="CATCHING UP"]');
+    tap('[data-act="say"][data-arg="LEADERS BEHIND"]');
     const input = document.querySelector<HTMLInputElement>(
       '[data-testid="msg-input"]',
     )!;
@@ -157,7 +157,7 @@ describe('lane taps and message buttons (main.ts, jsdom)', () => {
 
     expect(frames().slice(before)).toEqual([
       { t: 'msg', text: 'PITS' },
-      { t: 'msg', text: 'CATCHING UP' },
+      { t: 'msg', text: 'LEADERS BEHIND' },
       { t: 'msg', text: 'box this lap' },
     ]);
     expect(frames().filter((frame) => frame.t === 'preset')).toHaveLength(0);

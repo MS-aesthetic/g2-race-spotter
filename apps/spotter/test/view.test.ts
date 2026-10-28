@@ -519,8 +519,8 @@ describe('AC-4 ack icon', () => {
   });
 });
 
-describe('messages (design rounds 6 and 7)', () => {
-  it('offers four built-in messages, 2×2 in reading order, all one style', () => {
+describe('messages (design rounds 6, 7 and 7b)', () => {
+  it('offers two built-in messages, LEADERS BEHIND then PITS, one style', () => {
     render(consoleModel());
 
     expect(
@@ -534,19 +534,18 @@ describe('messages (design rounds 6 and 7)', () => {
         el.className,
       ]),
     ).toEqual([
-      ['CATCHING UP', 'CATCHING UP', 'say'],
-      ['PULLING AWAY', 'PULLING AWAY', 'say'],
       ['LEADERS BEHIND', 'LEADERS BEHIND', 'say'],
       ['PITS', 'PITS', 'say'],
     ]);
-    // SPIN and PULL OFF are gone, and nothing wears the alert colour.
+    // SPIN, PULL OFF, CATCHING UP and PULLING AWAY are gone (round 7b), and
+    // nothing wears the alert colour.
     expect(root.querySelector('.say--alert')).toBeNull();
     expect(
       root.querySelector('[data-testid="builtin-messages"]')!.children,
-    ).toHaveLength(4);
+    ).toHaveLength(2);
   });
 
-  it('offers ENTRY and EXIT corner calls above the 2×2, LOW left to TOP right (round 7)', () => {
+  it('offers ENTRY and EXIT corner calls above the built-ins, LOW left to TOP right (round 7)', () => {
     render(consoleModel());
 
     const rows = [...root.querySelectorAll('.calls__row')];
@@ -579,14 +578,14 @@ describe('messages (design rounds 6 and 7)', () => {
       ['GO MID', 'say', 'GO MID\nEXIT', 'EXIT GO MID'],
       ['GO TOP', 'say', 'GO TOP\nEXIT', 'EXIT GO TOP'],
     ]);
-    // Same family as the 2×2: the plain `say` class plus a modifier.
+    // Same family as the built-ins: the plain `say` class plus a modifier.
     for (const el of root.querySelectorAll('.say--call')) {
       expect(el.className).toBe('say say--call');
     }
   });
 
   it('gives no button a lit state for the room message, a corner call included (round 7)', () => {
-    // The 2×2 never reflected the room's message, so the corner calls do not
+    // The built-ins never reflected the room's message, so the calls do not
     // either; the header's ack icon is the only trace of it on the phone.
     render(
       consoleModel({

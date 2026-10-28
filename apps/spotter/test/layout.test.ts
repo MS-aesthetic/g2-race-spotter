@@ -152,6 +152,9 @@ interface Measured {
   phaseLabels: string[];
   phaseAbove: { gap: number; leftOffset: number; width: number }[];
   rowWidth: number;
+  callColumnGap: number;
+  callRowGap: number;
+  phaseStyle: { color: string; fontSize: number }[];
   callsTop: number;
   callsBottom: number;
   saysTop: number;
@@ -399,6 +402,33 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
           rowWidth: (
             consoleEl.querySelector('.calls') ?? consoleEl
           ).getBoundingClientRect().width,
+          // Round 7b: space between neighbouring buttons in a row, and from
+          // the ENTRY buttons down to the EXIT heading.
+          callColumnGap: Math.min(
+            ...callRows.flatMap((row) => {
+              const rowButtons = [...row.querySelectorAll('.say--call')].map(
+                (el) => el.getBoundingClientRect(),
+              );
+              return rowButtons
+                .slice(1)
+                .map((box, index) => box.left - rowButtons[index]!.right);
+            }),
+          ),
+          callRowGap:
+            callRows[1]!.querySelector('.calls__phase')!.getBoundingClientRect()
+              .top -
+            Math.max(
+              ...[...callRows[0]!.querySelectorAll('.say--call')].map(
+                (el) => el.getBoundingClientRect().bottom,
+              ),
+            ),
+          phaseStyle: callRows.map((row) => {
+            const style = getComputedStyle(row.querySelector('.calls__phase')!);
+            return {
+              color: style.color,
+              fontSize: parseFloat(style.fontSize),
+            };
+          }),
           callsTop: Math.min(...calls.map((box) => box.top)),
           callsBottom: Math.max(...calls.map((box) => box.bottom)),
           saysTop: Math.min(...says.map((box) => box.top)),
@@ -426,7 +456,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
 
         // Reported so a regression says by how much, not just that it failed.
         console.info(
-          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes ${[...new Set(measured.lanes)].join(',')}, air ${measured.airLanesFaders.toFixed(0)}/${measured.airFadersMessages.toFixed(0)}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, calls ${[...new Set(measured.callSizes)].join(',')} y ${measured.callsTop.toFixed(0)}..${measured.callsBottom.toFixed(0)}, messages ${[...new Set(measured.saySizes)].join(',')} from y=${measured.saysTop.toFixed(0)}`,
+          `layout ${viewport.width}x${viewport.height} ${live ? 'live' : 'down'}: document ${measured.documentScroll} <= ${measured.innerHeight}, console ${measured.consoleScroll} <= ${measured.consoleClient}, buttons ${measured.buttons} min ${measured.minButton}px, lanes ${[...new Set(measured.lanes)].join(',')}, air ${measured.airLanesFaders.toFixed(0)}/${measured.airFadersMessages.toFixed(0)}px, faders end y=${measured.fadersBottom} (${((100 * measured.fadersBottom) / measured.innerHeight).toFixed(1)} %), gaps ${measured.gaps.map((gap) => gap.toFixed(0)).join('/')}px, knob ${measured.knob.minWidth}x${measured.knob.minHeight}, track ${measured.track.minWidth}x${measured.track.minHeight}, calls ${[...new Set(measured.callSizes)].join(',')} gaps ${measured.callColumnGap.toFixed(0)}/${measured.callRowGap.toFixed(0)}px y ${measured.callsTop.toFixed(0)}..${measured.callsBottom.toFixed(0)}, messages ${[...new Set(measured.saySizes)].join(',')} from y=${measured.saysTop.toFixed(0)}`,
         );
 
         expect(measured.documentScroll).toBeLessThanOrEqual(
@@ -435,11 +465,12 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
         expect(measured.consoleScroll).toBeLessThanOrEqual(
           measured.consoleClient,
         );
-        // code chip + 3 lanes + 6 corner calls + 4 built-ins + Send (round 6:
+        // code chip + 3 lanes + 6 corner calls + 2 built-ins + Send (round 6:
         // no CLEAR, no Save, no saved-message chips even though the live room
-        // holds three; round 7 added the corner calls). Faders are not
-        // buttons: each is one slider track.
-        expect(measured.buttons).toBe(15);
+        // holds three; round 7 added the corner calls; round 7b removed
+        // CATCHING UP and PULLING AWAY). Faders are not buttons: each is one
+        // slider track.
+        expect(measured.buttons).toBe(13);
         expect(measured.savedMessageControls).toBe(0);
         expect(measured.minButton).toBeGreaterThanOrEqual(MIN_TOUCH_PX);
         expect(measured.minLane).toBeGreaterThanOrEqual(MIN_LANE_PX);
@@ -507,15 +538,21 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
             1,
           );
         }
-        // Between the faders (portrait; beside them in landscape) and the 2×2.
+        // Round 7b (Maxx, 13:34): noticeably more room between the call
+        // buttons (16 px, was 10) and between the ENTRY and EXIT rows (16 px,
+        // was 8), and larger, pure white headings (15 px, was 12 px grey).
+        expect(measured.callColumnGap).toBeGreaterThanOrEqual(15);
+        expect(measured.callRowGap).toBeGreaterThanOrEqual(15);
+        for (const phase of measured.phaseStyle) {
+          expect(phase.color).toBe('rgb(255, 255, 255)');
+          expect(phase.fontSize).toBeGreaterThanOrEqual(15);
+        }
+        // Between the faders (portrait; beside them in landscape) and the
+        // built-in messages.
         expect(measured.callsBottom).toBeLessThan(measured.saysTop);
-        // Four built-in messages, 2×2, all one size (round 7: EXIT → PITS).
-        expect(measured.sayLabels).toEqual([
-          'CATCHING UP',
-          'PULLING AWAY',
-          'LEADERS BEHIND',
-          'PITS',
-        ]);
+        // Two built-in messages in one row, one size (round 7: EXIT → PITS;
+        // round 7b: CATCHING UP and PULLING AWAY removed).
+        expect(measured.sayLabels).toEqual(['LEADERS BEHIND', 'PITS']);
         // One size: layout rounding may split a pixel between the columns.
         const sizes = measured.saySizes.map((size) =>
           size.split('x').map(Number),
@@ -526,7 +563,7 @@ describeOrSkip('AC-8 the console never needs scrolling', () => {
             1,
           );
         }
-        expect([measured.sayColumns, measured.sayRows]).toEqual([2, 2]);
+        expect([measured.sayColumns, measured.sayRows]).toEqual([2, 1]);
         if (portrait) {
           // Lanes and faders sit in the top 55 % of a portrait phone.
           expect(measured.fadersBottom).toBeLessThanOrEqual(
