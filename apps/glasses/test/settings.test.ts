@@ -83,6 +83,31 @@ describe('room and pin validation', () => {
 });
 
 describe('relay URL', () => {
+  it('a packaged build uses the baked-in relay whatever origin the Even app serves it from', () => {
+    for (const origin of [
+      'https://localhost',
+      'file://',
+      'evenhub://app',
+      '',
+    ]) {
+      expect(
+        resolveRelayBase({
+          origin,
+          fallback: 'wss://g2-race-relay.example.workers.dev/',
+          pinned: true,
+        }),
+      ).toBe('wss://g2-race-relay.example.workers.dev');
+    }
+    expect(
+      resolveRelayBase({
+        search: '?relay=wss://other.example',
+        origin: 'https://localhost',
+        fallback: 'wss://g2-race-relay.example.workers.dev',
+        pinned: true,
+      }),
+    ).toBe('wss://other.example');
+  });
+
   it('upgrades the page origin to a websocket scheme', () => {
     expect(resolveRelayBase({ origin: 'https://relay.example' })).toBe(
       'wss://relay.example',

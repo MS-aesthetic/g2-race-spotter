@@ -131,6 +131,13 @@ export interface RelayBaseInput {
    * has no WebSocket room endpoint. Comes from `VITE_RELAY_URL` (see `.env`).
    */
   readonly fallback?: string;
+  /**
+   * Packaged `.ehpk` build (`npm run pack`, `VITE_RELAY_PINNED=1`): the page
+   * is served from inside the Even app, whose origin is not documented and
+   * may well be `https://` — so the baked-in `fallback` wins over the origin.
+   * `?relay=` still overrides.
+   */
+  readonly pinned?: boolean;
 }
 
 export function resolveRelayBase(input: RelayBaseInput = {}): string {
@@ -143,10 +150,13 @@ export function resolveRelayBase(input: RelayBaseInput = {}): string {
   }
 
   const origin = (input.origin ?? '').replace(/\/+$/, '');
+  const fallback = (input.fallback ?? '').replace(/\/+$/, '');
+  if (input.pinned === true && fallback !== '') {
+    return fallback;
+  }
   if (origin.startsWith('https://')) {
     return `wss://${origin.slice('https://'.length)}`;
   }
-  const fallback = (input.fallback ?? '').replace(/\/+$/, '');
   if (fallback !== '') {
     return fallback;
   }

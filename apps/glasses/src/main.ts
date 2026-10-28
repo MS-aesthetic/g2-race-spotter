@@ -40,6 +40,7 @@ const relayBase = resolveRelayBase({
   search: globalThis.location?.search,
   origin: globalThis.location?.origin,
   fallback: import.meta.env.VITE_RELAY_URL,
+  pinned: import.meta.env.VITE_RELAY_PINNED === '1',
 });
 
 const root = document.getElementById('app');
