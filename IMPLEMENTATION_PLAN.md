@@ -1,4 +1,4 @@
-# Implementation plan — 2026-10-28 (stability: T050 + T065)
+# Implementation plan — 2026-10-28 (design round 7 + stability)
 
 Status: BUILDING — code complete for the first hardware session
 Current spec focus: hardware evidence (Maxx). No agent code task is open until that session reports back.
@@ -41,7 +41,7 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Needs human [HW]
 
-- [ ] T118 (owner: maxx) Redeploy the relay with T050 + T065 (`npm run deploy` from the PC clone after pulling `master`). Round 6 is already live — verified 2026-10-28: the deployed spotter bundle `main-BC16Fc7e.js` matches a `build:site` of `2708fb0`.
+- [x] T118 (owner: maxx) Redeployed 2026-10-28 (verified live: spotter `main-BWsDdjq8.js`). Was: Redeploy the relay with T050 + T065 (`npm run deploy` from the PC clone after pulling `master`). Round 6 is already live — verified 2026-10-28: the deployed spotter bundle `main-BC16Fc7e.js` matches a `build:site` of `2708fb0`.
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode in the Even app, scan the QR from the spotter page's room overlay (no PC needed since T058), save a photo/log under `qa/<date>/`. **First real information the project gets.**
 - [x] T102 (owner: maxx) (spec: 020 AC-10) Deployed 2026-09-04 to `https://g2-race-relay.maxx-384.workers.dev` (account `maxx-384`); `DEBUG_KEY` not yet set; `qa/<date>/020-deploy.log` not yet saved — Maxx to paste the deploy output when convenient.
 - [ ] T104 (owner: maxx) (spec: 030 AC-8) Real-glasses `lanes`, `gap-sweep`, `message-ack`, `link-loss` from the spotter PWA; `qa/<date>/REPORT.md`.
@@ -55,6 +55,8 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Done this cycle
 
+- [x] T067 + T068 design round 7 (approved from mocks, amended live by Maxx): lane triangles 50 % larger and solid (no blink); message in the bottom strips between the corner Ls, two lines (`\n`, then word-wrap); phone ENTRY / EXIT rows of GO LOW / GO MID / GO TOP sending `"<action>\n<phase>"`, white headings above the rows, built-ins LEADERS BEHIND + PITS. Merges `1ccdaae`, `d3d324f`; review `docs/reviews/2026-10-28-round-13-T067-T068.md`. `app.json` 1.1.0. Needs `npm run deploy` + `.ehpk` 1.1.0 upload **together** (older glasses draw the `\n` as `?`).
+- [x] T066 `90309d1` packaged `.ehpk` pins the relay URL; Maxx uploaded 1.0.0 as a private build and confirmed it works on hardware (2026-10-28).
 - [x] T065 (coordinator, 2026-10-28) `ef8d476` — `RoomClient` drops a socket silent for `SOCKET_SILENT_MS` (6 s) or not open within `CONNECT_TIMEOUT_MS` (10 s) and reconnects; same-URL `connect()` replaces a socket quiet for > 2 ping periods; spotter reconnects on `visibilitychange`/`pageshow`/`online`. Half-open LTE sockets previously never recovered until the OS gave up.
 - [x] T050 (coordinator, 2026-10-28) `6cf87b5` — relay silent-peer reaper (020 AC-7) + joined-socket validation (020 AC-9). 449/449 tests after the review nit pass.
 - [x] T063 + T064 design round 6 (approved from mocks first): 500 ms ×8 lane blink, bitmap message in 288×96 top strips blinking 1 s for 5 s, L-shaped corner bars + centre-out middle bar in 288×144 bottom strips; spotter: no CLEAR, square lanes, 2×2 messages, no Save/chips. `6eab30d`, `2ede204`. Relay redeployed (verified live 2026-10-28).
@@ -71,6 +73,7 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Notes / why
 
+- 2026-10-28 first hardware session (Maxx): "everything works"; spotter data off/on → reconnected; driver phone locked 5 min → app still good (060 AC-5/6 informally passed — save notes under `qa/` when convenient). Round 7 followed directly from that session. Round lessons: two Opus workers in parallel worktrees + one reviewer each took ~1 h wall clock including two live amendments sent to the running phone worker; parallel `npm test` runs on the 2-CPU container collide on wrangler's inspector port / boot time — run full suites serially.
 - 2026-10-28 stability pass (Maxx: "tell me … what i need to do so that I can actually use this with some level of stability", then "do the fixes now"): no simulator or hardware evidence exists in `qa/` yet; the only code risks left before a track session were half-open sockets (no client ever acted on `lastFrameAt` — reconnect happened only on `FOREGROUND_ENTER_EVENT`) and the relay never reaping silent peers (`S` could stay lit for a dead spotter phone). Both fixed. The OneDrive mirror (`C:\Users\maxx\OneDrive\Documents\EVEN G2 HUD`) is frozen at 2026-09-04 and its `_xfer\round6.bundle` is already on GitHub — the PC clone + GitHub are the only live copies.
 - 2026-10-01 design round 6: showing Maxx rendered mocks (PIL from the real top strip + the proposed geometry) BEFORE writing code took four quick iterations on the corner shape and cost no worker tokens; both leases then landed in one iteration each with an in-lease nit pass. T054 housekeeping grows again (role files, hud-e2e-testing skill, BUILD_PLAN §3/§5 — see the review record).
 - 2026-09-25 design round 4: SDK 0.0.12 page caps are 4 image / 8 text / 12 containers (RESEARCH_NOTES §2) — the worker stopping on the type instead of working around it saved a hardware-only failure. Open items listed in the round-7 review record; T054 housekeeping now also covers 040 R2–R5, 050 Scope/R1, cloudflare-relay-deploy 24 h.
