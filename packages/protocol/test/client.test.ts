@@ -6,10 +6,12 @@ import {
   CLOSE_CODE_DRIVER_EVICTED,
   CLOSE_CODE_SILENT_PEER,
   CLOSE_CODE_VERSION,
+  CONNECT_TIMEOUT_MS,
   PING_INTERVAL_MS,
   RECONNECT_MAX_MS,
   RECONNECT_MIN_MS,
   RoomClient,
+  SOCKET_SILENT_MS,
   type RoomClientTimers,
   type RoomWebSocket,
 } from '../src/index.js';
@@ -425,7 +427,11 @@ describe('RoomClient', () => {
     first.open();
     first.receive(state(99));
     first.fail();
-    expect(timers.timeouts.size).toBe(0);
+    // The stale socket schedules no reconnect; the only pending timeout is
+    // the replacement socket's own connect timeout (cleared when it opens).
+    expect([...timers.timeouts.values()]).toEqual([
+      expect.objectContaining({ delayMs: CONNECT_TIMEOUT_MS }),
+    ]);
     expect(timers.intervals.size).toBe(0);
 
     second.open();
@@ -576,5 +582,133 @@ describe('RoomClient', () => {
 
     expect(FakeWebSocket.sockets).toEqual([socket]);
     expect(sent(socket)).toEqual([{ t: 'hello', v: 2, role: 'spotter' }]);
+  });
+
+  describe('dead-socket recovery', () => {
+    function clock(start = 1_000) {
+      let now = start;
+      return {
+        now: () => now,
+        advance: (ms: number) => {
+          now += ms;
+        },
+      };
+    }
+
+    it('drops an open socket that stays silent past SOCKET_SILENT_MS and reconnects', () => {
+      FakeWebSocket.reset();
+      const timers = new FakeTimers();
+      const time = clock();
+      const connection: Array<[string, unknown]> = [];
+      const client = createClient(timers, { now: time.now });
+      client.onConnection((value, detail) => connection.push([value, detail]));
+
+      client.connect('ws://relay.test/room/CAR42?role=spotter');
+      const first = FakeWebSocket.sockets[0];
+      first.open();
+      first.receive(state(1));
+
+      // Healthy: pongs keep arriving, pings keep going out.
+      time.advance(PING_INTERVAL_MS);
+      first.receive({ t: 'pong', ts: 1, serverTs: 1 });
+      timers.tickIntervals();
+      expect(sent(first).at(-1)).toMatchObject({ t: 'ping' });
+
+      // Half-open: nothing comes back. Pinging continues until the silence
+      // exceeds SOCKET_SILENT_MS, then the socket is dropped.
+      time.advance(SOCKET_SILENT_MS);
+      timers.tickIntervals();
+      expect(sent(first).at(-1)).toMatchObject({ t: 'ping' });
+      time.advance(1);
+      timers.tickIntervals();
+
+      expect(client.lastFrameAt).toBeUndefined();
+      expect(timers.intervals.size).toBe(0);
+      expect(connection.at(-1)).toEqual([
+        'closed',
+        { code: undefined, terminal: false },
+      ]);
+      expect([...timers.timeouts.values()]).toEqual([
+        expect.objectContaining({ delayMs: RECONNECT_MIN_MS }),
+      ]);
+
+      timers.runNextTimeout();
+      expect(FakeWebSocket.sockets).toHaveLength(2);
+      // A late close from the abandoned socket changes nothing.
+      first.fail();
+      expect(FakeWebSocket.sockets).toHaveLength(2);
+      expect(connection.at(-1)?.[0]).toBe('connecting');
+    });
+
+    it('drops an open socket that never delivers its replay', () => {
+      FakeWebSocket.reset();
+      const timers = new FakeTimers();
+      const time = clock();
+      const client = createClient(timers, { now: time.now });
+
+      client.connect('ws://relay.test/room/CAR42?role=spotter');
+      FakeWebSocket.sockets[0].open();
+      time.advance(SOCKET_SILENT_MS + 1);
+      timers.tickIntervals();
+
+      expect(timers.intervals.size).toBe(0);
+      timers.runNextTimeout();
+      expect(FakeWebSocket.sockets).toHaveLength(2);
+    });
+
+    it('abandons a socket that never opens within CONNECT_TIMEOUT_MS', () => {
+      FakeWebSocket.reset();
+      const timers = new FakeTimers();
+      const connection: string[] = [];
+      const client = createClient(timers);
+      client.onConnection((value) => connection.push(value));
+
+      client.connect('ws://relay.test/room/CAR42?role=spotter');
+      expect([...timers.timeouts.values()]).toEqual([
+        expect.objectContaining({ delayMs: CONNECT_TIMEOUT_MS }),
+      ]);
+      timers.runNextTimeout();
+
+      expect(connection).toEqual(['connecting', 'closed']);
+      expect([...timers.timeouts.values()]).toEqual([
+        expect.objectContaining({ delayMs: RECONNECT_MIN_MS }),
+      ]);
+      timers.runNextTimeout();
+      expect(FakeWebSocket.sockets).toHaveLength(2);
+    });
+
+    it('clears the connect timeout once the socket opens', () => {
+      FakeWebSocket.reset();
+      const timers = new FakeTimers();
+      const client = createClient(timers);
+
+      client.connect('ws://relay.test/room/CAR42?role=spotter');
+      FakeWebSocket.sockets[0].open();
+
+      expect(timers.timeouts.size).toBe(0);
+    });
+
+    it('replaces a replayed socket on same-URL connect once it has gone quiet (foreground return)', () => {
+      FakeWebSocket.reset();
+      const timers = new FakeTimers();
+      const time = clock();
+      const client = createClient(timers, { now: time.now });
+      const url = 'ws://relay.test/room/CAR42?role=spotter';
+
+      client.connect(url);
+      const first = FakeWebSocket.sockets[0];
+      first.open();
+      first.receive(state(1));
+
+      // Still fresh: a foreground connect is a no-op.
+      time.advance(2 * PING_INTERVAL_MS);
+      client.connect(url);
+      expect(FakeWebSocket.sockets).toHaveLength(1);
+
+      // Phone was locked; timers were frozen, nothing arrived.
+      time.advance(1);
+      client.connect(url);
+      expect(FakeWebSocket.sockets).toHaveLength(2);
+    });
   });
 });

@@ -3,10 +3,12 @@ import {
   CLOSE_CODE_BAD_HELLO,
   CLOSE_CODE_DRIVER_EVICTED,
   CLOSE_CODE_VERSION,
+  CONNECT_TIMEOUT_MS,
   PING_INTERVAL_MS,
   PROTOCOL_VERSION,
   RECONNECT_MAX_MS,
   RECONNECT_MIN_MS,
+  SOCKET_SILENT_MS,
   isErrorMessage,
   isServerMessage,
   isState,
@@ -172,6 +174,9 @@ export class RoomClient {
   private url: string | undefined;
   private pingTimer: number | undefined;
   private reconnectTimer: number | undefined;
+  private connectTimer: number | undefined;
+  /** Local time the current socket opened; the silence clock before its first frame. */
+  private openedAt = 0;
   private reconnectAttempt = 0;
   private status: ConnectionState = 'closed';
   private replayed = false;
@@ -210,13 +215,25 @@ export class RoomClient {
     // socket that is no longer `this.socket`, so the old socket's handlers
     // cannot leak state into the new session even though they are not
     // explicitly removed.
-    if (this.url === url && this.socket !== undefined && this.replayed) {
+    //
+    // It must also have heard from the relay within two ping periods: after
+    // a phone lock or app switch the timers were frozen, so a socket can look
+    // replayed while it is really half-open. A foreground `connect()` then
+    // replaces it at once instead of waiting for the silence watchdog.
+    if (
+      this.url === url &&
+      this.socket !== undefined &&
+      this.replayed &&
+      this.lastFrameAt !== undefined &&
+      this.now() - this.lastFrameAt <= 2 * PING_INTERVAL_MS
+    ) {
       return;
     }
 
     const urlChanged = this.url !== undefined && this.url !== url;
     this.url = url;
     this.clearReconnectTimer();
+    this.clearConnectTimer();
     this.clearPingTimer();
     this.retireSocket();
     if (urlChanged) {
@@ -228,6 +245,7 @@ export class RoomClient {
   disconnect(): void {
     this.url = undefined;
     this.clearReconnectTimer();
+    this.clearConnectTimer();
     this.clearPingTimer();
 
     this.retireSocket();
@@ -281,6 +299,11 @@ export class RoomClient {
 
     const socket = new this.WebSocket(this.url);
     this.socket = socket;
+    this.clearConnectTimer();
+    this.connectTimer = this.timers.setTimeout(() => {
+      this.connectTimer = undefined;
+      this.dropDeadSocket(socket);
+    }, CONNECT_TIMEOUT_MS);
     this.listen(socket, 'open', () => this.handleOpen(socket));
     this.listen(socket, 'message', (event) =>
       this.handleMessage(socket, event),
@@ -307,8 +330,10 @@ export class RoomClient {
       return;
     }
 
+    this.clearConnectTimer();
     this.lastSeen = 0;
     this.replayed = false;
+    this.openedAt = this.now();
     this.setConnectionState('open');
     this.sendFrame(this.hello());
     this.pingTimer = this.timers.setInterval(
@@ -372,6 +397,7 @@ export class RoomClient {
 
     this.socket = undefined;
     this.replayed = false;
+    this.clearConnectTimer();
     this.clearPingTimer();
     const terminal = isTerminalClose(event);
     const code = closeCode(event);
@@ -394,7 +420,35 @@ export class RoomClient {
       return;
     }
 
+    // The relay answers every ping, so silence this long means the socket is
+    // dead even if the OS still reports it open (half-open after a cell
+    // handoff). Drop it and reconnect instead of pinging into the void.
+    const heardAt = this.lastFrameAt ?? this.openedAt;
+    if (this.now() - heardAt > SOCKET_SILENT_MS) {
+      this.dropDeadSocket(socket);
+      return;
+    }
+
     this.sendFrame({ t: 'ping', ts: this.now() });
+  }
+
+  /**
+   * Abandons a socket that never opened or went silent: reported as a
+   * non-terminal close and followed by the normal jittered reconnect. Its own
+   * `close` event, if one ever arrives, is ignored by the identity guard.
+   */
+  private dropDeadSocket(socket: RoomWebSocket): void {
+    if (this.socket !== socket) {
+      return;
+    }
+
+    this.clearConnectTimer();
+    this.clearPingTimer();
+    this.retireSocket();
+    this.replayed = false;
+    this.lastFrameAt = undefined;
+    this.setConnectionState('closed', { code: undefined, terminal: false });
+    this.scheduleReconnect();
   }
 
   private hello(): Hello {
@@ -470,6 +524,15 @@ export class RoomClient {
 
     this.timers.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
+  }
+
+  private clearConnectTimer(): void {
+    if (this.connectTimer === undefined) {
+      return;
+    }
+
+    this.timers.clearTimeout(this.connectTimer);
+    this.connectTimer = undefined;
   }
 
   private clearPingTimer(): void {

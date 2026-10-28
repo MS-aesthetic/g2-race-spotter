@@ -530,6 +530,22 @@ root.addEventListener('keydown', (event) => {
 // move on their own; one tick per ping interval is enough to age them out.
 window.setInterval(() => update({}), PING_INTERVAL_MS);
 
+/**
+ * Back from a locked screen, another app, or a dead zone: reconnect at once
+ * instead of waiting out a backoff or the silence watchdog (timers were
+ * frozen while hidden). `RoomClient.connect` is a no-op on a socket that has
+ * heard from the relay in the last two ping periods, so a healthy session is
+ * left alone.
+ */
+function resumeLink(): void {
+  if (model.screen === 'console' && document.visibilityState === 'visible') {
+    client.connect(roomUrl(origin, model.form));
+  }
+}
+document.addEventListener('visibilitychange', resumeLink);
+window.addEventListener('pageshow', resumeLink);
+window.addEventListener('online', resumeLink);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker

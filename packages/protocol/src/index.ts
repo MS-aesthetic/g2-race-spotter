@@ -49,6 +49,16 @@ export const HUD_STALE_CLEAR_MS = 6_000;
 export const CAR_LEVEL_MAX = 3;
 export const RECONNECT_MIN_MS = 500;
 export const RECONNECT_MAX_MS = 8_000;
+/**
+ * `RoomClient` drops an OPEN socket that has delivered no frame (the relay
+ * pongs every ping, so a healthy socket hears back every `PING_INTERVAL_MS`)
+ * for this long and reconnects. A half-open socket — common on LTE cell
+ * handoffs — otherwise sits "open" until the OS gives up, which can take
+ * minutes. Longer than `DRIVER_NO_LINK_MS` so NO LINK always shows first.
+ */
+export const SOCKET_SILENT_MS = 6_000;
+/** `RoomClient` abandons a socket that has not opened within this long. */
+export const CONNECT_TIMEOUT_MS = 10_000;
 export const RATE_LIMIT_PER_S = 30;
 export const RATE_BURST = 60;
 /**
@@ -60,6 +70,37 @@ export const MSG_MAX_CHARS = 80;
 /** Most custom messages a room keeps in `State.presets`. */
 export const PRESETS_MAX = 12;
 export const FRAME_MAX_BYTES = 1_024;
+
+/** Every client frame `t`; anything else is an unknown frame (020 AC-9). */
+export const CLIENT_MESSAGE_TYPES = [
+  'hello',
+  'ping',
+  'lane',
+  'cars',
+  'msg',
+  'clear',
+  'preset',
+  'ack',
+] as const;
+export type ClientMessageType = (typeof CLIENT_MESSAGE_TYPES)[number];
+
+export function isClientMessageType(
+  value: unknown,
+): value is ClientMessageType {
+  return (CLIENT_MESSAGE_TYPES as readonly unknown[]).includes(value);
+}
+
+/**
+ * The only role allowed to send a room-changing frame, or `null` for frames
+ * either role sends (`hello`, `ping`). Mirrors the reducer's role checks so
+ * the relay can count wrong-role frames before they reach it.
+ */
+export function senderRole(t: ClientMessageType): Role | null {
+  if (t === 'hello' || t === 'ping') {
+    return null;
+  }
+  return t === 'ack' ? 'driver' : 'spotter';
+}
 
 export const CLOSE_CODE_BAD_HELLO = 4_400;
 export const CLOSE_CODE_AUTH = 4_401;
