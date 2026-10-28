@@ -1,7 +1,7 @@
-# Implementation plan — 2026-10-01 (design round 6)
+# Implementation plan — 2026-10-28 (stability: T050 + T065)
 
-Status: BUILDING
-Current spec focus: hardware/simulator evidence (Maxx) + specs/020 AC-7/AC-9 (T050); design round 6 integrated 2026-10-01
+Status: BUILDING — code complete for the first hardware session
+Current spec focus: hardware evidence (Maxx). No agent code task is open until that session reports back.
 
 ## Model routing (either vendor per tier — pick per run, mixing is fine)
 
@@ -19,16 +19,14 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Active stream leases (interactive coordinator only)
 
-- L021 (T063) integrated as `6eab30d`, L022 (T064) as `2ede204` — review `docs/reviews/2026-10-01-round-11-T063-T064.md`. Leases closed.
+- No active leases. T065 (`ef8d476`) and T050 (`6cf87b5`) were done directly by the coordinator on 2026-10-28 with a fresh exact-range review — `docs/reviews/2026-10-28-round-12-T050-T065.md`.
+- Closed: L021 (T063) `6eab30d`, L022 (T064) `2ede204` — review `docs/reviews/2026-10-01-round-11-T063-T064.md`.
 - Closed: L019 (T052), L020 (T053) and the round 3–5b leases — see `ralph/PROGRESS.md`.
 
 ## Next (ordered; the serial runner takes the first unchecked task)
 
-
-- [ ] T052 (owner: g2-glasses-dev) (Maxx design round 1, 2026-09-04 — human-requested changes to 030/050/040; record as Decisions) [stream:app-design; lock:app-design; depends:T030+T040 integrated] **HUD redesign + "car inside/outside" signal.** (a) Protocol: additive `State.side: 'inside' | 'outside' | null` and spotter-only message `{t:'side', side}`; guards, fixtures (`side.valid/invalid.json`), reducer (no-op does not bump `seq`), `RoomClient` queues the latest `side` while offline like `lane`; `PROTOCOL_VERSION` stays 1 (additive). Relay: accept via `isClientMessage` (spotter role only). (b) Glasses HUD image (288×144, still one image container): three lane positions across the top — ▼ left, ● middle, ▲ right — active one filled with a checkerboard/Bayer dither (easier on the eyes), inactive ones as faint outlines; bar below; under the bar a ◀ at the left edge when `side === 'inside'` and a ▶ at the right edge when `side === 'outside'`; all fills dithered, outlines solid; ≥ 90 alert and NO-LINK dimming kept. Page layout: message text container at the TOP of the canvas, image below it, status at the BOTTOM RIGHT. (c) Status strip becomes two letters: `L` solid when the link is OK, blinking (~700 ms via `status` jobs, never image sends) when NO LINK; `S` present only while `spotterOnline`; `ROOM ?` unchanged. (d) Spotter PWA: two toggle buttons **CAR INSIDE** / **CAR OUTSIDE** under the slider (tap again to clear; reflect server state); header unchanged. (e) Update the three skills and re-record goldens; add Decisions to specs 020/030/050/040. Verifiers: existing suites updated + `packages/protocol/test/reduce.test.ts` side cases, `apps/glasses/test/draw-hud.test.ts` new goldens (each lane, each side, dither present, dim), `apps/glasses/test/link-watchdog.test.ts` L/S strings + blink, `apps/spotter/test/view.test.ts` side buttons. Extra gates: every root gate, both app builds.
-
-- [ ] T050 (owner: relay-backend-dev, small enough for a Sonnet-tier worker) (spec: 020 AC-7, AC-9; R4 minus rate limiting) [stream:relay-room; lock:relay-room; depends:T009 integrated (`b28cc2c`)] **Relay heartbeat + validation in one task.** `alarm()`: reduce `{t:'peer', online:false}` inline and broadcast *before* `close(4408)` (server close does not fire `webSocketClose`); add `attachment.rejected !== true` to `persistAndBroadcast`/`hasReadyPeer`; reap unready/roleless sockets that never sent `hello` (arm on accept or reap next tick — update the `alarm: null` assertions in `auth.test.ts` deliberately and say so); self-arm while sockets remain. Validation: `FRAME_MAX_BYTES` on UTF-8 byte length before `JSON.parse`; unknown `t` ignored and counted; malformed non-hello → `error{bad_frame}`, socket stays open; wrong-role frames ignored; `name=''` → absent; version precedence (`7bab61a`) preserved. **Verifiers:** `services/relay/test/heartbeat.test.ts` (spotter stops pinging → driver sees `spotterOnline === false` and spotter closes 4408 within `PEER_OFFLINE_MS + ALARM_TICK_MS`; an unready socket is reaped), `validation.test.ts` (AC-9). Extra gates: pinned live Wrangler tests, every root gate, `wrangler types --check`, isolated-assets dry-run.
 - [ ] T051 (owner: g2-glasses-dev) (spec: 050 image polish) [depends:T030 integrated; T104/T109 evidence] Whatever the first hardware session shows: nibble order / stride flip, pacing, `sendFailed` behaviour, design tweaks in `hud-design.ts`. Scoped by Maxx after the session; do not start before.
+- [ ] T054 (owner: plan-updater + any worker, Sonnet-tier) Housekeeping collected by the review records (role files, `hud-e2e-testing` skill, BUILD_PLAN §3/§5, constitution/AGENTS v1 prose, PWA icons, `HUD_GAP_FLUSH_MS` rename). Not blocking; batch it with T051.
 
 ## Needs simulator [SIM] — Maxx runs these on his machine
 
@@ -41,6 +39,7 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Needs human [HW]
 
+- [ ] T118 (owner: maxx) Redeploy the relay with T050 + T065 (`npm run deploy` from the PC clone after pulling `master`). Round 6 is already live — verified 2026-10-28: the deployed spotter bundle `main-BC16Fc7e.js` matches a `build:site` of `2708fb0`.
 - [ ] T101b (owner: maxx) (spec: 010 AC-4) Enable Developer Mode in the Even app, scan the QR from the spotter page's room overlay (no PC needed since T058), save a photo/log under `qa/<date>/`. **First real information the project gets.**
 - [x] T102 (owner: maxx) (spec: 020 AC-10) Deployed 2026-09-04 to `https://g2-race-relay.maxx-384.workers.dev` (account `maxx-384`); `DEBUG_KEY` not yet set; `qa/<date>/020-deploy.log` not yet saved — Maxx to paste the deploy output when convenient.
 - [ ] T104 (owner: maxx) (spec: 030 AC-8) Real-glasses `lanes`, `gap-sweep`, `message-ack`, `link-loss` from the spotter PWA; `qa/<date>/REPORT.md`.
@@ -54,7 +53,9 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Done this cycle
 
-- [x] T063 + T064 design round 6 (approved from mocks first): 500 ms ×8 lane blink, bitmap message in 288×96 top strips blinking 1 s for 5 s, L-shaped corner bars + centre-out middle bar in 288×144 bottom strips; spotter: no CLEAR, square lanes, 2×2 messages, no Save/chips. `6eab30d`, `2ede204`. Relay redeploy pending (Maxx's PC).
+- [x] T065 (coordinator, 2026-10-28) `ef8d476` — `RoomClient` drops a socket silent for `SOCKET_SILENT_MS` (6 s) or not open within `CONNECT_TIMEOUT_MS` (10 s) and reconnects; same-URL `connect()` replaces a socket quiet for > 2 ping periods; spotter reconnects on `visibilitychange`/`pageshow`/`online`. Half-open LTE sockets previously never recovered until the OS gave up.
+- [x] T050 (coordinator, 2026-10-28) `6cf87b5` — relay silent-peer reaper (020 AC-7) + joined-socket validation (020 AC-9). 445/445 tests.
+- [x] T063 + T064 design round 6 (approved from mocks first): 500 ms ×8 lane blink, bitmap message in 288×96 top strips blinking 1 s for 5 s, L-shaped corner bars + centre-out middle bar in 288×144 bottom strips; spotter: no CLEAR, square lanes, 2×2 messages, no Save/chips. `6eab30d`, `2ede204`. Relay redeployed (verified live 2026-10-28).
 - [x] T060 + T061 design round 5 (corner arcs, vertical middle bar, ◀▲▶ + blink, faders, renamed presets). Relay redeployed.
 - [x] T058 hosted glasses app + QR driver setup; T059 solid fills. `npm run deploy` is the one-command deploy.
 - [x] T056 + T057 design round 4 (presets/random room/24 h TTL/new spotter layout; four-strip perimeter HUD). Relay redeployed.
@@ -68,9 +69,10 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 
 ## Notes / why
 
+- 2026-10-28 stability pass (Maxx: "tell me … what i need to do so that I can actually use this with some level of stability", then "do the fixes now"): no simulator or hardware evidence exists in `qa/` yet; the only code risks left before a track session were half-open sockets (no client ever acted on `lastFrameAt` — reconnect happened only on `FOREGROUND_ENTER_EVENT`) and the relay never reaping silent peers (`S` could stay lit for a dead spotter phone). Both fixed. The OneDrive mirror (`C:\Users\maxx\OneDrive\Documents\EVEN G2 HUD`) is frozen at 2026-09-04 and its `_xfer\round6.bundle` is already on GitHub — the PC clone + GitHub are the only live copies.
 - 2026-10-01 design round 6: showing Maxx rendered mocks (PIL from the real top strip + the proposed geometry) BEFORE writing code took four quick iterations on the corner shape and cost no worker tokens; both leases then landed in one iteration each with an in-lease nit pass. T054 housekeeping grows again (role files, hud-e2e-testing skill, BUILD_PLAN §3/§5 — see the review record).
 - 2026-09-25 design round 4: SDK 0.0.12 page caps are 4 image / 8 text / 12 containers (RESEARCH_NOTES §2) — the worker stopping on the type instead of working around it saved a hardware-only failure. Open items listed in the round-7 review record; T054 housekeeping now also covers 040 R2–R5, 050 Scope/R1, cloudflare-relay-deploy 24 h.
-- 2026-09-25 design round 3 lessons for T050 (still open): the relay alarm now also serves the 6 s stale clear (`alarm.ts`, keyed on `calledAt`, earlier-only re-pointing); T050's silent-peer reaper must compose with it, not replace it. T054 housekeeping grows: v1 (`gap`/`side`) prose in AGENTS.md §3/§47, constitution §3, `hud-e2e-testing` skill, role files; rename `HUD_GAP_FLUSH_MS`; PWA icons; optional drag across segments.
+- 2026-09-25 design round 3 lessons for T050 (done 2026-10-28 — the reaper runs first in the same `alarm()`): the relay alarm now also serves the 6 s stale clear (`alarm.ts`, keyed on `calledAt`, earlier-only re-pointing); T050's silent-peer reaper must compose with it, not replace it. T054 housekeeping grows: v1 (`gap`/`side`) prose in AGENTS.md §3/§47, constitution §3, `hud-e2e-testing` skill, role files; rename `HUD_GAP_FLUSH_MS`; PWA icons; optional drag across segments.
 - 2026-09-04 design rounds: Maxx iterates live (phone + simulator) and each round is one lease with an Opus worker, one review, an in-lease nit pass, integrate, redeploy — ~30–40 min per round. Housekeeping task T054 collects the doc drift and small nits the reviews listed (see the review record) so they do not pile up: rewrite 030 R3/AC-4 + constitution §1 + BUILD_PLAN for the L/S strip; purge slider/throttle prose from the protocol + e2e skills, the spotter role and BUILD_PLAN; add `playwright-core` to `check:pins`; cap the auto-ack retry; `export function start(root)` in the spotter so wiring is testable; make every relay live test wait for a matching frame (flakes under parallelism).
 - 2026-09-04 round 3: both consolidated app tasks landed in one iteration each with an in-lease nit pass — the consolidation paid for itself immediately. What is left before race day is mostly Maxx's: sideload (T101b), deploy (T102), first real-glasses run (T104), then T051 for whatever that shows. T050 (relay heartbeat + validation) is the only remaining pre-hardware code task and can run while Maxx tests.
 - 2026-09-04 consolidation: Maxx judged the per-criterion slicing too expensive for an app this size. T020–T025 + 050's automated criteria → T030; spec 040 → T040; T012 + T013 (minus rate limiting) → T050; T014/T018/060/070 deferred. Consolidated tasks get an Opus-tier worker because a review block on a large task costs more than the model-tier difference.
@@ -79,5 +81,5 @@ The one-criterion-per-iteration slicing cost ~3 iterations per task and the app 
 - T030 and T040 are disjoint (glasses vs spotter) and run as parallel leases; T050 can run alongside either. The serial runner order is T030 → T040 → T050.
 - `ralph/loop.sh` still honours only `owner:` and `[HW]`; `depends:`/`lock:` are honoured by agents reading the plan.
 - The three untracked `.claude/agents/cavecrew-*.md` files are Maxx's; never delete, commit, or regenerate over them.
-- AC audit 010: AC-1/2/6/7 met; AC-3/AC-5 `[SIM]`/T003c; AC-4 `[HW]`. 020: AC-1–6, 8 met; AC-7/AC-9 → T050; AC-10 `[HW]`. 030: AC-1–6 met, AC-7 `[SIM]` T026, AC-8/10 `[HW]`, AC-9 dropped. 040: AC-1–5 met, AC-6/7 `[HW]`. 050: AC-1–5 met, AC-5b `[SIM]` T026, AC-6–8 `[HW]`. 060/070 deferred.
+- AC audit 010: AC-1/2/6/7 met; AC-3/AC-5 `[SIM]`/T003c; AC-4 `[HW]`. 020: AC-1–9 met (AC-7/AC-9 by T050, 2026-10-28); AC-10 `[HW]` (deployed; `qa/` log still to save). 030: AC-1–6 met, AC-7 `[SIM]` T026, AC-8/10 `[HW]`, AC-9 dropped. 040: AC-1–5 met, AC-6/7 `[HW]`. 050: AC-1–5 met, AC-5b `[SIM]` T026, AC-6–8 `[HW]`. 060/070 deferred.
 - No criterion is `DISPUTED`; the 2026-09-04 spec changes (030 AC-9 dropped, 020 R4 rate limiting dropped, image-first) are human decisions recorded in each spec's Decisions. No simulator or hardware evidence is claimed; no deployment or secrets.
