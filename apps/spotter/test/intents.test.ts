@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { MSG_MAX_CHARS } from '@g2-race-spotter/protocol';
+import { MSG_MAX_CHARS, isSetMsg } from '@g2-race-spotter/protocol';
 
 import {
   BUILTIN_MESSAGES,
+  CALL_ACTIONS,
+  CALL_PHASES,
   CAR_DETENTS,
   CAR_ROWS,
+  callMessage,
   detentAt,
   detentFromPointer,
   dragCars,
@@ -134,14 +137,11 @@ describe('AC-2 fader drag', () => {
   });
 });
 
-describe('built-in messages (design round 6)', () => {
-  it('are the four Maxx kept, in 2×2 reading order, each a valid msg text', () => {
-    expect(BUILTIN_MESSAGES).toEqual([
-      'CATCHING UP',
-      'PULLING AWAY',
-      'LEADERS BEHIND',
-      'EXIT',
-    ]);
+describe('built-in messages (design rounds 6, 7 and 7b)', () => {
+  it('are the two Maxx kept, left to right, each a valid msg text', () => {
+    // Round 7 renamed EXIT to PITS (EXIT is a corner phase now); round 7b
+    // removed CATCHING UP and PULLING AWAY.
+    expect(BUILTIN_MESSAGES).toEqual(['LEADERS BEHIND', 'PITS']);
     for (const text of BUILTIN_MESSAGES) {
       expect(normaliseMessage(text)).toBe(text);
       expect(text.length).toBeLessThanOrEqual(MSG_MAX_CHARS);
@@ -183,5 +183,43 @@ describe('message normalising', () => {
   it('trims, caps and re-trims', () => {
     expect(normaliseMessage('  box box  ')).toBe('box box');
     expect(normaliseMessage(`${'a'.repeat(79)} tail`)).toBe('a'.repeat(79));
+  });
+
+  it('trims the ends only: an inner line break survives (design round 7)', () => {
+    expect(normaliseMessage('GO LOW\nEXIT')).toBe('GO LOW\nEXIT');
+    expect(normaliseMessage(' \nGO TOP\nENTRY\n ')).toBe('GO TOP\nENTRY');
+  });
+
+  it('counts the line break against MSG_MAX_CHARS like any character', () => {
+    // 78 + '\n' + 'bc' is 81 characters: the cap keeps 80, the break counted
+    // as one. With 79 in front the break is the 80th character, so the cap
+    // keeps it and the re-trim drops it as a trailing blank.
+    expect(normaliseMessage(`${'a'.repeat(78)}\nbc`)).toBe(
+      `${'a'.repeat(78)}\nb`,
+    );
+    expect(normaliseMessage(`${'a'.repeat(79)}\nb`)).toBe('a'.repeat(79));
+  });
+});
+
+describe('corner calls (design round 7)', () => {
+  it('are ENTRY then EXIT, each GO LOW · GO MID · GO TOP left to right', () => {
+    expect(CALL_PHASES).toEqual(['ENTRY', 'EXIT']);
+    expect(CALL_ACTIONS).toEqual(['GO LOW', 'GO MID', 'GO TOP']);
+  });
+
+  it('send the action on line 1 and the phase on line 2', () => {
+    expect(callMessage('GO LOW', 'EXIT')).toBe('GO LOW\nEXIT');
+    expect(callMessage('GO TOP', 'ENTRY')).toBe('GO TOP\nENTRY');
+  });
+
+  it('are all valid msg texts that normalising leaves untouched', () => {
+    for (const phase of CALL_PHASES) {
+      for (const action of CALL_ACTIONS) {
+        const text = callMessage(action, phase);
+        expect(text.split('\n')).toEqual([action, phase]);
+        expect(normaliseMessage(text)).toBe(text);
+        expect(isSetMsg({ t: 'msg', text })).toBe(true);
+      }
+    }
   });
 });

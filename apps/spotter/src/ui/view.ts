@@ -4,7 +4,14 @@ import {
   type Lane,
 } from '@g2-race-spotter/protocol';
 
-import { BUILTIN_MESSAGES, CAR_DETENTS, CAR_ROWS } from '../intents.ts';
+import {
+  BUILTIN_MESSAGES,
+  CALL_ACTIONS,
+  CALL_PHASES,
+  CAR_DETENTS,
+  CAR_ROWS,
+  callMessage,
+} from '../intents.ts';
 import {
   isLatencyStale,
   isLive,
@@ -246,7 +253,41 @@ function faders(model: Model): VNode {
   );
 }
 
-/** Four equal buttons in a 2×2 grid (design round 6), one colour. */
+/**
+ * The corner calls (design round 7): a row per phase — the phase name as a
+ * small heading line above it (Maxx, 2026-10-28), then GO LOW · GO MID ·
+ * GO TOP across the full width — in the message buttons' style. Each
+ * button sends one two-line `msg` (`'GO LOW\nEXIT'`) through the same
+ * `data-act="say"` path as the built-ins below; like them it carries no lit
+ * state.
+ */
+function cornerCalls(): VNode {
+  return h(
+    'div',
+    { class: 'calls', 'data-testid': 'corner-calls' },
+    CALL_PHASES.map((phase) =>
+      h('div', { class: 'calls__row', role: 'group', 'aria-label': phase }, [
+        h('span', { class: 'calls__phase', 'aria-hidden': 'true' }, [phase]),
+        ...CALL_ACTIONS.map((action) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'say say--call',
+              'data-act': 'say',
+              'data-arg': callMessage(action, phase),
+              'aria-label': `${phase} ${action}`,
+            },
+            [action],
+          ),
+        ),
+      ]),
+    ),
+  );
+}
+
+/** The built-in messages, equal buttons in one colour: round 6's 2×2, one
+ * row of two (LEADERS BEHIND · PITS) since round 7b. */
 function builtinMessages(): VNode {
   return h(
     'div',
@@ -374,7 +415,7 @@ function consoleView(model: Model): VNode {
       h(
         'section',
         { class: 'half half--bottom', 'data-testid': 'bottom-half' },
-        [builtinMessages(), messageRow(model)],
+        [cornerCalls(), builtinMessages(), messageRow(model)],
       ),
     ]),
     h(
